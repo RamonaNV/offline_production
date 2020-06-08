@@ -19,7 +19,7 @@ apt-get install  build-essential cmake libbz2-dev libgsl0-dev libcfitsio-dev
     libboost-system-dev libboost-thread-dev libboost-date-time-dev libzmq5-dev
     libboost-python-dev libboost-serialization-dev libboost-filesystem-dev 
     libboost-program-options-dev libboost-regex-dev libboost-iostreams-dev
-    opencl-dev python3-numpy
+    opencl-dev python3-numpy sprng2-dev
 ```
 
 ## Building
