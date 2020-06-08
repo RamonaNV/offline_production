@@ -1,7 +1,7 @@
 # offline_production
 Slim version of IceCube's physics production software, including only the projects required to run up to photon generation. 
 
-Full documentation of all projects are available at https://docs.icecube.aq .
+Full documentation of all projects are available at https://docs.icecube.aq/trunk .
 
 # Dependencies
 * cmake 
