@@ -1,0 +1,91 @@
+.. $Id: RELEASE_NOTES 121473 2014-07-11 12:37:08Z olivas $
+.. $Author: olivas $
+.. $Date: 2014-07-11 06:37:08 -0600 (Fri, 11 Jul 2014) $
+
+.. _corsika-reader-release-notes:
+
+Release Notes
+=============
+
+On the trunk
+------------
+
+- Fix suppoert for biased CORSIKA shower generation
+
+Feb. 5, 2020 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-01
+
+Dec. 20, 2019 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-00
+
+* I3CORSIKAReader will now emit an S-Frame with a I3CorsikaInfo object 
+  to be used for weighting
+
+Nov 12, 2018 Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+-----------------------------------------------------------------
+V00-02-00
+
+* Separated surface sampling (and oversampling) to CORSIKAResampler module. 
+* Legacy mode oversampling parameter (needed for background coincident showers).
+
+
+Nov 3, 2017 Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+----------------------------------------------------------------
+V00-01-02
+
+* updated scripts
+
+March 24, 2017 Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+-------------------------------------------------------------------
+V00-01-01
+
+* Parameter name typo corrected
+* Improved docs
+
+April 8, 2016 Alex Olivas (olivas@icecube.umd.edu)
+--------------------------------------------------
+V00-01-00
+
+* EHistory parameter added. This will carry out rotation to I3 coordinate 
+  system for Ehistory shower particles. EHistory option is not compatible 
+  with ARRANG option in CORSIKA. So when EHistory option is used, the 
+  rotation by 119 degrees to IceCube coordinate system has to be done 
+  by hand for all particles.
+* fix example scripts
+* pdg code for rho0 changed to 113
+* No longer adds an I3EventHeader to the frame.  This is solely the job 
+  of the global trigger sim module.
+* Use surfaces from phys-services instead of MuonGun
+* Fill secondaries into I3MCTree all at once if possible. Major speedup
+  for muon bundles.
+* Set default thinning flag.
+* Never rewind input files. Treat these as streams. Allows usage of
+  pipes from CORSIKA.
+* Added oversampling parameter. Each file is read multiple times and 
+  number of showers in weight map is given value nevents*oversampling
+* Update to new I3MCTree
+
+November 24, 2014 Alex Olivas (olivas@icecube.umd.edu)
+------------------------------------------------------
+V00-00-05
+
+* CorsikaInteractionHeight is now added to the frame (temporarily).
+
+August 11, 2014 Juan Carlos Diaz Velez (juancarlos@icecube.wisc.edu)
+--------------------------------------------------------------------
+V00-00-04
+
+* Fixed arguments passed to MuonGun::GetTotalArea(cos(thetaMax), cos(thetaMin)). 
+  Order was swapped resulting in negative area.
+ 
+July 14, 2014 Alex Olivas  (olivas@icecube.umd.edu)
+---------------------------------------------------
+V00-00-03
+
+* Take the curvature of the Earth into account when shifting the shower
+  core, fixing a bug that caused showers to miss the target volume by
+  several kilometers at zenith angles larger than 89 degrees.
+* Use MuonGun's cylinder class for sampling.
+* Added staging support.
