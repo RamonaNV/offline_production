@@ -36,5 +36,5 @@ apt-get install  build-essential cmake libbz2-dev libgsl0-dev libcfitsio-dev
 
 ```sh
   ./env-shell.sh
-  ./clsim/resources/scripts/benchmark.py --gcd-file=$I3_TESTDATA/GCD/GeoCalibDetectorStatus_2016.57531_V0.i3.gz
+  ./clsim/resources/scripts/benchmark.py --gcd-file=$I3_TESTDATA/GCD/GeoCalibDetectorStatus_2016.57531_V0.i3.gz --numevents 100
 ```
