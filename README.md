@@ -5,6 +5,8 @@ Full documentation of all projects are available at https://docs.icecube.aq .
 
 # Dependencies
 * cmake 
+* python3
+* numpy
 * boost
 * zmq
 * gsl
