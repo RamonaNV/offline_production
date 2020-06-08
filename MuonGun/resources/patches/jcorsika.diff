@@ -1,0 +1,185 @@
+--- corsika.F.orig	2012-11-15 12:36:30.000000000 -0600
++++ corsika.F	2012-11-15 21:12:59.000000000 -0600
+@@ -1094,10 +1094,13 @@
+ 
+       IMPLICIT DOUBLE PRECISION (A-H,O-Z)
+ #define __ATMOS2INC__
++#define __AMANDA_EELOWINC__
++#define __AMANDA_EXTRAINC__
+ #define __BUFFSINC__
+ #define __CHISTAINC__
+ #define __CONSTAINC__
+ #define __CURVEINC__
++#define __ELABCTINC__
+ #define __ELADPMINC__
+ #define __ELASTYINC__
+ #define __GENERINC__
+@@ -1174,6 +1177,17 @@
+      *            (MPART2(1,22),MALPH2(1)), (MPART2(1,23),MCRMM2(1)),
+      *            (MPART2(1,24),MCRMB2(1)), (MPART2(1,25),MOTH2(1)),
+      *            (MPART2(1,27),MNETB2(1))
++      
++      DOUBLE PRECISION EPRMU
++      LOGICAL FLAG_LOCUT
++      COMMON /MY_INFO/ EPRMU, FLAG_LOCUT
++      
++C       DOUBLE PRECISION LLOW, EELOW
++C       PARAMETER        (ALOW = 0.212/1.2)
++C       PARAMETER        (BLOW = 0.251E-3/1.2)
++			
++C       INTEGER PRWGHT
++      
+ #if __GFORTRAN__
+       REAL XLEFTA,XLEFTB
+ #endif
+@@ -1401,6 +1415,13 @@
+ C  TIME AT BEGINNING
+       CALL TIME( TLEFTA )
+ #endif
++
++      IF(FLAG_LOCUT) THEN
++         LLOW = LOG(1+(ELCUT(2)*BLOW/ALOW))/BLOW
++         WRITE(MONIOU,*) 'SKEW ANGLE CUTOFF AT ', ELCUT(2),
++     *        'GeV FOR THE LEVEL OF ', LLOW, ' mwe IS ENABLED'
++      ENDIF
++
+       THICK00 = THICK0
+ C-----------------------------------------------------------------------
+ C  LOOP OVER SHOWERS
+@@ -1692,6 +1713,22 @@
+ #endif
+         PRMPAR(3) = SIN( THETAP ) * COS( PHIP )
+         PRMPAR(4) = SIN( THETAP ) * SIN( PHIP )
++        
++        PRWGHT = MAX(INT(PRMPAR(0))/100, 1)
++        IF(FLAG_LOCUT) THEN
++           EELOW = COS(THETAP)
++           IF (EELOW.EQ.0) GOTO 2
++           EELOW = BLOW*LLOW/EELOW
++           IF (EELOW.GT.100) EELOW=100
++           EELOW = (EXP(EELOW)-1)*ALOW/BLOW
++           EELOW = EELOW*EPRMU*PRWGHT
++           IF (EELOW.GT.PRMPAR(1)) THEN
++              CALL TOBUF( EVTH,0 )
++              CALL TOBUF( EVTE,0 )
++              GOTO 2
++           ENDIF
++        ENDIF
++        
+         IF ( FPRINT  .OR.  DEBUG  .OR.  MOD(ISHW-1,IPROUT) .EQ. 0 ) THEN
+ #if __VIEWCONE__
+           IF ( VUECON(2) .GT. 0.D0 ) WRITE(MONIOU,669) THETAP,PHIP
+@@ -8378,6 +8415,7 @@
+ 
+       IMPLICIT NONE
+ #define __ATMOSINC__
++#define __AMANDA_EXTRAINC__
+ #define __ATMOS2INC__
+ #define __CONSTAINC__
+ #define __DPMFLGINC__
+@@ -8451,7 +8489,11 @@
+ #define __TSTINTINC__
+ #endif
+ #include "corsika.h"
+-
++      
++      DOUBLE PRECISION EPRMU
++      LOGICAL FLAG_LOCUT
++      COMMON /MY_INFO/ EPRMU, FLAG_LOCUT
++      
+       DOUBLE PRECISION R1,R2
+       INTEGER          I,IE,IOBSLV,IS,ISEQ,LENVAL,MMM,MONNEW,NUMERR,
+      *                 IDCHAR
+@@ -8542,6 +8584,9 @@
+ C  DEFAULT VALUE FOR KASCADE
+       OBSLEV(1) = 110.D2
+ #endif
++C  SLANT DEPTH CUT
++      EPRMU      = 1.0D0
++      FLAG_LOCUT = .FALSE.
+ #if __VOLUMECORR__
+       DETCFG    = 0.D0
+ #endif
+@@ -9208,6 +9253,11 @@
+       ELSEIF ( LINE(1:5) .EQ. 'HILOW' ) THEN
+         CALL DTCDBL( LINE,IS,HILOELB,'HILOW',1 )
+ 
++C     GET LOW ENERGY CUTOFF FLAG
++      ELSEIF ( LINE(1:5) .EQ. 'LOCUT' ) THEN
++         CALL DTCLOG(LINE,IS,FLAG_LOCUT,'LOCUT',1)
++         CALL DTCDBL(LINE,IS,EPRMU,'LOCUT',2)
++
+ #if __INTTEST__
+ C  GET DATASET NAME FOR HISTOGRAM STORAGE
+       ELSEIF ( LINE(1:6) .EQ. 'HISTDS' ) THEN
+@@ -12613,7 +12663,8 @@
+ 
+ #endif
+ C  OUTPUT FILES SHOULD NORMALLY NOT EXIST BEFORE THE RUN STARTS
+-      RQSTAT = 'NEW'
++C  XXX JVS: but sometimes it's useful to write to existing files
++      RQSTAT = 'OLD'
+ C  LOOK FOR THE FIRST BLANK IN DATASET NAME
+       IBL = INDEX(DSN,' ')
+ C  CHECK DATA SET NAME FOR CORRECTNESS
+@@ -12691,15 +12742,15 @@
+         RQSTAT = 'UNKNOWN'
+       ELSE
+ C  ON LINUX WITH G77 AN EXISTING FILE CAUSES A CORE DUMP -> FIRST INQUIRE
+-        INQUIRE(FILE=DSN,EXIST=FEXIST)
+-        IF ( FEXIST ) THEN
+-          IBL = INDEX(DSN,' ')
+-          IF ( IBL .LE. 1 ) IBL = LEN(DSN)+1
+-          WRITE(MONIOU,5791) DSN(1:IBL-1)
++C        INQUIRE(FILE=DSN,EXIST=FEXIST)
++C        IF ( FEXIST ) THEN
++C          IBL = INDEX(DSN,' ')
++C          IF ( IBL .LE. 1 ) IBL = LEN(DSN)+1
++C          WRITE(MONIOU,5791) DSN(1:IBL-1)
+  5791     FORMAT(/,' FILE ',A,' ALREADY EXISTS. RENAME OR REMOVE IT',
+      *           ' OR CHANGE ''DIRECT'' DATA CARD AND TRY AGAIN.')
+-          STOP 'FATAL PROBLEM'
+-        ENDIF
++C          STOP 'FATAL PROBLEM'
++C        ENDIF
+       ENDIF
+ #endif
+ 
+@@ -12743,7 +12794,7 @@
+ C  OPEN DATASET FOR PARTICLE OUTPUT
+       IF ( FPAROUT ) THEN
+         OPEN(UNIT=MPATAP,FILE=DSN,STATUS=RQSTAT,
+-     *       FORM='UNFORMATTED',ACCESS='SEQUENTIAL')
++     *       FORM='UNFORMATTED',ACCESS='APPEND')
+         WRITE(MONIOU,579) DSN
+  579    FORMAT(/,' PARTICLE OUTPUT TO FILE : ',A79)
+ #if __COMPACT__
+--- corsika.h.orig	2012-11-15 12:36:35.000000000 -0600
++++ corsika.h	2012-11-15 21:13:05.000000000 -0600
+@@ -4492,4 +4492,26 @@
+       LOGICAL
+      *   LPI0,LETA,LHYP,LK0S,LSPEC,FLOR
+ #undef __TSTINTINC__
++
++
+ #endif
++
++/* AMANDA_EELOW */
++/*-- Author :    by  D. Chirkin UC Berkeley 05/06/00 */
++#ifdef __AMANDA_EELOWINC__
++      DOUBLE PRECISION LLOW, EELOW
++      PARAMETER        (ALOW = 0.212/1.2)
++      PARAMETER        (BLOW = 0.251E-3/1.2)
++      INTEGER PRWGHT
++#undef __AMANDA_EELOWINC__
++#endif
++
++/* AMANDA_EXTRA */
++/*-- Author :    by  D. Chirkin UC Berkeley 01/12/07 */
++#ifdef __AMANDA_EXTRAINC__
++C      DOUBLE PRECISION EPRMU
++C      LOGICAL FLAG_LOCUT
++C      COMMON /MY_INFO/ FLAG_LOCUT, EPRMU
++#undef __AMANDA_EXTRAINC__
++#endif
++

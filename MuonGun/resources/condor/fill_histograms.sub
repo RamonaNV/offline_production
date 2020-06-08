@@ -1,0 +1,13 @@
+Executable      = $ENV(I3_BUILD)/MuonGun/resources/scripts/propagate_and_fill.py
+# the weights argument needs special escaping
+Arguments       = $(args)
+Universe        = vanilla
+Notification    = never
+
+Output          = logs/condor.$(Process).$(Cluster).out
+Error           = logs/condor.$(Process).$(Cluster).error
+Log             = /var/tmp/fill_histograms.log
+
+getenv = True
+
+queue

@@ -1,0 +1,15 @@
+The scripts in this directory fit the muon bundle multiplicity, radius, and
+energy distributions tabulated with propagate_and_fill.py to a series of spline
+surfaces. To fit all 5 required distributions, run the fit.sh script e.g. like
+this:
+
+./fit.sh /data/uwa/jvansanten/projects/2012/muongun/corsika/SIBYLL/Hoerandel5/atmod_12.hdf5 Hoerandel5_atmod12_SIBYLL
+
+This will store the 5 fits in files Hoerandel5_atmod12_SIBYLL.single_flux.fits,
+Hoerandel5_atmod12_SIBYLL.bundle_flux.fits, etc. To make the fit run faster, set
+GOTO_NUM_THREADS to the number of threads to use (generally the number of
+physical cores on your machine) e.g. like this:
+
+GOTO_NUM_THREADS=12 ./fit.sh /data/uwa/jvansanten/projects/2012/muongun/corsika/SIBYLL/Hoerandel5/atmod_12.hdf5 Hoerandel5_atmod12_SIBYLL
+
+

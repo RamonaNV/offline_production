@@ -1,0 +1,105 @@
+.. $Id: RELEASE_NOTES 121473 2014-07-11 12:37:08Z olivas $
+.. $Author: olivas $
+.. $Date: 2014-07-11 06:37:08 -0600 (Fri, 11 Jul 2014) $
+
+Release Notes
+=============
+
+trunk
+-----
+
+Dec. 20, 2019 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-00
+
+* MuonGun.Track handles sliced MCTrees
+* MuonGun.MuonBundleConverter ignores secondary muons in MCTree
+* EnergyDistribution and friends integrate over energy in log space for better
+  numerical stability
+* Update MuonPropagator to use restructured PROPOSAL API
+
+Release V00-02-03
+-----------------
+* Added support for boost >= 1.63.
+  For these newer versions of boost, boostnumpy has been integrated into boost
+  and is not an external dependency anymore.
+* Fixes issue driven by merge with unbiased branch (r160287) to extruded_polygon.py
+
+Release V00-02-02
+-----------------
+* Merged from branches/unbiased-generation
+* Unbiased generation with natural rates
+
+Release V00-02-01ug
+-------------------
+* Unbiased generation with natural rates
+
+V00-02-00: March 24, 2017
+-------------------------
+Mostly docs. Changes since 00-00-04:
+
+* Document:
+
+  * Methods for determining the energies of muons in simulation at arbitrary points
+  * How to calculate a muon effective area from MuonGun simulation
+  * List of available flux parameterizations 
+
+* Add:
+
+  * Generation probability parameterizations for the CORSIKA configurations used
+    in IC79 (previously private to my thesis work, but that's done now)
+  * Muon flux parameterizations from DPMJET, split into conventional and prompt
+    components (ditto)
+  * ExtrudedPolygon, a SamplingSurface formed by a convex hull around strings
+    in the X-Y plane and straight sides in the Z direction. This takes the
+    guesswork out of efficiently sampling on highly non-cylindrical geometries
+
+* Remove built-in copy of boost::numpy, and instead use Martin Wolf's enhanced
+  version (when available)
+
+* Rework SamplingSurface interface for more clarity:
+
+  - GetDifferentialArea() renamed to GetArea(): returns the area in m^2 in
+    the given direction. Surfaces are no longer assumed to be azimuthally
+    symmetric.
+
+  - GetTotalArea() renamed to GetAcceptance(): now returns the product of
+    area and solid angle integrated over both zenith and azimuth (i.e. the
+    return value no longer needs to be multiplied by 2pi to get m^2 sr)
+
+* Factor Surface classes out into phys-services, separating the general functionality
+  (calculating areas and finding intersections) with MuonGun specific bits
+  (equality comparison and flux integration)
+
+* Give Floodlight the ability to restrict its zenith angle range
+
+  -- Jakob van Santen
+
+* Remove built-in copy of the weighting project in favor of the official one.
+* Remove relative imports for Python 3 compatibility.
+
+  -- David Schultz
+  
+* Fixed pybindings for GenerationProbability to be able to combine
+  GenerationProbabilty objects with different settings in Python. I3FrameObject 
+  is now the base of GenerationProbability in the pybindings and added 
+  necessary pointer conversions. (reported and fixed by briedel in r134695)
+
+July 11, 2014 Alex Olivas  (olivas@icecube.umd.edu)
+---------------------------------------------------
+
+V00-00-04
+
+Added release notes for this project.
+
+* Add an axial cylinder sampling surface for use in NeutrinoGenerator
+* Add pybindings for I3MuonGun::GetDepth() and fix up argument order in
+  EnergyDistribution
+* Fix up various incompatibilities with Python 2.4 and 3
+* When choosing intersection points with a cylinder, allow up-going tracks to
+  intersect the bottom cap (reported by chaack)
+* Fix a sign error in the projected area term for cylinders. This was important
+  for extremely long cylinders. (reported by cweaver)
+* Check down-track distances of stochastic losses by distance rather than time
+  in Track
+

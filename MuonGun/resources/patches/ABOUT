@@ -1,0 +1,3 @@
+jcorsika.diff is a patch that adds some convenience features to CORSIKA v6990:
+- Removed check on the non-existence of output file, allowing one to write to a named pipe
+- Zenith dependent low-energy cutoff based on muon range (from dCORSIKA)

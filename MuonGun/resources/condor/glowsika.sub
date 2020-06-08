@@ -1,0 +1,33 @@
+
+tarball_base = simulation.trunk.r92403.Linux-x86_64.gcc-4.1.2
+hobohole = /data/sim/sim-new/ice/photonics-finebinned-standardcandle/hobohole
+#dest = /data/uwa/jvansanten/projects/2012/muongun/corsika/SIBYLL/H
+dest = $(hobohole)
+outfile = DAT000000.i3.bz2
+#tarball = /net/user/jvansanten/metaprojects/minisim/RHEL_5.0_amd64/simulation.trunk.r92403.Linux-x86_64.gcc-4.1.2.tar.gz
+tarball = $(hobohole)/$(tarball_base).tar.gz
+
+
+script = python $(tarball_base)/MuonGun/resources/scripts/shower_and_propagate.py --nevents=1000 $(outfile) --model=QGSJET
+args = -t $(tarball) -d $(dest) -o $(outfile) -- $(script)
+
+Executable      = glowsika.sh
+Universe        = vanilla
+Notification    = never
+
+Output          = logs/condor.$(Process).$(Cluster).out
+Error           = logs/condor.$(Process).$(Cluster).error
+Log             = /var/tmp/glowsika.log
+
+Arguments       = $(args)
+
+getenv          = False
+
+# Stage GridFTP tools and user cert to the node
+transfer_input_files = /data/sim/sim-new/downloads/globus.tar.gz, /tmp/x509up_u51509
+#WhenToTransferOutput = NEVER
+#should_transfer_files = NO
+
+Requirements = ( ( Arch == "INTEL" || Arch == "X86_64" ) ) && ( TARGET.OpSys == "LINUX" )
+
+queue

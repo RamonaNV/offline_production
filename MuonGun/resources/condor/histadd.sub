@@ -1,0 +1,11 @@
+Executable      = $ENV(I3_BUILD)/MuonGun/resources/scripts/dashi-histadd.py
+Universe        = vanilla
+Notification    = never
+
+Output          = logs/condor.$(Process).$(Cluster).out
+Error           = logs/condor.$(Process).$(Cluster).error
+Log             = /var/tmp/histadd.log
+
+getenv = True
+
+queue
