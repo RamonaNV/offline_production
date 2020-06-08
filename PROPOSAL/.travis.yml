@@ -1,0 +1,129 @@
+# os:
+#     - linux
+#     # - osx
+#
+# language: cpp
+#
+# dist: trusty
+# sudo: require
+#
+# compiler:
+#     - g++-4.8
+#     - clang-3.6
+#
+# addons:
+#     apt:
+#         sources:
+#             # add PPAs with more up-to-date toolchains
+#             - ubuntu-toolchain-r-test
+#             - llvm-toolchain-precise-3.6
+#         packages:
+#             # - liblog4cplus-dev
+#             - libboost-dev
+#             - libboost-python-dev
+#
+# before_script:
+#     - ./install_log4cplus.sh
+#     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+#         mkdir build;
+#         cd build;
+#         cmake ..;
+#       fi
+#
+# script:
+#     - make VERBOSE=1
+#
+# notifications:
+#     email: false
+
+###############################################################################
+#                                   content                                   #
+###############################################################################
+
+language: cpp
+sudo: require
+
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-4.8
+            - libboost-dev
+      env:
+         - MATRIX_EVAL="CC=gcc-4.8 && CXX=g++-4.8"
+
+    - os: linux
+      dist: trusty
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - libboost-dev
+      env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+
+    - os: linux
+      dist: trusty
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.6
+          packages:
+            - clang-3.6
+            - g++-4.9
+            - libboost-dev
+      env:
+        - MATRIX_EVAL="CC=clang-3.6 && CXX=clang++-3.6"
+
+    - os: linux
+      dist: trusty
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-trusty-5.0
+          packages:
+            - clang-5.0
+            - g++-7
+            - libboost-dev
+      env:
+        - MATRIX_EVAL="CC=clang-5.0 && CXX=clang++-5.0"
+
+    # - os: osx
+    #   osx_image: xcode8
+    #   env:
+    #     # - MATRIX_EVAL="&& CC=gcc-7 && CXX=g++-7"
+    #     - MATRIX_EVAL="CC=clang && CXX=clang++"
+
+before_install:
+    - pyenv global system 3.6
+    - eval "${MATRIX_EVAL}"
+
+install:
+    - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+        brew upgrade;
+        brew install cmake;
+        brew install boost;
+      fi
+    - ./install_log4cplus.sh
+
+before_script:
+    - mkdir build
+    - cd build
+    - cmake .. -DADD_TESTS=ON
+    - make VERBOSE=1
+
+script:
+    - travis_wait 60 ctest -j2 --verbose -E "(Ion|Brems|Photo|Epair)"
+
+notifications:
+    email: false
+

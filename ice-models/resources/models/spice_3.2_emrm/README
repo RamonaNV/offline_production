@@ -1,0 +1,7 @@
+bare-bones SPICE 3.2_EMRM model, might not be compatible with clsim just yet.
+EMRM = Enhanced Modified Renormalized Martin
+
+this uses a combination of SPICE 3.2-like (but inverted) scattering anisotropy
+and a new (Martin) absorption anisotropy model
+
+for running with ppc must add files as.dat, wv.dat, and rnd.txt.

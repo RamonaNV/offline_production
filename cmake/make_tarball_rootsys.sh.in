@@ -1,0 +1,15 @@
+#!/bin/sh
+#
+#  $Id: make_tarball_rootsys.sh.in 169709 2012-11-04 16:17:04Z nwhitehorn $  
+#
+#   Properly setup a mini ROOTSYS in your tarball.
+#
+
+if [ -d @ROOTSYS@ ] 
+then
+	echo "Generating tarball ROOTSYS"
+	mkdir -p @CMAKE_INSTALL_PREFIX@/cernroot/etc
+	mkdir -p @CMAKE_INSTALL_PREFIX@/cernroot/lib
+	cp -R @ROOTSYS@/etc/* @CMAKE_INSTALL_PREFIX@/cernroot/etc/
+	cp -R -P @ROOTSYS@/lib/* @CMAKE_INSTALL_PREFIX@/cernroot/lib/
+fi

@@ -1,0 +1,100 @@
+.. $Id: RELEASE_NOTES  79391 2011-10-10 olivas $
+.. $Author: olivas $
+.. $Date: 2011-10-10 $
+
+Release Notes
+=============
+
+Dec. 20, 2019 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-00
+
+Nov. 12, 2018 Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+------------------------------------------------------------------
+Release V02-06-00
+
+* Individual SPE template correction factors and RDE
+
+
+June 20, 2018 Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+------------------------------------------------------------------
+Release V02-05-01
+
+* Updates to docs
+* Fixes:
+  (r160002) Fixes the 3.00521 meter offset in the tilt table (along the gradient direction, only needed for SPICE 3 and above)
+  (r159391) process only Q frames; properly skips non-flasher events in time-consuming calibrator/wavedeform
+
+August 31, 2017 D. Chirkin
+--------------------------
+Release V02-05-00
+
+* merged CUDA and OpenCL versions into single OpenCL version of code
+* removed multiple define statements (permanently enabling optional code)
+* multiple code optimizations, improved method of copying of photon data to the GPU
+* fully merged particle/flasher code into single method, flasher parameters now passed in a particle segment
+* added Poisson/binomial sampling of generated number of photons (from mean prediction)
+* added cable shadow and DOM tilt code and corresponding flasher-fitted files
+* removed obsolete scripts and most of the ice directories; one (most recent and comprehensive) ice directory remains
+* added documentation that explains run time parameters and data files
+
+
+March 24, 2017 D. Chirkin
+-------------------------
+Release V02-04-00
+
+* possible to save photons on the surface of DOMs (when POUT and PDIR are used)
+* photoluminescence implementation in the GPU version (when MOPO is used)
+* minor code tweaks to keep up with new compilers
+* llh/DirectFit code is updated with cable shadow and DOM tilt
+
+
+October 21, 2016 A. Olivas
+--------------------------
+Release V02-03-00
+
+* Improvements to DirectFit?/llh code, mainly in simultaneous unfolding+time search
+* Added capability to simulate isotropic flasher source. Set FWID=-1 to enable in flasher simulation
+* Added CLSimStep functionality to OpenCL ppc version
+* Added time binning (0.1 ns) of photons to limit memory use with HE events.
+* Small fix to avoid production of long tracks if MMCtrack has Ei and Ef ==0,
+  solves the problem with low energy numu CC interactions
+* Modified for optional use with SpiceHD (no angular acceptance but a cut on the DOM impact point)
+* Added explicit list of hadrons, so all hadrons will produce light.
+* Added interface to CLSim/Geant4 steps to the CUDA version
+
+
+November 24, 2014 D. Chirkin
+----------------------------
+
+Several compilation (warnings) and run time (seg. faults) fixes. New env.
+variables OGPU/OCPU/OACC allow running on only GPU/CPU/Accelerator cards.
+Includes the final version of SPICE3.
+
+June 30, 2014 D. Chirkin
+------------------------
+
+Updated particle tree parsing to work with corsika when pi/K's are saved.
+Changed the build preference: prefer OpenCL over CUDA.
+Included new ice model: SPICE 3.
+
+March 06, 2013 Marcel Zoll  (marcel.zoll@fysik.su.se)
+-----------------------------------------------------
+
+BadDomList is now read from the DetectorStatus for every dom that has HV==0
+
+Tue Jun 26 13:34:57 CDT 2012 Dima Chirkin
+-----------------------------------------
+
+Updated bare muon photon yield (new fit from Christopher).
+Added SPICE Lea ice model and support.
+Also added aha-fixed, wham.
+The run.py now works with latest simulation.
+Added width parameter for flasher simulation.
+
+October 10, 2011 Alex Olivas  (olivas@icecube.umd.edu)
+------------------------------------------------------
+
+Going to get serious about release notes for individual projects.
+
+

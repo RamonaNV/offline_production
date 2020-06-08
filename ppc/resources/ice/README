@@ -1,0 +1,9 @@
+for use with ppc only
+
+This directory is provided as an example of a valid ice model configuration.
+The ice model will occasionally be updated to newer versions, so should not
+be used where specific version is needed. Please use ice models contained
+within the ice-models module instead.
+
+Files geo-f2k, eff-f2k, and hvs-f2k will overwrite icetray GCD values used
+by ppc. To use the GCD values remove one or more of these files.

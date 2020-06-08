@@ -1,0 +1,11 @@
+bare-bones SPICE BFR DV1 model, might not be compatible with clsim just yet.
+BireFRingence Dima Version 1 (as in sandbox/spicifier)
+
+this uses a parameterized birefringence-only model of ice anisotropy
+
+#for running with ppc must add files as.dat, wv.dat, and rnd.txt.
+This directory contains all necessary files for convenience.
+     as.dat defines the angular sensitivity model as fitted to flasher data ("dima")
+     wv.dat contains cherenkov spectrum of nominal PMT DOMs
+
+Please let me know (dima) if something is missing or not working

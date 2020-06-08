@@ -1,0 +1,4 @@
+"homogenized" ice model for performance testing with new sensors at PINGU-ish depths
+
+This was constructed by replacing the coefficients at all depths with
+the values from SPICE Mie at 2248.47 meters (z=-300.4)

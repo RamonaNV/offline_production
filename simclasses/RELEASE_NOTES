@@ -1,0 +1,188 @@
+.. $Id: RELEASE_NOTES  79391 2011-10-10 olivas $
+.. $Author: olivas $
+.. $Date: 2011-10-10 $
+
+Release Notes
+=============
+
+trunk
+--------------
+
+- Add I3ShowerBias for biased CORSIKA shower generation
+
+Dec. 20, 2019 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-00
+
+- Add I3NuGenInfo and I3CorsikaInfo for use in S-Frame weighting
+- Adding three remaining Gaisser-Hillas fit parameters (a, b, and c) to I3CorsikaShowerInfo.
+- Added CROSSTALK_PULSE to I3MCPulse
+- New classes for cable shadow:
+  * I3Photon
+  * I3CompressedPhoton
+  * I3ExtraGeometry
+  * I3ExtraGeometryItem
+  * I3ExtraGeometryItemMove
+  * I3ExtraGeometryUnion
+  * I3ExtraGeometryCylinder
+  * I3CylinderMap
+
+
+Nov. 12, 2018 Juan Carlos Diaz Velez (juancarlos@icecube.umd.edu)
+--------------------------------------------------------------------
+Release V02-03-00
+* Added variables to I3CorsikaShowerInfo needed to delegate surface 
+sampling from corsika reader to a later stage in the simulation chain.
+
+June 20, 2018 Juan Carlos Diaz Velez (juancarlos@icecube.umd.edu)
+--------------------------------------------------------------------
+Release V02-02-01
+* Cleanup of import statements
+
+
+Nov 3, 2017 Juan Carlos Diaz Velez (juancarlos@icecube.umd.edu)
+--------------------------------------------------------------------
+Release V02-02-00
+* Add support for printing most types
+
+
+
+August 27, 2017 Juan Carlos Diaz Velez (juancarlos@icecube.umd.edu)
+--------------------------------------------------------------------
+Release V02-01-02
+* (157482) Fix for exposing of constructors
+
+June 26, 2017 Alex Olivas (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+Release V02-01-01
+
+* (r154595) Slimmer I3CompressedPhoton
+
+March 24, 2017 Alex Olivas (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+Release V02-01-00
+
+* (r146654) Uses serialization project.
+* (r145870) Moved I3Photon and I3CompressedPhoton from clsim to simclasses
+
+April 8, 2016 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V02-00-00
+
+* The following deprecated classes were hidden, but kept around in case we run across any old simulation samples. (r138942)
+
+  - I3GaussianPMTPulse
+  - I3MCPMTResponse
+  - I3MCTWRParams
+  - MMCWeight
+
+* Moved I3ParticleIDMap to its own file.  Wasn't obvious that it could be found in I3MCPulse.h. (r138942)
+
+  -- Alex Olivas
+
+* moved I3WimpParams out of wimpsim-reader here
+  -- Marcel Zoll
+
+
+December 12, 2014 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V01-05-00
+
+* Clean up unused code
+
+  -- Alex Olivas
+
+* Add Python dependency
+* Add Python module to load interfaces in a safe way
+* Add `operator<<` and `operator==` for a bunch of classes and expose
+  these to Python via dataclass_suite
+* Add Python tests (test_str.py and test_equality.py)
+* Make str output more consistent
+* Refactor common code into macro I3_SEQUENCE_OP_OSTREAM
+
+  -- Hans Dembinski
+
+* Fix linking error on Mavericks
+
+  -- David Schultz
+
+
+October 9, 2014 Alex Olivas (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+
+Release V01-04-03
+
+* Added version checks to the serialization method (so that when you
+  try to read new data with old software, you get a nice error message
+  instead of cryptic ones)
+
+  -- Alex Olivas
+
+
+July 10, 2014 Alex Olivas  (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+
+Release V01-04-02
+
+* Added `I3Map<OMKey, vector<I3MCPulse> >` converter.
+* Cleaned up cmake pybindings.
+
+April 8, 2014 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V01-04-01
+
+* Make things const
+
+  -- Jakob van Santen
+
+
+January 13, 2014 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V01-04-00
+
+* Use doubles to store pulse times (necessary for long events)
+
+  -- Alex Olivas
+
+* Fix bug in obsLevelHeight units
+* Add hack to try and tell whether depths were stored as g/cm2 or in I3Units
+
+  -- Kath Rawlins
+
+
+January 11, 2012 Emanuel Jacobi  (emanuel.jacobi@desy.de)
+--------------------------------------------------------------------
+
+Release V01-01-00
+
+* I3SumGenerator moved to sim-services
+
+  -- Alex Olivas
+
+* Remove reference to I3ConverterFactory
+
+  -- Jakob van Santen
+
+* Allow full access to I3MMCTrack from python
+
+  -- Claudio Kopper
+
+
+January 11, 2012 Emanuel Jacobi  (emanuel.jacobi@desy.de)
+--------------------------------------------------------------------
+
+Release V01-00-02
+
+* Cleaned up dependencies
+
+  -- Nathan Whitehorn
+
+
+October 10, 2011 Alex Olivas  (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+
+Going to get serious about release notes for individual projects.

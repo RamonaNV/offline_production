@@ -1,0 +1,15 @@
+# ppc configuration file: follow strict order below
+5     # over-R: DOM radius "oversize" scaling factor
+1.0   # overall DOM efficiency correction
+0.35  # 0=HG; 1=SAM
+0.9   # g=<cos(theta)>
+
+130   # direction of major anisotropy axis
+-0.106 # magnitude of major anisotropy coefficient k1
+0.053  # magnitude of minor anisotropy coefficient k2
+
+0.5   # hole ice radius in units of [DOM radius]
+0.5   # hole ice effective scattering length [m]
+100   # hole ice absorption length [m]
+0.35  # hole ice 0=HG; 1=SAM
+0.9   # hole ice g=<cos(theta)>

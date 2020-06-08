@@ -1,0 +1,6 @@
+bare-bones SPICE BFR DV1 model, might not be compatible with clsim just yet.
+BireFRingence Dima Version 1 (as in sandbox/spicifier)
+
+this uses a parameterized birefringence-only model of ice anisotropy
+
+for running with ppc must add files as.dat, wv.dat, and rnd.txt.

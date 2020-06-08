@@ -1,0 +1,25 @@
+The unified angular acceptance model is documented in more detail at: https://github.com/philippeller/angular_acceptance
+
+- the script /ice-models/python/angsens_unified/unified_angular_acceptance.py produces icetray "as.*" like outputs (maximum + 10d polinomial coeffs) given two input paramters p0 and p1
+- the sets as.set*_p0=*_p1=* are covering an interesting region over the parameter space and are intended to be used for systematics
+- these sets are to be used as systematics variations w.r.t. baeline (which is dima=0.3/p2=-1, or using the unified model given in the table below)
+
+- to recover curves close to the old known models, the following table gives the correspnding parameters:
+                    p0        p1
+    nominal         0.567771  0.168269
+    h1-100cm       -0.123027  0.131104
+    h2-50cm        -0.405128  0.075841
+    h3-30cm        -0.595997  0.017468
+    dima            0.232258 -0.042754
+    dima+           0.265798 -0.070837
+    dima-           0.198792 -0.014733
+    dragon          0.072961 -0.043175
+    greco           0.167150 -0.060809
+    baseline        0.101569 -0.049344
+    msu2            0.357705 -0.036428
+    martin_0.6_14  -0.028113 -0.035254
+    martin_0.8_40  -0.246929 -0.010401
+    martin_1.8_125 -0.569511 -0.034839
+    all            -0.427318 -0.067581
+    tilted         -0.501349 -0.087664
+    horizontal     -0.378935 -0.038564

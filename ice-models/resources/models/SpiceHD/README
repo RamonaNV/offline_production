@@ -1,0 +1,11 @@
+For use with PPC (revision 149421,+) and CUDA only:
+
+SpiceHD is based on Spice3.2 but changes the way the DOM is modelled, adds propagation in the hole ice column and modifies the anisotropy as well as the detector geometry:
+ - the angular acceptance function is substituted by a more physically motivated cut on the impact point, where only photons arriving at the volume of the PMT are accepted,this enables the use of direct tracking of photons through the hole column
+ - comparing to flasher data the hole ice radius, scattering length (as specified in cfg.txt) and relative position to each DOM (as specified in the geo-f2k file) has been determined
+ - in order to achieve a sensible detector geometry the anisotropy has been refitted to 8% (Spice Lea value), in Spice3.2 the anisotropy seems to be biased by the flasher unfolding
+
+In order to use SpiceHD with PPC update your PPC version to add least revision 149421, in the IceCube SVN. Then recompile with HOLE and ASENS enabled in the gpu/ini.cxx file.
+Be sure to use an as.dat with only two lines: 0.0 and 0.33 (0 disables weighted propagation, the second is (1-2*angular acceptance integral(0.335)) to guarantee the right cut on the impact point).
+When used in an IceTray environment the detector geometry is loaded from the associated GCD file. The GCD file can be adopted to the optimized geometry using the GCDModifier.py script.
+Be sure that as.dat only contains a single "1.0", otherwise weighted propagation which does not work with SpiceHD will be used.

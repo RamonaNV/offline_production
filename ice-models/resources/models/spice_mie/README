@@ -1,0 +1,2 @@
+bare-bones SPICE Mie model, should be compatible with clsim as is.
+for running with ppc must add files as.dat, wv.dat, and rnd.txt.

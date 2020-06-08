@@ -1,0 +1,4 @@
+"homogenized" ice model for performance testing with new sensors.
+
+This was constructed by replacing the coefficients at all depths with
+the values from SPICE Mie at 1698.47 meters (z=249.60)

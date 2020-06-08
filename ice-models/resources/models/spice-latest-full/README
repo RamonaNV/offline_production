@@ -1,0 +1,10 @@
+for use with ppc only (has new features that are compatible with ppc trunk):
+
+SPICE 3.2 with contribution from air bubbles (at depths less than 1350 m, taken from WHAM!)
+and with RDE fitted with flasher data, combined with the HQE-specific wavelength curve.
+
+Some SPICE3 parameters are updated (fitted to 85 string data):
+     fSL=0.35 (scat. function), k1=-0.106 (anisotropy coeff.)
+
+To use with ppc icetray module add rnd.txt file (removed to reduce size).
+To use with stand-alone (command-line) ppc also add file geo-f2k.

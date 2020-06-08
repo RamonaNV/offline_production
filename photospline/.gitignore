@@ -1,0 +1,2 @@
+# Ignore C extensions.
+python/spglam.so

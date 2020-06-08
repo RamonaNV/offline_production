@@ -1,0 +1,103 @@
+.. $Id: RELEASE_NOTES  79391 2011-10-10 olivas $
+.. $Author: olivas $
+.. $Date: 2012-06-27 $
+
+.. _cmc-release-notes:
+
+Release Notes
+=============
+
+trunk
+-----
+
+Mar. 3, 2020 Brian Clark (baclark@msu.edu)
+------------------------------------------
+Prepare for combo release V01-00-00
+
+*  Update some code block formatting syntax in rst docs
+
+Feb. 5, 2020 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-01
+
+* Merged docs from the wiki into proper project rst docs.
+
+Dec. 20, 2019 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-00
+
+June 20, 2019 Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+---------------------------------------------------------------------
+V03-03-01 - Incremental release.
+
+* Cleanup of import statements
+
+Nov 3, 2017 Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+---------------------------------------------------------------------
+V03-03-00 - Incremental release.
+
+* Exposes cmc parameters to Python
+
+March 24th, 2017 Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+---------------------------------------------------------------------
+
+V03-02-00 - Incremental release.
+
+* Factor longitudinal profile calculation out into sim-services, and use the
+  same profiles in cmc and clsim. Now cmc uses different profiles for EM and
+  hadronic showers, and uses a radiation length that is corrected for the
+  density of ice.
+* Emit sub-cascades with new shape, CascadeSegment. This tells photon
+  propagators that the cascade should be treated as a constant emitter with a
+  fixed length, rather than having its longitudinal development simulated.
+
+November 24th, 2014 Alex Olivas  (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+
+V03-00-03 - Incremental release.
+
+- V03-01-00
+  
+  * r141148 - Add a maximum output cascade energy, above which 
+    cascades are further split, but given identical locations.   
+
+
+November 24th, 2014 Alex Olivas  (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+
+V03-00-03 - Incremental release.
+
+* Split particles now get their LocationType.
+
+July 10th, 2014 Alex Olivas  (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+
+V03-00-02 - Incremental release.
+
+* Python 3 script cleanups.
+
+June 18th, 2012 Alex Olivas  (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+
+* Big reorganization.  The main motivation was to make projects
+  that depend on cmc not have to include gsl in their USE_TOOLS line.
+  It's always a bit of a surprise to link to a project only to have
+  that fail because you didn't include their tools as well.  That's
+  just bad form.  So most classes are moved to private.  The only
+  thing left in public is I3CascadeMCService.  Only the propagator
+  service depends on explicitly building against it.
+
+* The scripts work again and were never fully converted.  Welcome
+  to the world of Q-frames!
+
+
+June 27th, 2012 Alex Olivas  (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+
+* CMC wasn't handling pathological input very well. When the particle's
+  energy is not normal ( literally !std::isnormal ) CMC would either
+  abort or loop infinitely.  This is the cause of the following ticket :
+  http://code.icecube.wisc.edu/projects/icecube/ticket/384
+  When the particle's energy is not normal CMC now prints
+  a warning and returns an empty list.
+

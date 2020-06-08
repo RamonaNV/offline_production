@@ -1,0 +1,33 @@
+.. $Id: RELEASE_NOTES  79391 2011-10-10 olivas $
+.. $Author: olivas $
+.. $Date: 2011-10-10 $
+
+Release Notes
+=============
+
+Dec. 20, 2019 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-00
+
+December 18, 2018 - Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+------------------------------------------------------------------------------
+* Default model-specific DOMefficiencies
+
+June 22, 2018 - Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+------------------------------------------------------------------------------
+Release V00-01-00
+* Adds new hole-ice models
+
+
+V00-00-02 - Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+------------------------------------------------------------------------------
+
+* Incremental release: Changed anisotropy to values from Martin and added a model for new LE production
+
+
+V00-00-01 - Juan Carlos Diaz-Velez (juancarlos@icecube.wisc.edu)
+------------------------------------------------------------------------------
+
+* Initial release: ported from ppc/clsim
+
+

@@ -1,0 +1,330 @@
+.. $Id: RELEASE_NOTES 178208 2019-12-20 17:52:18Z olivas $
+.. $Author: olivas $
+.. $Date: 2019-12-20 10:52:18 -0700 (Fri, 20 Dec 2019) $
+
+Release Notes
+=============
+
+Trunk
+
+Dec. 20, 2019 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-00
+
+June 20, 2018 Juan Carlos Diaz Velez (juancarlos@icecube.wisc.edu)
+--------------------------------------------------------------------
+Release V00-11-01
+
+* Update slicing function for slicing dimension ndim-2 in gen2 splines
+
+
+Nov 3, 2017 Juan Carlos Diaz Velez (juancarlos@icecube.wisc.edu)
+--------------------------------------------------------------------
+Release V00-11-00
+
+* Fixes another memory leak
+
+March 27, 2017 Alex Olivas (olivas@icecube.umd.edu)
+--------------------------------------------------------------------
+Release V00-10-01
+
+* Fix memory leaks in spglam with properly placed Py_DECREFs (hat tip to sflis)
+* Fix a bug in splinetable_convolve that filled parts of the transfer matrix
+  that should have been zero with (occasionally negative) garbage. Convolution
+  now preserves monotonicity, as advertised.
+* Make ndsplineeval_deriv2() actually work, and add test for same
+* Add a regression test for cfitter
+* Update FITS detection to prefer astropy.io.fits
+* Update fitting scripts to deal with clsim FITS tables
+* Expose I3SplineTable extents and ndim to Python
+  
+  -- Jakob van Santen
+
+* Add a function to extract 1D slices from spline surfaces
+  
+  -- Thorsten Gluesenkamp
+
+* Make 1D monotonic fitting work in the Python implementation.
+  
+  -- John Kelley
+
+* Make FITSTable.stack() handle tables where statistical errors were stored
+  
+  -- Thomas Kittler
+
+* Skip wavelength-range factor when normalizing tables in memory (clsim does
+  it correctly internally now)
+  
+  -- Marcel Usner
+
+* Various fixes to follow build system churn and keep static analysis happy
+
+  -- Kevin Meagher, Don La Dieu
+
+April 18, 2015 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V00-10-01
+
+* Deal with NaN data in pyglam
+* Small code changes to fix warnings
+* Fix memory leaks in spglam
+* Rewrite blossom convolution in a slightly more memory-efficient way
+* Save all attributes as header keys instead of only a few
+
+  -- Jakob van Santen
+
+
+April 3, 2015 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V00-10-00
+
+* Make it possible to import FITStable from clsim
+* Pad out knots vector as done in readsplinefitstable(), fixing a rare
+  segfault in test_single_basis_vs_multi
+* Small code changes to fix warnings
+* Keep track of the GeometryType enum
+
+  -- Jakob van Santen
+
+* Move the .fits tables to I3_TESTDATA and find them there
+
+  -- Don la Dieu
+
+* Fix error message in test
+
+  -- Alex Olivas
+
+December 9, 2014 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V00-09-01
+
+* Disable doxygen until its cyclic dependency can be fixed
+
+  -- Don la Dieu
+
+* Expose gradient evaluation in I3SplineTable and document it
+
+  -- Jakob van Santen
+
+
+September 23, 2014 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V00-09-00
+
+* Add a utility function to extend the support of the knot vector
+* Fix memory leak in I3SplineTable pybindings
+* Switch default parity to the actual default
+
+  -- Jakob van Santen
+
+* Work around file handle limits
+
+  -- Moriah Tobin
+
+* Correct example code
+
+  -- Chris Weaver
+
+April 22, 2014 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V00-08-01
+
+* Only use gcc flags for gcc
+
+  -- Chris Weaver
+
+* Change F*x to numpy.dot(F,x) in glam.py
+* Force IEEE 754-compliant SSE math for all floating-point operations,
+  keeping vector and scalar calculations exactly identical (which was
+  already the case for x86_64 platforms, but has to be explicitly
+  specified for i686)
+* Only try to link to BLAS if it can actually be found
+
+  -- Jakob van Santen
+
+
+January 15, 2014 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V00-08-00
+
+* Fall back to clsim PhotoTable if loading the original table fails
+* Mask out non-finite values before passing them to Gnuplot
+* Make I3SplineTable noncopyable
+* Specify C linkage in C headers
+* Refactor ndsplineeval_gradient() to use the same non-recursive algorithm
+  as ndsplineeval() and bspline_nonzero() to use temporaries of the same
+  precision as bspline_deriv_nonzero()
+* Add two new unit tests to ensure that ndsplineeval_gradient() and
+  ndsplineeval() return bit-for-bit identical results 
+
+  -- Jakob van Santen
+
+* Include parity in spline tables
+
+  -- Marcel Usner
+
+
+August 21, 2013 Meike de With (meike.de.with@desy.de)
+--------------------------------------------------------------------
+
+Release V00-07-00
+
+* Check the return value of tablesearchcenters() in the sampler
+* Make project compatible with Python 3
+* Remove some deprecated API warnings and update to new numpy API
+* Use spglam instead of glam if it is available
+
+  -- Nathan Whitehorn
+
+* Fix SuiteSparse header paths following cmake update
+* Add some 'const's 
+* Allow header keywords to be read through I3SplineTable
+* Add doxygen comments
+* Add a function to permute the dimensions of a spline table
+* Actually call the SplineTable constructor, making spglam work
+
+  -- Jakob van Santen
+
+
+February 21, 2013 Emanuel Jacobi  (emanuel.jacobi@desy.de)
+--------------------------------------------------------------------
+
+Release V00-06-00
+
+* Nest headings in docs properly
+* Consolide CMakeLists.txt
+* Removed dependency on log4cplus
+* Remove photo2numpy. It is now obsolete, having been replaced by the
+  standalone python reader.
+* Add dependency on IceTray to support the new unit test infrastructure
+
+  -- Nathan Whitehorn
+
+* Add write support to C-side splinetable.
+* Improved documentation
+* Expose table dimensionality and extent in I3SplineTable.
+* Make I3SplineTable const-correct and aware of the BIAS field.
+* Make C library functions const-correct.
+* Remove a stray knot shift. This was a small effect for Photonics tables
+  (1 degree in zenith and 1 meter in depth), but has been wrong since
+  before the initial commit.
+
+  -- Jakob van Santen
+
+* Cleaned up warnings generated by clang
+
+  -- Kevin Meagher
+
+September 11, 2012 Emanuel Jacobi  (emanuel.jacobi@desy.de)
+--------------------------------------------------------------------
+
+Release V00-05-00
+
+* Make plots look nicer, with colors, correct axes, ...
+* Reformulate the entry to the outer loop of BLOCK3 to avoid spurious
+  early termination.
+
+    In the previous version of the initilization, we started by solving
+    the unconstrained problem and projecting the solution into the x>=0
+    space. The first operation in the other loop is to check the Lagrange
+    multipliers associated with the constrained coefficients and free any
+    whose nonzeroness would reduce the residual. In certain cases where a
+    very small penalty term was used, it could happen that all elements of y
+    were nonnegative, causing the outer loop to terminate with a truncated
+    solution that did not correspond to the minimum in the subspace of
+    the free coefficients. Starting with the null vector instead of the
+    truncated solution to the unconstrained problem keeps the state of the
+    factorization consistent with the rest of the outer loop, and makes this
+    behavior go away.
+
+* Shift time knots to start from 1 ns instead of 0.1 ns
+* Replace photoadd with something that actually works.
+* Fix an off-by-2 bug in standalone reader.
+
+  -- Jakob van Santen
+
+* Fixed small bug in reading spline header in python. Now, spline.geotype
+  actually returns the geotype, and spline.level actually returns the level
+
+  -- Jake Feintzeig
+
+
+June 25, 2012 Emanuel Jacobi  (emanuel.jacobi@desy.de)
+--------------------------------------------------------------------
+
+Release V00-04-00
+
+* Rototill photospline code to get the geometry lookup class (point
+  source vs. infinite muon for now) from the table headers instead of
+  guessing from the look-up particle type.
+* Make the photonics-dependent parts conditional on the
+  presence of photonics
+* Add an experimental non-recursive BLAS-based ndsplineeval()
+* Remove localbasis_sub()
+
+  -- Nathan Whitehorn
+
+* Condense photo2numpy from 500 lines of C to 60 lines of Python
+
+  -- Jakob van Santen
+
+* Silence warnings in clang
+* removed an unused variable from cholesky_solve
+
+  -- Claudio Kopper
+
+
+
+January 11, 2012 Emanuel Jacobi  (emanuel.jacobi@desy.de)
+--------------------------------------------------------------------
+
+Release V00-03-00
+
+Features:
+
+* Added support for Ngroup
+
+   -- Jacob Feintzeig
+
+* Read reference index of refraction from Photonics tables
+
+  -- Jakob van Santen
+
+Bugfixes:
+
+* Build photo2numpy unconditionally
+* Allow use of non-spglam components if spglam is not built
+* Check if level2 support exists
+* Handle missing numpy gracefully
+* Synchronize nnls_lawson_hanson() with wavedeform and millipede
+
+  -- Nathan Whitehorn
+
+August 9, 2011 Emanuel Jacobi  (emanuel.jacobi@desy.de)
+--------------------------------------------------------------------
+
+Release V00-02-00
+
+Features:
+
+* Updated the version of Lawson-Hanson
+* Reduced the effects of autocorrelation by thinning
+  the sampled points by the burnin period.
+
+  -- Nathan Whitehorn
+
+* utils.py works with level1 and level2 tables
+
+  -- Jacob Feintzeig
+
+
+April 15, 2011, Fabian Kislat  (fabian.kislat@desy.de)
+--------------------------------------------------------------------
+
+Release V00-01-00. Initial release.
