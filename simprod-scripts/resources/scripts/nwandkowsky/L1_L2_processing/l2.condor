@@ -1,0 +1,30 @@
+# Stage shebang script and GridFTP certificate to the node.
+# # The executable itself will always be staged if the node is
+# # on a different filesystem.
+should_transfer_files = YES
+transfer_input_files = L2.py
+# # but do not try to copy outputs back (see: https://htcondor-wiki.cs.wisc.edu/index.cgi/tktview?tn=3081)
++TransferOutput=""
+
+executable = L2.py
+gcd = /cvmfs/icecube.opensciencegrid.org/data/GCD/GeoCalibDetectorStatus_2016.57531_V0.i3.gz
+
+output = log/job.$(Cluster).out
+error = log/job.$(Cluster).err
+log = log/MuonGun.log
+
+universe = vanilla
+notification = never
+
+# Select only ATI GPUs. they count as a single resource, but are twice as fast!
+#+AccountingGroup="long.$ENV(USER)"
++AccountingGroup="sanctioned.$ENV(USER)"
+request_memory = 3500
+Requirements = (OpSysMajorVer =?= 6)
+
+Arguments = -g $(gcd) -i $(infile) -o $(outfile)
+
+# If the job gets evicted, place on hold rather than restarting.
+#PeriodicHold = (NumJobStarts >= 1 && JobStatus == 1)
+
+queue

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+eval `$1`
+ENVSHELL=$2
+shift 2
+$ENVSHELL $@
+

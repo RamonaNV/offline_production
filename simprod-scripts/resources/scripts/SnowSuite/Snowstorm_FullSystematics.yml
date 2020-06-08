@@ -1,0 +1,46 @@
+# Config for the full-scale systematics dataset
+# (after alignment with the calibration group)
+
+# baseline ice-model and hole-ice parametrization
+IceModelLocation: "$I3_BUILD/ice-models/resources/models/spice_3.2.1"
+HoleIceParameterization: "$I3_BUILD/ice-models/resources/models/angsens/as.flasher_p1_0.30_p2_-1"
+
+
+# Control ice model perturbations:
+
+Perturbations:
+    # IceWavePlusModes for depth dependent absorption/scattering scaling
+    IceWavePlusModes:
+        apply: true
+        type: default
+
+    # Global ice scattering scaling
+    Scattering:
+        type: uniform
+        uniform:
+            limits: [[0.9, 1.1]]
+
+    # Global ice absorption scaling
+    Absorption:
+        type: uniform
+        uniform:
+            limits: [[0.9, 1.1]]
+
+    # Ice anisotropy scaling
+    AnisotropyScale:
+        type: uniform
+        uniform:
+            limits: [[0., 2.0]]
+
+    # DOM efficiency scaling
+    DOMEfficiency:
+        type: uniform
+        uniform:
+            limits: [[0.9, 1.1]]
+   
+    # DOM angular acceptance according to the Unified HoleIce model
+    # see: https://github.com/philippeller/angular_acceptance
+    HoleIceForward_Unified:
+        type: uniform
+        uniform:
+                limits: [[-2., 1.], [-0.2, 0.2]]

@@ -1,0 +1,37 @@
+These things are a refactoring of dcorsika.py in simprod-scripts in order to make it more readable and more flexible. It adds a builder, so in principle one can build on the fly, but clearly this builder is rather simple.
+
+There have been some changes in parameter names:
+-------------------------------------------
+  Old name               New name
+-------------------------------------------
+  model                  he_model
+  lemodel                le_model
+  cthmin/max             theta-min/max
+  cphmin/max             phi-min/max
+  donkg                  no-nkg             We can change this back (what should be the default?
+  doegs                  no-egs             We can change this back (what should be the default?
+  runnum                 runnr              (the "new" name is the corsika name)
+  firstevent             evtnr              (the "new" name is the corsika name)
+  nevents                nshow              (the "new" name is the corsika name)
+  crtype                 prmpar             (the "new" name is the corsika name)
+  --flat_detector        --geometry=flat    This is to be consistent with other compile options
+  logfile                log
+  URL                    url
+-------------------------------------------
+
+Some parameters that are not in the new version. Notably some directories, and there is corsika_path instead. The removed options to deprecated_options if there is a way to fix the logic, or they can be added again. Removed options:
+  topdir
+  tmpdir
+  cachedir
+  cvmfs
+  skipoptions
+  ecuts
+  ratmo
+  pipe (this has actually never been included)
+
+
+Some hardcoded parameters changed. This still needs looking into.
+  save_long
+  ecuts#
+  arrang
+

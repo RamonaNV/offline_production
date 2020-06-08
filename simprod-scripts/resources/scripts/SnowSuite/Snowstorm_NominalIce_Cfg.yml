@@ -1,0 +1,53 @@
+# Config for a "nominal" (not perturbed) ice-model in Snowstorm
+
+# baseline ice-model and hole-ice parametrization
+
+IceModelLocation: "$I3_BUILD/ice-models/resources/models/spice_3.2.1"
+HoleIceParameterization: "$I3_BUILD/ice-models/resources/models/angsens/as.flasher_p1_0.30_p2_-1"
+
+
+# Control ice model perturbations:
+
+Perturbations:
+    # IceWavePlusModes for depth dependent absorption/scattering scaling
+    IceWavePlusModes:
+        apply: false
+        type: default
+
+    # Global ice scattering scaling
+    Scattering:
+        type: delta
+        delta:
+            x0: [1.0]
+
+    # Global ice absorption scaling
+    Absorption:
+        type: delta
+        delta:
+            x0: [1.0]
+
+    # Ice anisotropy scaling
+    AnisotropyScale:
+        type: delta
+        delta:
+            x0: [1.0]
+
+    # DOM efficiency scaling
+    DOMEfficiency:
+        type: delta
+        delta:
+            x0: [1.0]
+
+    # DOM angular acceptance according to the MSU HoleIce model
+    # see: https://wiki.icecube.wisc.edu/index.php/MSU_Forward_Hole_Ice
+    #HoleIceForward_MSU:
+    #    type: delta
+    #    delta:
+    #        x0: [0.3, -1.0]
+    
+    # DOM angular acceptance according to the Unified HoleIce model
+    # see: https://github.com/philippeller/angular_acceptance
+    HoleIceForward_Unified:
+        type: delta
+        delta:
+            x0: [0.101569, -0.049344]

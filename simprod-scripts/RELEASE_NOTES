@@ -1,0 +1,196 @@
+Release Notes
+=============
+
+.. _simprod-scripts-release-notes:
+
+trunk
+-----
+Added repoly example to merge events prior to photon propagation
+
+Feb. 5, 2020 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-01
+
+Dec. 20, 2019 Alex Olivas (aolivas@umd.edu)
+-------------------------------------------
+Combo Release V00-00-00
+
+Release V01-11-00
+-----------------
+* Added support for re(over) sampling of corsika showers in photon propagation stage.
+* Support for individual SPE templates.
+
+Release V01-10-04
+-----------------
+* Support (including traysegments) for unbuased muongun generation
+* Updated defaults for NuGen
+* Updated default ice model
+* Bug fix: skip I3MuonSliceRemoverAndPulseRelabeler if MMCTrackList is None
+
+Release V01-10-02
+-----------------
+* added option to control NuGen's zenith sampling mode
+
+Release V01-10-01
+-----------------
+* Config parameters for NuGen differential x-sections
+* Enable histograms for MuonGun
+
+Release V01-10-00
+-----------------
+* Support for new modes in neutrino-generator
+* Added jcorska (corsika_dev)
+
+Release V01-09-00
+-----------------
+
+* Added S-,M-frames to MuonGun IPModule. S-Frames are needed to weigh MuonGun events.
+* Added I3PrimaryPulseMapper from sim-services to generate an I3ParticleIDMap that associates MCPulses with
+  the primary of the particle that produced them. PMTResponseSimulator adds an I3ParticleIDMap that maps pulses with
+  the particle that produced them but often these secondary particles are not saved in order to save space on disc.
+* Added a merged I3MCTree that combines SignalMCTree and BackgroundMCTree in order to keep output compatible with 
+  previous versions.
+* Fixed a problem with GENIE NuTau + GEANT4 not working due to the I3TauSanitizer. Also
+  added the ability to shift the center of the GENIE generation volume.
+* Switched GENIE from using the 2.6.4 splines to 2.8.6 splines
+* Added documentation and tests.
+
+Release V01-08-07
+-----------------
+
+* IP2 needs the corsika version to be a string
+
+Release V01-08-06
+-----------------
+
+* Corrects a bug in ppc module that inavertently renamed mcpes.
+
+Release V01-08-05
+-----------------
+* Corrects a bug in ppc module that inavertently renamed mcpes.
+
+* Added option to disable Histograms
+* Added option to set CORSIKA run number.
+* Renamed diplopia instances to polyplopia
+* Added SelectNeutrino option in Corsika for CORSIKA-neutrinos
+* Added sanity checker for PPC
+* Turned Corsika into a ParsingModule.  The bool parameters are now proper 
+  toggle switches and don't take a specific value anymore. (r144343 and r144345)
+* Removed double deletion of frame object in the ppc segment, which would have thrown. (r138265)
+* Removed the IceTop segment.
+* Removed RepairBrokenGCD segment.  There are checks for pathological 
+  voltages in the GCD validation scripts, so this correction isn't 
+  needed anymore.
+* In python/modules/corsika.py, changes in Corsika5ComponentGenerator, add default GCD
+  create ouputdir for xml and i3 files.
+* Create documentation in resources/docs/modules/corsika.rst
+
+
+Release V01-08-04
+-----------------
+
+* Added option to set CORSIKA run number.
+* Renamed diplopia instances to polyplopia
+* Added SelectNeutrino option in Corsika for CORSIKA-neutrinos
+* Added sanity checker for PPC
+
+Release V01-08-03
+-----------------
+* Fixes problem with very long paths on INPUT corsika cards
+
+Release V01-08-02
+-----------------
+
+* Only add the _withoutNoise variable when we use noise (#1702)
+
+Release V01-08-01
+-----------------
+
+* Fixed several bugs int the nugen coincident simulation chain
+* Remove runid from generators. Now assigned at detector level.
+
+Release V01-08-00
+-----------------
+
+* Turned Corsika into a ParsingModule.  The bool parameters are now proper 
+  toggle switches and don't take a specific value anymore. (r144343 and r144345)
+* Removed double deletion of frame object in the ppc segment, which would have thrown. (r138265)
+* Removed the IceTop segment.
+* Removed RepairBrokenGCD segment.  There are checks for pathological 
+  voltages in the GCD validation scripts, so this correction isn't 
+  needed anymore.
+* In python/modules/corsika.py, changes in Corsika5ComponentGenerator, add default GCD
+  create ouputdir for xml and i3 files.
+* Create documentation in resources/docs/modules/corsika.rst
+
+Release V01-07-13
+-----------------
+
+* Add option to enable GPUs in CLSimPlusGenie
+
+Release V01-07-12
+-----------------
+
+* Fix for ParamsMap in GenerateNeutrinos
+
+Release V01-07-11
+-----------------
+
+* Moved efficiency down-sampling after polyplopia 
+* Added SkipKeys option to IC86 module 
+
+Release V01-07-10
+-----------------
+
+* IceTop detector integration
+* no-hole-ice option for hybrid mode
+* Allow detector segments to be more easily run by humans
+* Remove DOMSimulator options, since we can't run it anymore
+* Remove old references to /net/user
+* Detector option for time shift skip keys (to not time shift specified keys)
+* Default to I3LinearizedMCTree 
+* Default DOM efficiency to 0.99
+* Better handling of renamed I3MCPESeriesMap
+* Add MultiDomEffSample segment to sample a lower efficiency from MCPESeries
+* Do efficiency sampling at beginning of detector step, if requested
+
+Release V01-07-09
+-----------------
+
+* Added IceTop modules. 
+* Fixed handling of mctype for sanity_checker and diplopia
+
+
+Release V01-07-08
+-----------------
+
+* Update NuGen to support latest interface
+* Add some corsika options for IceTop
+
+Release V01-07-07
+-----------------
+
+* Merge SimProd and traysegments versions of NuGen script
+* Update NuGen to support latest interface
+* Add tests to make sure NuGen runs and the API hasn't been broken
+
+Release V01-07-06
+-----------------
+
+* IC79 L2 fixes for icesim4
+* Detector changes for IT support
+* Add PINGU detector and triggers
+* NuGen cross section support
+* Fix pnorm and pgam for corsika (previously stuck at defaults)
+* Update NuGen to support latest interface
+* Support flavor biasing for CORSIKA neutrinos
+* Added a CORSIKA neutrino mode to fullSimulation.py
+* Added 5component CORSIKA module (independent of dCORSIKA)
+* Fix primary spectral index for 5comp corsika weights
+* Fix PPC segment (for overriding default cfg.txt)
+* Make NuGen.AutomaticMuonFinalVolume configurable
+* Added Ovesampling to CorsikaReader segment
+* Allow disabling the hole-ice DOM acceptance for non-hybrid clsim
+* Ensure none of the atmospheric neutrinos are absorbed in the glacier
+* Added module to correct weights for buggy simulations
+

@@ -1,0 +1,28 @@
+# Stage shebang script and GridFTP certificate to the node.
+# # The executable itself will always be staged if the node is
+# # on a different filesystem.
+should_transfer_files = YES
+transfer_input_files = photon_nugen.py
+# # but do not try to copy outputs back (see: https://htcondor-wiki.cs.wisc.edu/index.cgi/tktview?tn=3081)
++TransferOutput=""
+
+executable = photon_nugen.py
+gcd = /cvmfs/icecube.opensciencegrid.org/data/GCD/GeoCalibDetectorStatus_IC86_Merged.i3.gz
+
+output = log/job.$(Cluster).out
+error = log/job.$(Cluster).err
+log = log/NuE_photon.log
+
+universe = vanilla
+notification = never
+
+# Select only ATI GPUs. they count as a single resource, but are twice as fast!
+
+request_memory = $(memory)
+request_gpus = 1
++AccountingGroup="gpu.$ENV(USER)"
+Requirements = (OpSysMajorVer =?= 6)
+
+Arguments = --domos $(domos) --domeff $(domeff) --icemodel $(ice) -s $(seed) -g $(gcd) -r $(runnumber) -n $(numevents) --gamma $(gamma) --energy_min $(emin) --energy_max $(emax) --flavor $(flavor) -o $(outfile)
+
+queue
