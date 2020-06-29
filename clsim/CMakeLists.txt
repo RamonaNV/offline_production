@@ -70,6 +70,15 @@ else (BUILD_CLSIM_DATACLASSES_ONLY)
 endif (BUILD_CLSIM_DATACLASSES_ONLY)
 
 
+
+
+enable_language(CUDA)
+
+
+
+
+
+
 SET(LIB_${PROJECT_NAME}_SOURCEFILES
   # private/clsim
   private/clsim/I3CLSimEventStatistics.cxx
@@ -93,6 +102,7 @@ SET(LIB_${PROJECT_NAME}_SOURCEFILES
 SET(LIB_${PROJECT_NAME}_PROJECTS serialization icetray dataio dataclasses
 phys-services tableio simclasses sim-services)
 SET(LIB_${PROJECT_NAME}_TOOLS python boost gsl)
+#SET(CMAKE_CC_FLAGS "${CMAKE_CC_FLAGS} pkg-config --libs --cflags pocl ")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2 -msse3")
 
 # these files will be compiled in any case (with or without OpenCL/Geant4)
@@ -287,6 +297,8 @@ if(NOT BUILD_CLSIM_DATACLASSES_ONLY)
   endif()
 endif()
 
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cudaKernels)
+
 # check for Geant4
 if (GEANT4_FOUND AND OPENCL_FOUND AND NOT DISABLE_GEANT4_IN_CLSIM)
     ADD_DEFINITIONS(-DHAS_GEANT4)
@@ -315,11 +327,20 @@ else (GEANT4_FOUND AND OPENCL_FOUND AND NOT DISABLE_GEANT4_IN_CLSIM)
     colormsg(RED   "+-- Geant4 or OpenCL is not installed on your system. clsim will fail if it is not used with parameterizations.")
 endif (GEANT4_FOUND AND OPENCL_FOUND AND NOT DISABLE_GEANT4_IN_CLSIM)
 
+ 
+
+list(APPEND LIB_${PROJECT_NAME}_LIBRARIES
+ 
+  thiscudalib
+
+  )
+
 # the clsim library definition
 i3_add_library(${PROJECT_NAME}
   ${LIB_${PROJECT_NAME}_SOURCEFILES}
   USE_TOOLS ${LIB_${PROJECT_NAME}_TOOLS}
   USE_PROJECTS ${LIB_${PROJECT_NAME}_PROJECTS}
+  LINK_LIBRARIES ${LIB_${PROJECT_NAME}_LIBRARIES}
   )
 
 if(NOT BUILD_CLSIM_DATACLASSES_ONLY)
@@ -367,3 +388,12 @@ i3_add_pybindings(clsim
 
 ## restore OPENCL_FOUND
 set(OPENCL_FOUND ${tmp_OPENCL_FOUND})
+
+
+
+
+
+
+
+
+
