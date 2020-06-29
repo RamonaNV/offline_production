@@ -1,13 +1,13 @@
-##orginal:
+## orginal:
 https://github.com/IceCubeOpenSource/offline_production
 
-##Compiling:
+## Compiling:
 with  cmake3.17.0 or newer:
 env CC=gcc-8 CXX=g++-8 cmake ..
 (offline_production:
 cmake .. -DOpenCL_INCLUDE_DIR=/usr/local/cuda-10.2/include/CL/ -DOpenCL_LIBRARY=/usr/local/cuda-10.2/lib64/libOpenCL.so -DBOOST_INCLUDEDIR=/home/rhohl/boostInstall173/include -DBOOST_ROOT=/home/hohlr/boostInstall173/ -DCMAKE_PREFIX_PATH=/home/rhohl/boostInstall173/include/ -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-10.2 )
 
-##Running Code.
+## Running Code.
 in build:
 ./env-shell.sh
 export I3_TESTDATA= PATH_TO_ICECUBECUDA/test-data
