@@ -1853,7 +1853,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
   // CL PART
   printf(" -------------  CL ------------- \n");
   // uncomment for profiling CUDA only:
-  NSteps = 1;
+ // NSteps = 1;
 
   std::chrono::time_point<std::chrono::system_clock> startTimeCL2 =
       std::chrono::system_clock::now();

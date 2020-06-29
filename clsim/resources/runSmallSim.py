@@ -1,4 +1,18 @@
 
+#!/usr/bin/env python
+
+"""
+Demo: feeding the same steps through CLSim 
+"""
+
+from __future__ import print_function
+
+from icecube import icetray, ppc, clsim, phys_services, dataclasses, simclasses
+from os.path import expandvars, join, isfile
+from os import environ
+import tempfile, shutil
+import argparse
+import numpy
 
 """The MIT License (MIT)
 
@@ -22,20 +36,6 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-#!/usr/bin/env python
-
-"""
-Demo: feeding the same steps through CLSim 
-"""
-
-from __future__ import print_function
-
-from icecube import icetray, ppc, clsim, phys_services, dataclasses, simclasses
-from os.path import expandvars, join, isfile
-from os import environ
-import tempfile, shutil
-import argparse
-import numpy
 
 parser =argparse.ArgumentParser()
 parser.add_argument('-g', '--gcd-file', default=expandvars('$I3_TESTDATA/GCD/GeoCalibDetectorStatus_2016.57531_V0.i3.gz'))
