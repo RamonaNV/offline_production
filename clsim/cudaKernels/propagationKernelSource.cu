@@ -72,13 +72,13 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
       uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
         uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a  ){
 
-      int maxsteps = 10000000;
-      int nlaunches = (nsteps+maxsteps-1)/maxsteps;
+  
+      int nlaunches = (nsteps+nsteps-1)/nsteps;
        
       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
       init_RDM_CUDA( nsteps, MWC_RNG_x,  MWC_RNG_a);
       
-      printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, nlaunches, maxsteps);
+      printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, nlaunches, nsteps);
       uint32_t h_totalHitIndex =0;
       unsigned short *d_geolayer;
 	CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
@@ -91,12 +91,12 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
       for (int ilaunch= 0 ; ilaunch<nlaunches; ++ilaunch )
       {
              
-            int launchnsteps = ( (1+ilaunch)*maxsteps<= nsteps) ?  maxsteps : nsteps-ilaunch*maxsteps;   
-            std::cout<< launchnsteps<<std::endl;
+            int launchnsteps = ( (1+ilaunch)*nsteps<= nsteps) ?  nsteps : nsteps-ilaunch*nsteps;   
+           
             struct I3CLSimStepCuda* h_cudastep = (struct I3CLSimStepCuda*) malloc(launchnsteps*sizeof(struct I3CLSimStepCuda));
             
             for (int i =0; i<launchnsteps; i++){
-                  h_cudastep[i] = I3CLSimStep(in_steps[i+ilaunch*maxsteps]); 
+                  h_cudastep[i] = I3CLSimStep(in_steps[i+ilaunch*nsteps]); 
             } 
             startTimeCuda = std::chrono::system_clock::now();
             
@@ -135,7 +135,8 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
            // copy (max fo maxHitIndex) photons to host.
             struct I3CLSimPhotonCuda* h_cudaphotons = (struct I3CLSimPhotonCuda*) malloc(numberPhotons*sizeof(struct I3CLSimPhotonCuda));
             CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
-      
+            cudaDeviceSynchronize();  
+
            free(h_cudastep);     
            cudaFree(d_cudaphotons); 
            cudaFree(d_cudastep); 

@@ -4,22 +4,19 @@ https://github.com/IceCubeOpenSource/offline_production
 ## Compiling:
 with  cmake3.17.0 or newer:
 env CC=gcc-8 CXX=g++-8 cmake ..
-(offline_production:
-cmake .. -DOpenCL_INCLUDE_DIR=/usr/local/cuda-10.2/include/CL/ -DOpenCL_LIBRARY=/usr/local/cuda-10.2/lib64/libOpenCL.so -DBOOST_INCLUDEDIR=/home/rhohl/boostInstall173/include -DBOOST_ROOT=/home/hohlr/boostInstall173/ -DCMAKE_PREFIX_PATH=/home/rhohl/boostInstall173/include/ -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-10.2 )
 
 ## Running Code.
 in build:
 ./env-shell.sh
 export I3_TESTDATA= PATH_TO_ICECUBECUDA/test-data
-python ./clsim/resources/scripts/benchmark.py --gcd-file=$I3_TESTDATA/GCD/GeoCalibDetectorStatus_2016.57531_V0.i3.gz --numevents 1000
  
-for running test
-smalll script of clsim only:
 python clsim/resources/runSmallSim.py
 (needs variable I3_TESTDATA to test-data folder too)
+(other one:  python ./clsim/resources/scripts/benchmark.py --gcd-file=$I3_TESTDATA/GCD/GeoCalibDetectorStatus_2016.57531_V0.i3.gz --numevents 1000 ,
+has not yet been adapted to run both..)
 
 
-
+------------------------------------------------------------------
 
 # offline_production
 Slim version of IceCube's physics production software, including only the projects required to run up to photon generation. 

@@ -120,6 +120,7 @@ maxNumWorkitems_(10240)
 
 I3CLSimStepToPhotonConverterOpenCL::~I3CLSimStepToPhotonConverterOpenCL()
 {
+ 
     if (openCLThreadObj_)
     {
         if (openCLThreadObj_->joinable())
@@ -811,7 +812,7 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread()
     
     try {
        // OpenCLThread_impl(di);
-        CLCUDAThread(di);
+       CLCUDAThread(di);
         PRINTLC
     } catch(...) { // any exceptions?
         std::cerr << "OpenCL worker thread died unexpectedly.." << std::endl;
@@ -1071,6 +1072,8 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_downloadPhotons(boost
             queue_[bufferIndex]->flush(); // make sure it starts executing on the device
             waitForOpenCLEventYield(copyComplete);
         }
+
+        printf( "Num photons to copy (buffer %u): %" PRIu32, bufferIndex, numberOfGeneratedPhotons);
         
 #ifdef I3_LOG4CPLUS_LOGGING
         LOG_IMPL(INFO, "Num photons to copy (buffer %u): %" PRIu32, bufferIndex, numberOfGeneratedPhotons);
@@ -1850,7 +1853,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
   // CL PART
   printf(" -------------  CL ------------- \n");
   // uncomment for profiling CUDA only:
-  //NSteps = 1;
+  NSteps = 1;
 
   std::chrono::time_point<std::chrono::system_clock> startTimeCL2 =
       std::chrono::system_clock::now();
@@ -1890,6 +1893,13 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
               err.err());
   }
 
+  std::chrono::time_point<std::chrono::system_clock> endTimeCL =
+      std::chrono::system_clock::now();
+  float timer = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    endTimeCL - startTimeCL)
+                    .count();
+  printf("runtime %f [ms] \n", timer);
+
   try {
     // wait for the queue to really finish (just to make sure)
     queue_[0]->finish();
@@ -1897,13 +1907,6 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
     log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
               err.err());
   }
-
-  std::chrono::time_point<std::chrono::system_clock> endTimeCL =
-      std::chrono::system_clock::now();
-  float timer = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    endTimeCL - startTimeCL)
-                    .count();
-  printf("runtime %f [ms] \n", timer);
 
   I3CLSimPhotonSeriesPtr photons;
   I3CLSimPhotonHistorySeriesPtr photonHistories;
@@ -2050,17 +2053,15 @@ void I3CLSimStepToPhotonConverterOpenCL::CLCUDAThread(
   unsigned int otherBuffer = 1;
   bool otherBufferHasBeenCopied = false;
 
-    // start the main loop
+    // start the main loop  -   
     for (;;)
     {
+        bool starving = false;
+        bool shouldBreak = false;
+        runCLCUDA(di, last_timestamp, shouldBreak, 0, stepsIdentifier[0],
+                    totalNumberOfPhotons[0], numberOfSteps[0]);
 
-
-  bool starving = false;
-  bool shouldBreak = false;
-  runCLCUDA(di, last_timestamp, shouldBreak, 0, stepsIdentifier[0],
-            totalNumberOfPhotons[0], numberOfSteps[0]);
-
- if (shouldBreak) break;
+        if (shouldBreak) break;
   }
 
   printf("OpenCLCUDA thread terminating...");

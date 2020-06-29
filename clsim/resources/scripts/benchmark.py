@@ -64,8 +64,12 @@ import numpy
 
 from icecube import icetray, dataclasses, dataio, phys_services, sim_services, simclasses, clsim
 
-# icetray.I3Logger.global_logger.set_level(icetray.I3LogLevel.LOG_INFO)
-icetray.I3Logger.global_logger.set_level(icetray.I3LogLevel.LOG_WARN)
+icetray.logging.rotating_files('logtrace')
+
+
+#icetray.I3Logger.global_logger.set_levelicetray.I3LogLevel.LOG_INFO)
+#icetray.I3Logger.global_logger.set_level(icetray.I3LogLevel.LOG_WARN)
+icetray.I3Logger.global_logger.set_level(icetray.I3LogLevel.LOG_TRACE)
 
 radius = 120.*I3Units.m
 
