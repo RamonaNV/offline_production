@@ -22,7 +22,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifndef GEOMETRYSOURCE_CUH
 #define GEOMETRYSOURCE_CUH
-
+ 
+ 
+#pragma once
 
 ///////////////// BEGIN ice/water properties ////////////
 
@@ -15605,11 +15607,11 @@ __constant__ float geoDomPosStringMeanPosY[GEO_DOM_POS_NUM_STRINGS] = {
 
 
 
-__device__ void geometryGetDomPosition(unsigned short stringNum, unsigned short domNum, floating_t *domPosX, floating_t *domPosY, floating_t *domPosZ )
+__device__ __forceinline__ void geometryGetDomPosition(unsigned short stringNum, unsigned short domNum, float *domPosX, float *domPosY, float *domPosZ )
 {
     const unsigned int index = geoDomPosStringStartIndexInTemplateDomList[stringNum]+uint(domNum);
-    *domPosX = convert_floating_t(geoDomPosTemplatePositionsX_flat[index])*GEO_DOM_POS_MAX_ABS_X_MULTIPLIER_IN_TEMPLATE + geoDomPosStringMeanPosX[stringNum];
-    *domPosY = convert_floating_t(geoDomPosTemplatePositionsY_flat[index])*GEO_DOM_POS_MAX_ABS_Y_MULTIPLIER_IN_TEMPLATE + geoDomPosStringMeanPosY[stringNum];
+    *domPosX = float(geoDomPosTemplatePositionsX_flat[index])*GEO_DOM_POS_MAX_ABS_X_MULTIPLIER_IN_TEMPLATE + geoDomPosStringMeanPosX[stringNum];
+    *domPosY = float(geoDomPosTemplatePositionsY_flat[index])*GEO_DOM_POS_MAX_ABS_Y_MULTIPLIER_IN_TEMPLATE + geoDomPosStringMeanPosY[stringNum];
     *domPosZ = geoDomPosTemplatePositionsZ_flat[index];
 }
 
@@ -15620,7 +15622,7 @@ __device__ void geometryGetDomPosition(unsigned short stringNum, unsigned short 
 #define GEO_LAYER_STRINGSET_NUM 12
 #define GEO_LAYER_STRINGSET_MAX_NUM_LAYERS 99
 
-__constant__ float geoStringPosX[NUM_STRINGS] = {
+__constant__   float geoStringPosX[NUM_STRINGS] = {
   -2.5614001465e+02f, 
   -1.3280000305e+02f, 
   -9.1300001144e+00f, 

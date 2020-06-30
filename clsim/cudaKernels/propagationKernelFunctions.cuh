@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
+#include <math_constants.h>
 //!!! order matters:
 #include <CLnoneCUDA.cuh>
 #include <prependSource.cuh>
@@ -48,23 +49,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ///////////////// forward declarations
 
-__device__ int findLayerForGivenZPos(float posZ);
+__device__ __forceinline__ int findLayerForGivenZPos(float posZ);
 
-__device__ float mediumLayerBoundary(int layer);
+__device__ __forceinline__ float mediumLayerBoundary(int layer);
 
-__device__ void scatterDirectionByAngle(float cosa, float sina,
+__device__  __forceinline__ void scatterDirectionByAngle(float cosa, float sina,
                                         float4 *direction,
                                         float randomNumber);
 
-__device__ void createPhotonFromTrack(const I3CLSimStepCuda *step,
+__device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *step,
                                       const float4& stepDir, RNG_ARGS,
                                       float4 *photonPosAndTime,
                                       float4 *photonDirAndWlen);
 
  
-__device__ float2 sphDirFromCar(float4 carDir);
+__device__ __forceinline__ float2 sphDirFromCar(float4 carDir);
  
-__device__ void
+__device__ __forceinline__ void
 saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
         const float thisStepLength, float inv_groupvel,
         float photonTotalPathLength, uint32_t photonNumScatters,
@@ -97,10 +98,10 @@ __constant__ float PI = 3.14159265359f;
 //__device__ inline float my_sin(const float a);
 //__device__ inline float my_log(const float a);
 //__device__ inline float my_exp(const float a);
-__device__ inline float my_fabs(const float a);
-__device__ inline float sqr(const float a);
+__device__ __forceinline__ float my_fabs(const float a);
+__device__ __forceinline__ float sqr(const float a);
 
-__device__ void checkForCollision_OnString(
+__device__  __forceinline__ void checkForCollision_OnString(
     const unsigned short stringNum, const float photonDirLenXYSqr,
     const float4& photonPosAndTime, const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
@@ -119,7 +120,7 @@ __device__ void checkForCollision_OnString(
 #endif
     const unsigned short *geoLayerToOMNumIndexPerStringSetLocal);
 
-__device__ void checkForCollision_InCell(
+__device__  __forceinline__ void checkForCollision_InCell(
     const float photonDirLenXYSqr, const float4& photonPosAndTime,
     const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
@@ -143,7 +144,7 @@ __device__ void checkForCollision_InCell(
     const float this_geoCellWidthY, const int this_geoCellNumX,
     const int this_geoCellNumY);
 
-__device__ void checkForCollision_InCells(
+__device__  __forceinline__ void checkForCollision_InCells(
     const float photonDirLenXYSqr, const float4& photonPosAndTime,
     const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
@@ -162,7 +163,7 @@ __device__ void checkForCollision_InCells(
 #endif
     const unsigned short *geoLayerToOMNumIndexPerStringSetLocal);
 
-__device__ bool checkForCollision(
+__device__ __forceinline__ bool checkForCollision(
     const float4& photonPosAndTime, const float4& photonDirAndWlen,
     float inv_groupvel, float photonTotalPathLength,
     uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
@@ -179,7 +180,7 @@ __device__ bool checkForCollision(
 #endif
     const unsigned short *geoLayerToOMNumIndexPerStringSetLocal);
 
-__device__ void checkForCollision_OnString(
+__device__  __forceinline__ void checkForCollision_OnString(
     const unsigned short stringNum, const float photonDirLenXYSqr,
     const float4& photonPosAndTime, const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
@@ -395,7 +396,7 @@ __device__ void checkForCollision_OnString(
   }// end for loop layer_z
 }
 
-__device__ void checkForCollision_InCell(
+__device__  __forceinline__ void checkForCollision_InCell(
     const float photonDirLenXYSqr, const float4& photonPosAndTime,
     const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
@@ -500,9 +501,11 @@ __device__ void checkForCollision_InCell(
           geoLayerToOMNumIndexPerStringSetLocal);
     }
   }
+
+ // __syncthreads(); //onecellsyncthreads
 }
 
-__device__ void checkForCollision_InCells(
+__device__  __forceinline__ void checkForCollision_InCells(
     const float photonDirLenXYSqr, const float4& photonPosAndTime,
     const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
@@ -611,10 +614,11 @@ __device__ void checkForCollision_InCells(
 
 #undef DO_CHECK
 
-__syncthreads();
+ __syncthreads(); //cellsyncthreads
+
 }
 
-__device__ bool checkForCollision(
+__device__  __forceinline__ bool checkForCollision(
     const float4& photonPosAndTime, const float4& photonDirAndWlen,
     float inv_groupvel, float photonTotalPathLength,
     uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
@@ -705,7 +709,8 @@ __device__ bool checkForCollision(
 #endif // STOP_PHOTONS_ON_DETECTION
 #endif // DEBUG_STORE_GENERATED_PHOTONS
 
-__syncthreads();
+// __syncthreads();
+
 }
 
 #ifdef SAVE_ALL_PHOTONS
@@ -726,23 +731,23 @@ __syncthreads();
 //__device__ inline float my_exp(const float a) { return expf(a); }
  
 #ifdef USE_FABS_WORKAROUND
-__device__ inline float my_fabs(const float a) { return (a < ZERO) ? (-a) : (a); }
+__device__ __forceinline__ float my_fabs(const float a) { return (a < ZERO) ? (-a) : (a); }
 #else
-__device__ inline float my_fabs(const float a) { return fabs(a); }
+__device__ __forceinline__ float my_fabs(const float a) { return fabs(a); }
 #endif
-__device__ inline float sqr(const float a) { return a * a; }
+__device__ __forceinline__ float sqr(const float a) { return a * a; }
 
-__device__ int findLayerForGivenZPos(float posZ) {
+__device__ __forceinline__ int findLayerForGivenZPos(float posZ) {
   return int((posZ - (float)MEDIUM_LAYER_BOTTOM_POS) /
              (float)MEDIUM_LAYER_THICKNESS);
 }
 
-__device__ float mediumLayerBoundary(int layer) {
+__device__ __forceinline__ float mediumLayerBoundary(int layer) {
   return (float(layer) * ((float)MEDIUM_LAYER_THICKNESS)) +
          (float)MEDIUM_LAYER_BOTTOM_POS;
 }
 
-__device__ void scatterDirectionByAngle(float cosa, float sina,
+__device__  __forceinline__ void scatterDirectionByAngle(float cosa, float sina,
                                         float4 *direction,
                                         float randomNumber) {
  
@@ -787,7 +792,7 @@ __device__ void scatterDirectionByAngle(float cosa, float sina,
   //       (*direction).z*(*direction).z);
 }
 
-__device__ void createPhotonFromTrack(const I3CLSimStepCuda *step,
+__device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *step,
                                       const float4& stepDir, RNG_ARGS,
                                       float4 *photonPosAndTime,
                                       float4 *photonDirAndWlen) {
@@ -849,7 +854,7 @@ __device__ void createPhotonFromTrack(const I3CLSimStepCuda *step,
 #endif
 }
 
-__device__ float2 sphDirFromCar(float4 carDir) {
+__device__ __forceinline__ float2 sphDirFromCar(float4 carDir) {
   // Calculate Spherical coordinates from Cartesian
   const float r_inv =
   rsqrtf(carDir.x * carDir.x + carDir.y * carDir.y + carDir.z * carDir.z);
@@ -859,21 +864,21 @@ __device__ float2 sphDirFromCar(float4 carDir) {
     theta = acos(carDir.z * r_inv);
   } else {
     if (carDir.z < 0.f)
-      theta = PI;
+      theta = CUDART_PI_F;
   }
   if (theta < 0.f)
-    theta += 2.f * PI;
+    theta += 2.f * CUDART_PI_F;
 
   float phi = atan2(carDir.y, carDir.x);
   if (phi < 0.f)
-    phi += 2.f * PI;
+    phi += 2.f * CUDART_PI_F;
 
   return float2{theta, phi};
 }
 
 
 // Record a photon on a DOM
-__device__ void
+__device__ __forceinline__ void
 saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
         const float thisStepLength, float inv_groupvel,
         float photonTotalPathLength, uint32_t photonNumScatters,
@@ -894,8 +899,8 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
 ) {
 
   //PRINTL
-  uint32_t myIndex = 1+atomicAdd(&hitIndex[0], 1);//*hitIndex++;  //
- // printf("     -> photon record added at position %u.\n",    myIndex);
+  uint32_t myIndex = 1+atomicAdd(&hitIndex[0], 1); 
+  
 
   if (myIndex < maxHitIndex) {
 #ifdef PRINTF_ENABLED
@@ -942,8 +947,7 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
     outputPhotons[myIndex].cherenkovDist =
         photonTotalPathLength + thisStepLength;
     outputPhotons[myIndex].numScatters = photonNumScatters;
-    outputPhotons[myIndex].weight =
-        step->weight / getWavelengthBias(photonDirAndWlen.w);
+    outputPhotons[myIndex].weight = step->weight / getWavelengthBias(photonDirAndWlen.w);
     outputPhotons[myIndex].identifier = step->identifier;
 
     outputPhotons[myIndex].stringID = short(hitOnString);
@@ -964,15 +968,6 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
     }
 #endif
 
-#ifdef PRINTF_ENABLED
-    // dbg_printf("     -> stored photon: p=(%f,%f,%f), d=(%f,%f), t=%f,
-    // wlen=%fnm\n",
-    //    outputPhotons[myIndex].posAndTime.x,
-    //    outputPhotons[myIndex].posAndTime.y,
-    //    outputPhotons[myIndex].posAndTime.z, outputPhotons[myIndex].dir.x,
-    //    outputPhotons[myIndex].dir.y, outputPhotons[myIndex].posAndTime.w,
-    //    outputPhotons[myIndex].wavelength/1e-9f);
-#endif
   }
 }
 

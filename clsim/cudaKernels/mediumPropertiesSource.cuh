@@ -23,7 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef MEDIUMPROPERTYSOURCE_CUH
 #define MEDIUMPROPERTYSOURCE_CUH
 
-
+#pragma once
 
 
 #define MEDIUM_LAYERS 171
@@ -40,9 +40,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ///////////////// START phase refractive index ////////////////
 
-__device__ float getPhaseRefIndex_func0(float wlen);
+__device__  __forceinline__   float getPhaseRefIndex_func0(float wlen);
 
-__device__ float getPhaseRefIndex_func0(float wlen) {
+__device__ __forceinline__ float getPhaseRefIndex_func0(float wlen) {
   const float n0 = 1.5574900000e+00f;
   const float n1 = -1.5798800000e+00f;
   const float n2 = 3.9999300000e+00f;
@@ -55,9 +55,9 @@ __device__ float getPhaseRefIndex_func0(float wlen) {
   return np;
 }
 
-__device__ float getDispersion_func0(float wlen);
+__device__ __forceinline__ float getDispersion_func0(float wlen);
 
-__device__ float getDispersion_func0(float wlen) {
+__device__ __forceinline__ float getDispersion_func0(float wlen) {
   const float n1 = -1.5798800000e+00f;
   const float n2 = 3.9999300000e+00f;
   const float n3 = -4.6827100000e+00f;
@@ -72,17 +72,17 @@ __device__ float getDispersion_func0(float wlen) {
 }
 
 #define FUNCTION_getPhaseRefIndex_DOES_NOT_DEPEND_ON_LAYER
-__device__ float getPhaseRefIndex(unsigned int layer, float wavelength);
+__device__ __forceinline__ float getPhaseRefIndex(unsigned int layer, float wavelength);
 
-__device__ float getPhaseRefIndex(unsigned int layer, float wavelength) {
+__device__ __forceinline__ float getPhaseRefIndex(unsigned int layer, float wavelength) {
   // phase refractive index does not have a layer structure
   return getPhaseRefIndex_func0(wavelength);
 }
 
 #define FUNCTION_getDispersion_DOES_NOT_DEPEND_ON_LAYER
-__device__ float getDispersion(unsigned int layer, float wavelength);
+__device__ __forceinline__ float getDispersion(unsigned int layer, float wavelength);
 
-__device__ float getDispersion(unsigned int layer, float wavelength) {
+__device__ __forceinline__ float getDispersion(unsigned int layer, float wavelength) {
   // phase refractive index does not have a layer structure
   return getDispersion_func0(wavelength);
 }
@@ -91,9 +91,9 @@ __device__ float getDispersion(unsigned int layer, float wavelength) {
 
 ///////////////// START group refractive index ////////////////
 
-__device__ float getGroupRefIndex_func0(float wlen);
+__device__ __forceinline__ float getGroupRefIndex_func0(float wlen);
 
-__device__ float getGroupRefIndex_func0(float wlen) {
+__device__ __forceinline__ float getGroupRefIndex_func0(float wlen) {
   const float n0 = 1.5574900000e+00f;
   const float n1 = -1.5798800000e+00f;
   const float n2 = 3.9999300000e+00f;
@@ -114,9 +114,9 @@ __device__ float getGroupRefIndex_func0(float wlen) {
 }
 
 #define FUNCTION_getGroupRefIndex_DOES_NOT_DEPEND_ON_LAYER
-__device__ float getGroupRefIndex(unsigned int layer, float wavelength);
+__device__ __forceinline__ float getGroupRefIndex(unsigned int layer, float wavelength);
 
-__device__ float getGroupRefIndex(unsigned int layer, float wavelength) {
+__device__ __forceinline__ float getGroupRefIndex(unsigned int layer, float wavelength) {
   // group refractive index does not have a layer structure
   return getGroupRefIndex_func0(wavelength);
 }
@@ -127,9 +127,9 @@ __device__ float getGroupRefIndex(unsigned int layer, float wavelength) {
 #define FUNCTION_getGroupVelocity_DOES_NOT_DEPEND_ON_LAYER
 #endif
 // group velocity from group refractive index
-__device__ float getGroupVelocity(unsigned int layer, float wavelength);
+__device__ __forceinline__ float getGroupVelocity(unsigned int layer, float wavelength);
 
-__device__ float getGroupVelocity(unsigned int layer, float wavelength) {
+__device__ __forceinline__ float getGroupVelocity(unsigned int layer, float wavelength) {
   const float c_light = 2.9979245800e-01f;
   const float n_group = getGroupRefIndex(layer, wavelength);
 
@@ -183,9 +183,9 @@ __constant__ float getScatteringLength_b400[171] = {
     1.5789900000e+00f, 1.5750900000e+00f, 1.5551600000e+00f,
 };
 
-__device__ float getScatteringLength(unsigned int layer, float wlen);
+__device__ float __forceinline__ getScatteringLength(unsigned int layer, float wlen);
 
-__device__ float getScatteringLength(unsigned int layer, float wlen) {
+__device__ float __forceinline__ getScatteringLength(unsigned int layer, float wlen) {
   const float alpha = 8.9860850573e-01f;
 
   return 1.f / (getScatteringLength_b400[layer] *
@@ -302,9 +302,9 @@ __constant__ float getAbsorptionLength_deltaTau[171] = {
     -9.7820100000e+00f, -9.9079000000e+00f, -1.0032600000e+01f,
 };
 
-__device__ float getAbsorptionLength(unsigned int layer, float wlen);
+__device__ __forceinline__ float getAbsorptionLength(unsigned int layer, float wlen);
 
-__device__ float getAbsorptionLength(unsigned int layer, float wlen) {
+__device__ __forceinline__ float getAbsorptionLength(unsigned int layer, float wlen) {
   const float kappa = 1.0841068029e+00f;
   const float A = 6.9540903320e+03f;
   const float B = 6.6177543945e+03f;
@@ -324,9 +324,9 @@ __device__ float getAbsorptionLength(unsigned int layer, float wlen) {
 ///////////////// START scattering angle distribution ////////////////
 
 /////// BEGIN mix scattering angle generator "makeScatteringCosAngle" ////////
-__device__ float makeScatteringCosAngle_mix1(float rrrr__);
+__device__ __forceinline__ float makeScatteringCosAngle_mix1(float rrrr__);
 
-__device__ float makeScatteringCosAngle_mix1(float rrrr__) {
+__device__ __forceinline__ float makeScatteringCosAngle_mix1(float rrrr__) {
   // const float g = 9.0000000000e-01f;
   // const float beta = (1.f-g)/(1.f+g);
   const float beta = 5.2631578947e-02f;
@@ -334,9 +334,9 @@ __device__ float makeScatteringCosAngle_mix1(float rrrr__) {
   return clamp(2.f * powf((rrrr__), beta) - 1.f, -1.f, 1.f);
 }
 
-__device__ float makeScatteringCosAngle_mix2(float rrrr__);
+__device__ __forceinline__ float makeScatteringCosAngle_mix2(float rrrr__);
 
-__device__ float makeScatteringCosAngle_mix2(float rrrr__) {
+__device__ __forceinline__ float makeScatteringCosAngle_mix2(float rrrr__) {
   const float g = 9.0000000000e-01f;
   const float g2 = 8.1000000000e-01f;
 
@@ -347,9 +347,9 @@ __device__ float makeScatteringCosAngle_mix2(float rrrr__) {
   return clamp((1.f + g2 - ii * ii) / (2.f * g), -1.f, 1.f);
 }
 
-__device__ float makeScatteringCosAngle(RNG_ARGS);
+__device__ __forceinline__ float makeScatteringCosAngle(RNG_ARGS);
 
-__device__ float makeScatteringCosAngle(RNG_ARGS) {
+__device__ __forceinline__ float makeScatteringCosAngle(RNG_ARGS) {
   const float rr = RNG_CALL_UNIFORM_CO;
   if (rr < 3.5000000000e-01f) {
     return makeScatteringCosAngle_mix1(rr / 3.5000000000e-01f);
@@ -364,9 +364,9 @@ __device__ float makeScatteringCosAngle(RNG_ARGS) {
 ///////////////// START directional absorption length correction function
 ///////////////////
 
-__device__ float getDirectionalAbsLenCorrFactor(float4 vec);
+__device__ __forceinline__  float getDirectionalAbsLenCorrFactor(float4 vec);
 
-__device__ float getDirectionalAbsLenCorrFactor(float4 vec) {
+__device__ __forceinline__ float getDirectionalAbsLenCorrFactor(float4 vec) {
   const float4 l =
       float4{8.5830136492e-01f, 1.0793942455e+00f, 1.0793942455e+00f, 0.f};
   const float4 rl =
@@ -387,9 +387,9 @@ __device__ float getDirectionalAbsLenCorrFactor(float4 vec) {
 
 ///////////////// START pre-scattering direction transformation ////////////////
 
-__device__ void transformDirectionPreScatter(float4 *vec);
+__device__ __forceinline__ void transformDirectionPreScatter(float4 *vec);
 
-__device__ void transformDirectionPreScatter(float4 *vec) {
+__device__ __forceinline__ void transformDirectionPreScatter(float4 *vec) {
   *vec = (float4){(9.9245941798e-01f * (*vec).x) +
                       (5.5392208739e-02f * (*vec).y) + (0.f * (*vec).z),
                   (5.5392208739e-02f * (*vec).x) +
@@ -409,9 +409,9 @@ __device__ void transformDirectionPreScatter(float4 *vec) {
 ///////////////// START post-scattering direction transformation
 ///////////////////
 
-__device__ void transformDirectionPostScatter(float4 *vec);
+__device__  __forceinline__   void transformDirectionPostScatter(float4 *vec);
 
-__device__ void transformDirectionPostScatter(float4 *vec) {
+__device__  __forceinline__   void transformDirectionPostScatter(float4 *vec) {
   *vec = (float4){(1.0108098679e+00f * (*vec).x) +
                       (-5.7549125949e-02f * (*vec).y) + (0.f * (*vec).z),
                   (-5.7549125949e-02f * (*vec).x) +
@@ -671,9 +671,9 @@ __constant__ float
         // distances[5]
 };
 
-__device__ float getTiltZShift(float4 vec);
+__device__  __forceinline__   float getTiltZShift(float4 vec);
 
-__device__ float getTiltZShift(float4 vec) {
+__device__  __forceinline__   float getTiltZShift(float4 vec) {
   const float z_rescaled = (vec.z - getTiltZShift_data_firstZCoord) /
                            getTiltZShift_data_zCoordSpacing;
   const int k = min(max(__float2int_rd(z_rescaled), 0),

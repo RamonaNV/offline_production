@@ -85,7 +85,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
       CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer*sizeof(unsigned short),cudaMemcpyHostToDevice));
       
       float timer = 0;
-      std::chrono::time_point<std::chrono::system_clock> startTimeCuda;
+      std::chrono::time_point<std::chrono::system_clock> startTimeCuda, endTimeCuda;
 
       //these multiple launches correspond to numBuffers..   
       for (int ilaunch= 0 ; ilaunch<nlaunches; ++ilaunch )
@@ -117,9 +117,8 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
             printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, numthr, launchnsteps);
             std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
             propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
-            cudaDeviceSynchronize(); CUDA_CHECK_CALL
-
-            std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
+            cudaDeviceSynchronize(); 
+            std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();CUDA_CHECK_CALL
             timer =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
 
             CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
@@ -136,14 +135,15 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
             struct I3CLSimPhotonCuda* h_cudaphotons = (struct I3CLSimPhotonCuda*) malloc(numberPhotons*sizeof(struct I3CLSimPhotonCuda));
             CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
             cudaDeviceSynchronize();  
+            endTimeCuda   = std::chrono::system_clock::now();
+
 
            free(h_cudastep);     
            cudaFree(d_cudaphotons); 
            cudaFree(d_cudastep); 
 
       }
-      std::chrono::time_point<std::chrono::system_clock> endTimeCuda = std::chrono::system_clock::now();
-
+     
       printf("runtime kernel only %f [ms] \n",timer );
       timer =  std::chrono::duration_cast<std::chrono::milliseconds>(endTimeCuda - startTimeCuda).count();
       printf("runtime with copying back %f [ms] \n",timer );
@@ -428,8 +428,8 @@ const I3CLSimStepCuda step = inputSteps[i];
                             photonHistory, currentPhotonHistory,
 #endif // SAVE_PHOTON_HISTORY
                             geoLayerToOMNumIndexPerStringSetLocal);
-      
-     //    __syncthreads();
+ 
+
                        
  
 #ifdef STOP_PHOTONS_ON_DETECTION

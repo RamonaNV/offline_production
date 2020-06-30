@@ -35,18 +35,21 @@ __device__ float rand_MWC_oc(uint64_t *x, uint32_t *a);
 //   Generates a random number between 0 and 1 [0,1)
 //////////////////////////////////////////////////////////////////////////////
 
-__device__ float rand_MWC_co(uint64_t *x, uint32_t *a) {
+__device__ __forceinline__ float rand_MWC_co(uint64_t *x, uint32_t *a) {
 
   //float rndm[10] = {0.2, 0.6, 0.43, 0.21, 0.9, 0.76, 0.1, 0.6, 0.34, 0.78};   return rndm[*a%10];
   // Generate a random number [0,1)
   *x = (*x & 0xffffffffull) * (*a) + (*x >> 32);
   return __fdividef(__uint2float_rz((unsigned int)(*x)), (float)0x100000000);
+  
+  //return((float)((unsigned int)(*x&0xffffffffull))/(UINT_MAX));
+
 } // end __device__ rand_MWC_co
 
 //////////////////////////////////////////////////////////////////////////////
 //   Generates a random number between 0 and 1 (0,1]
 //////////////////////////////////////////////////////////////////////////////
-__device__ float rand_MWC_oc(uint64_t *x, uint32_t *a) {
+__device__ __forceinline__ float rand_MWC_oc(uint64_t *x, uint32_t *a) {
   return 1.0f - rand_MWC_co(x, a);
 }
 

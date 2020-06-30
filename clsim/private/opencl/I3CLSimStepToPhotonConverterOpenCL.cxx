@@ -1880,14 +1880,21 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
       *(kernel_[0]),
       cl::NullRange,       // current implementations force this to be NULL
       cl::NDRange(NSteps), // number of work items
-      cl::NDRange(1),
-      NULL, //&(bufferWriteEvents),  // wait for buffers to be filled
+      cl::NDRange(512),
+      &(bufferWriteEvents),  // wait for buffers to be filled
       &kernelFinishEvent);
   queue_[0]->flush();
 
   try {
     // wait for the kernel to finish
     waitForOpenCLEventYield(kernelFinishEvent);
+  } catch (cl::Error &err) {
+    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
+              err.err());
+  }
+try {
+    // wait for the queue to really finish (just to make sure)
+    queue_[0]->finish();
   } catch (cl::Error &err) {
     log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
               err.err());
@@ -1900,14 +1907,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
                     .count();
   printf("runtime %f [ms] \n", timer);
 
-  try {
-    // wait for the queue to really finish (just to make sure)
-    queue_[0]->finish();
-  } catch (cl::Error &err) {
-    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
-              err.err());
-  }
-
+  
   I3CLSimPhotonSeriesPtr photons;
   I3CLSimPhotonHistorySeriesPtr photonHistories;
   boost::shared_ptr<std::vector<cl_float4>> photonHistoriesRaw;

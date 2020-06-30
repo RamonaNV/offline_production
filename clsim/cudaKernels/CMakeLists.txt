@@ -1,5 +1,7 @@
 
 find_package(CUDAToolkit REQUIRED)
+# LIST(APPEND CUDA_NVCC_FLAGS "-use_fast_math")
+
 
 add_library(thiscudalib SHARED
   propagationKernelSource.cu
@@ -22,3 +24,6 @@ target_include_directories(thiscudalib
   ${CMAKE_CURRENT_SOURCE_DIR}/../../serialization/public
   ${CMAKE_CURRENT_SOURCE_DIR}/../../phys-services/public
   )
+
+
+ 

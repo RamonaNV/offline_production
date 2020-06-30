@@ -35,7 +35,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 typedef float real_t;
 typedef float coord_t;
 
-__host__ __device__ inline real_t
+__host__ __device__ __forceinline__ real_t
 getZenith(const coord_t &dx, const coord_t &dy, const coord_t &dz) {
   const real_t rinv = rsqrt(dx * dx + dy * dy + dz * dz);
   real_t theta = 0.;
@@ -54,7 +54,7 @@ getZenith(const coord_t &dx, const coord_t &dy, const coord_t &dz) {
   return zenith;
 }
 
-__host__ __device__ inline real_t
+__host__ __device__ __forceinline__ real_t
 getAzimuth(const coord_t &dx, const coord_t &dy, const coord_t &dz) {
   real_t phi = 0;
   if ((dx != 0.) || (dy != 0.))
@@ -67,13 +67,13 @@ getAzimuth(const coord_t &dx, const coord_t &dy, const coord_t &dz) {
   return azimuth;
 }
 
-__host__ __device__ inline real_t
+__host__ __device__ __forceinline__ real_t
 CalcTheta(const coord_t &dx, const coord_t &dy, const coord_t &dz) {
 
   return CUDART_PI_F - getZenith(dx, dy, dz);
 }
 
-__host__ __device__ inline real_t CalcPhi(const coord_t &dx, const coord_t &dy,
+__host__ __device__ __forceinline__ real_t CalcPhi(const coord_t &dx, const coord_t &dy,
                                           const coord_t &dz) {
   real_t phi = CUDART_PI_F + getAzimuth(dx, dy, dz);
   if (phi >= 2. * CUDART_PI_F)

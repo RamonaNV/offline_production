@@ -25,17 +25,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <I3CLSimPhoton.h>
 #include <I3CLSimStep.h>
-
-__host__ __device__ struct __attribute__((packed)) I3CLSimStepCuda {
-  float4 posAndTime; // x,y,z,time                      // 4x 4byte float
+ 
+__host__ __device__  __attribute__((packed))   struct I3CLSimStepCuda {
+  float4 posAndTime; // x,y,z,time                      // 4x  4byte float
   float4 dirAndLengthAndBeta; // theta,phi,length,beta    // 4x 4byte float
   uint32_t numPhotons;        //    4byte unsigned
   float weight;               //    4byte float
   uint32_t identifier;        //    4byte unsigned
   unsigned char sourceType;   //     1 byte unsigned
                               // total: 45 bytes
-
-    __device__ __host__ I3CLSimStepCuda() 
+ 
+      __host__ I3CLSimStepCuda() 
     :posAndTime{0,0,0,0}, dirAndLengthAndBeta{0,0,0,0},
     numPhotons(0), weight(0), identifier(0), sourceType(0) 
     {} ;
@@ -81,7 +81,7 @@ __host__ __device__ struct __attribute__((packed)) I3CLSimPhotonCuda {
   float distInAbsLens;    //    32bit float
                           // total: 20x 32bit float = 80 bytes
 
-__device__ __host__ I3CLSimPhotonCuda()
+  __host__ I3CLSimPhotonCuda()
 :posAndTime{0,0,0,0}
 {}
 

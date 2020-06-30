@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifndef WLENGENSOURCE_CUH
 #define WLENGENSOURCE_CUH
+#pragma once
+ 
 
 #define _generateWavelength_0NUM_DIST_ENTRIES 43
 
@@ -64,9 +66,9 @@ __constant__ float _generateWavelength_0distYCumulativeValues
         1.0000000000e+00f,
 };
 
-__device__ float generateWavelength_0(RNG_ARGS);
+__device__ __forceinline__ float generateWavelength_0(RNG_ARGS);
 
-__device__ float generateWavelength_0(RNG_ARGS) {
+__device__ __forceinline__ float generateWavelength_0(RNG_ARGS) {
   const float randomNumber = RNG_CALL_UNIFORM_OC;
 
   unsigned int k = 0;
@@ -106,9 +108,9 @@ __device__ float generateWavelength_0(RNG_ARGS) {
   }
 }
 
-__device__ float generateWavelength(uint number, RNG_ARGS);
+__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS);
 
-__device__ float generateWavelength(uint number, RNG_ARGS) {
+__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS) {
   return generateWavelength_0(RNG_ARGS_TO_CALL);
 }
 

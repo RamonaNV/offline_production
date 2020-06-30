@@ -25,8 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 //#include <CLnoneCUDA.cuh>
 
-__device__ float getWavelengthBias(float wavelength);
-__device__ void
+__device__ __forceinline__ float getWavelengthBias(float wavelength);
+__device__ __forceinline__ void
 getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int *bin,
                                                  float *fraction);
 
@@ -44,7 +44,7 @@ __constant__ float getWavelengthBias_data[43] = {
     1.7607982083e-03f, 1.1304887420e-03f, 5.0300969625e-04f,
 };
 
-__device__ void
+__device__ __forceinline__ void
 getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int *bin,
                                                  float *fraction) {
   float fbin;
@@ -63,7 +63,7 @@ getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int *bin,
   *bin = ibin;
 }
 
-__device__ float getWavelengthBias(float wavelength) {
+__device__ __forceinline__ float getWavelengthBias(float wavelength) {
   int bin;
   float fraction;
   getWavelengthBias_getInterpolationBinAndFraction(wavelength, &bin, &fraction);
