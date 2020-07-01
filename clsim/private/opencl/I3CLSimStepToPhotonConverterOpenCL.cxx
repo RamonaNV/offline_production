@@ -1829,7 +1829,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
 
   // CUDA PART
 
-  int NSteps =  steps->size();
+  int NSteps = steps->size();
   int startExtract = 0;
   // assert(NSteps + startExtract > int(steps->size()));
   if (NSteps + startExtract > int(steps->size())) {
@@ -1838,26 +1838,25 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
     NSteps = int(steps->size());
   }
 
-int nbenchmarks = 10;
-size_t threadsperblock = 64;
-workgroupSize_ = threadsperblock;
+int nbenchmarks =1;
+workgroupSize_ = 512;
 
-    printf(" -------------  CUDA ------------- \n");
-
-
+  printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
 
-    launch_CudaPropogate(&(*steps)[0], NSteps,  
-                    maxNumOutputPhotons_,
-                    &geoLayerToOMNumIndexPerStringSetInfo_[0],
-                    geoLayerToOMNumIndexPerStringSetInfo_.size(),
-                    &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, int(threadsperblock), totalCudaKernelTime, nbenchmarks);
+  launch_CudaPropogate(&(*steps)[0], NSteps,  
+                       maxNumOutputPhotons_,
+                       &geoLayerToOMNumIndexPerStringSetInfo_[0],
+                       geoLayerToOMNumIndexPerStringSetInfo_.size(),
+                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, totalCudaKernelTime, nbenchmarks, workgroupSize_);
 
-    finalizeCUDA();
+  finalizeCUDA();
+  printf(" -------------  done CUDA ------------- \n");
+  printf("\n");
 
-
+ 
   // CL PART
-  printf(" \n -------------  CL ------------- \n");
+  printf(" -------------  CL ------------- \n");
   // uncomment for profiling CUDA ncu :
  // NSteps = 1;
  float totalCLKernelTime = 0;
@@ -1880,15 +1879,14 @@ workgroupSize_ = threadsperblock;
   }
 
  
-
-for (int b = 0 ; b< nbenchmarks; ++b){
+for (int b = 0 ; b< nbenchmarks ; ++b){
   std::chrono::time_point<std::chrono::system_clock> startTimeCL = std::chrono::system_clock::now();
     cl::Event kernelFinishEvent;
   queue_[0]->enqueueNDRangeKernel(
       *(kernel_[0]),
       cl::NullRange,       // current implementations force this to be NULL
       cl::NDRange(NSteps), // number of work items
-      cl::NDRange(threadsperblock),
+      cl::NDRange(workgroupSize_),
       &(bufferWriteEvents),  // wait for buffers to be filled
       &kernelFinishEvent);
   queue_[0]->flush();
@@ -1911,18 +1909,18 @@ try {
   std::chrono::time_point<std::chrono::system_clock> endTimeCL =
       std::chrono::system_clock::now();
   
-  if(b>0) {
+  //if( b>0 || nbenchmarks==0) {
       totalCLKernelTime += std::chrono::duration_cast<std::chrono::milliseconds>(
                     endTimeCL - startTimeCL).count();
-  }
+  //}
 }
 
-
- 
-    printf("\n ---  threads per block = %d, NSteps= %d -- \n",    threadsperblock,NSteps);
-    printf("avrg runtime CUDA kernel %f [ms] \n", totalCudaKernelTime/(nbenchmarks-1.f) );
-    printf("avrg runtime CL kernel   %f [ms] \n", totalCLKernelTime/(nbenchmarks-1.f) );
+    printf("\n -- num threads per block = %u------- \n",workgroupSize_);
+    printf("avrg runtime CUDA kernel %f [ms] \n", totalCudaKernelTime/float(nbenchmarks) );
+    printf("avrg runtime CL   kernel    %f [ms] \n", totalCLKernelTime/float(nbenchmarks) );
     printf(" ------------- ------------- \n \n");
+
+
 
 
  
@@ -2001,10 +1999,6 @@ try {
     log_fatal("OpenCL ERROR (memcpy from device): %s (%i)", err.what(),
               err.err());
   }
-  
-
-
-
  
     // we finished simulating.
     // signal the caller by putting it's id on the 
@@ -2036,10 +2030,8 @@ try {
         }
     }
 
- 
-
-
-  
+  printf(" ------------- done with launching CL with extracted step "
+         "------------- \n");
 }
 
 void I3CLSimStepToPhotonConverterOpenCL::CLCUDAThread(

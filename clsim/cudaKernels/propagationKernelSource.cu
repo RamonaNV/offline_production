@@ -25,12 +25,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <propagationKernelFunctions.cuh>
 
  //__device__ global random arrays
- __device__ __shared__ uint64_t* d_MWC_RNG_x;
- __device__ __shared__ uint32_t* d_MWC_RNG_a;
+ __device__  uint64_t* d_MWC_RNG_x;
+ __device__  uint32_t* d_MWC_RNG_a;
  
 #define CUDA_ERR_CHECK(e) if(cudaError_t(e)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(e)), __LINE__);
 #define CUDA_CHECK_CALL cudaError_t err = cudaGetLastError(); if(cudaError_t(err)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(err)), __LINE__-1);
-#define PRINTLC     printf("thread 0 - in line %d \n", __LINE__);  
+//#define PRINTLC     printf("thread 0 - in line %d \n", __LINE__);  
 
 
 // remark: ignored tabulate version, removed ifdef TABULATE 
@@ -68,10 +68,9 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 }
 
 
-void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
+void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
       uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, const int  threadsperblock,
-         float& totalCudaKernelTime, const int nbenchmarks ){
+        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime, const int nbenchmarks, size_t threadsPerBlock ){
 
   
       int nlaunches = (nsteps+nsteps-1)/nsteps;
@@ -111,18 +110,20 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             I3CLSimPhotonCuda * d_cudaphotons;
             CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons , maxHitIndex*sizeof(I3CLSimPhotonCuda)));
 
-         //   int numthr =   512;
-            int numBlocks =  (launchnsteps+threadsperblock-1)/threadsperblock;
-            printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, threadsperblock, launchnsteps);
+            int numthr =   int(threadsPerBlock);
+            int numBlocks =  (launchnsteps+numthr-1)/numthr;
+            printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, numthr, launchnsteps);
 
     
             //measure benchmark:
             for (int b = 0 ; b< nbenchmarks; ++b){
                   std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-                  propKernel<<<numBlocks, threadsperblock>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+                  propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
                   cudaDeviceSynchronize(); 
                   std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
-               if(b>0)   totalCudaKernelTime +=  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+                 // if(  b>0|| nbenchmarks==0) {   
+                        totalCudaKernelTime +=  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+                 // }
             }
 
 
@@ -182,21 +183,21 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
 
   if(i >=nsteps) return;
   
-  if(i ==0) printf("CUDA kernel... (thread %u of %u)\n", i, global_size);
+ // if(i ==0) printf("CUDA kernel... (thread %u of %u)\n", i, global_size);
 
   #ifndef SAVE_ALL_PHOTONS
  
- const  unsigned short * geoLayerToOMNumIndexPerStringSetLocal = geoLayerToOMNumIndexPerStringSet;
-  /*    __shared__ unsigned short
-  geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
-      // copy the geo data to our local memory (this is done by a whole work
-  group in parallel) event_t copyFinishedEvent =
-          async_work_group_copy(geoLayerToOMNumIndexPerStringSetLocal,
-          geoLayerToOMNumIndexPerStringSet,
-          (size_t)GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE,
-          0);
-      wait_group_events(1, &copyFinishedEvent);
-*/
+ //const  unsigned short * geoLayerToOMNumIndexPerStringSetLocal = geoLayerToOMNumIndexPerStringSet;
+  
+   __shared__    unsigned short   geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
+
+for (int ii = blockIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; ii+= blockDim.x){
+
+      geoLayerToOMNumIndexPerStringSetLocal[ii] =geoLayerToOMNumIndexPerStringSet[ii]; 
+ 
+}  
+
+  
   #endif
 
   #ifdef SAVE_PHOTON_HISTORY

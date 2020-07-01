@@ -437,7 +437,7 @@ __kernel void propKernel(
     unsigned int i = get_global_id(0);
  unsigned int global_size = get_global_size(0);
  
-if(i==0) printf("CL kernel... (work item %u of %u)\n", i, global_size);
+//if(i==0) printf("CL kernel... (work item %u of %u)\n", i, global_size);
 #ifndef SAVE_ALL_PHOTONS
     __local unsigned short geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
 

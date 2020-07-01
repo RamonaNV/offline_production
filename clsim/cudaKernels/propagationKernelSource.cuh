@@ -36,8 +36,7 @@ void finalizeCUDA();
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
     uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-    uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a,  int sizeRNG,
-    const int  threadsperblock,    float& totalCudaKernelTime,const int nbenchmarks );
+    uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a,  int sizeRNG, float& totalCudaKernelTime,const int nbenchmarks,size_t threadsPerBlock );
 
 
 #endif  // PROPAGATIONKERNELSOURCE_CUH
