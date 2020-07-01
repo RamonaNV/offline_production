@@ -1854,7 +1854,7 @@ workgroupSize_ = 512;
   printf(" -------------  done CUDA ------------- \n");
   printf("\n");
 
- workgroupSize_ = 256;
+
   // CL PART
   printf(" -------------  CL ------------- \n");
   // uncomment for profiling CUDA ncu :
