@@ -57,7 +57,7 @@ __device__  __forceinline__ void scatterDirectionByAngle(float cosa, float sina,
                                         float4 &direction,
                                         float randomNumber);
 
-__device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *step,
+__device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda &step,
                                       const float4& stepDir, RNG_ARGS,
                                       float4 &photonPosAndTime,
                                       float4 &photonDirAndWlen);
@@ -71,7 +71,7 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
         float photonTotalPathLength, uint32_t photonNumScatters,
         float distanceTraveledInAbsorptionLengths,
         const float4& photonStartPosAndTime,
-        const float4& photonStartDirAndWlen, const I3CLSimStepCuda *step,
+        const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
         unsigned short hitOnString, unsigned short hitOnDom, uint32_t *hitIndex,
         uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
@@ -105,14 +105,14 @@ __device__  __forceinline__ void checkForCollision_OnString(
     const unsigned short stringNum, const float photonDirLenXYSqr,
     const float4& photonPosAndTime, const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
-    float *thisStepLength, bool *hitRecorded, unsigned short *hitOnString,
-    unsigned short *hitOnDom,
+    float &thisStepLength, bool &hitRecorded, unsigned short &hitOnString,
+    unsigned short &hitOnDom,
 #else
     float thisStepLength, float inv_groupvel,
     float photonTotalPathLength, uint32_t photonNumScatters,
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
-    const float4& photonStartDirAndWlen, const I3CLSimStepCuda *step,
+    const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
     uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
@@ -124,14 +124,14 @@ __device__  __forceinline__ void checkForCollision_InCell(
     const float photonDirLenXYSqr, const float4& photonPosAndTime,
     const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
-    float *thisStepLength, bool *hitRecorded, unsigned short *hitOnString,
-    unsigned short *hitOnDom,
+    float &thisStepLength, bool &hitRecorded, unsigned short &hitOnString,
+    unsigned short &hitOnDom,
 #else
     float thisStepLength, float inv_groupvel,
     float photonTotalPathLength, uint32_t photonNumScatters,
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
-    const float4& photonStartDirAndWlen, const I3CLSimStepCuda *step,
+    const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
     uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
@@ -148,14 +148,14 @@ __device__  __forceinline__ void checkForCollision_InCells(
     const float photonDirLenXYSqr, const float4& photonPosAndTime,
     const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
-    float *thisStepLength, bool *hitRecorded, unsigned short *hitOnString,
-    unsigned short *hitOnDom,
+    float &thisStepLength, bool &hitRecorded, unsigned short &hitOnString,
+    unsigned short &hitOnDom,
 #else
     float thisStepLength, float inv_groupvel,
     float photonTotalPathLength, uint32_t photonNumScatters,
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
-    const float4& photonStartDirAndWlen, const I3CLSimStepCuda *step,
+    const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
     uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
@@ -168,9 +168,9 @@ __device__ __forceinline__ bool checkForCollision(
     float inv_groupvel, float photonTotalPathLength,
     uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
-    const float4& photonStartDirAndWlen, const I3CLSimStepCuda *step,
+    const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
 #ifdef STOP_PHOTONS_ON_DETECTION
-    float *thisStepLength,
+    float &thisStepLength,
 #else
     float thisStepLength,
 #endif
@@ -184,14 +184,14 @@ __device__  __forceinline__ void checkForCollision_OnString(
     const unsigned short stringNum, const float photonDirLenXYSqr,
     const float4& photonPosAndTime, const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
-    float *thisStepLength, bool *hitRecorded, unsigned short *hitOnString,
-    unsigned short *hitOnDom,
+    float &thisStepLength, bool &hitRecorded, unsigned short &hitOnString,
+    unsigned short &hitOnDom,
 #else
     float thisStepLength, float inv_groupvel,
     float photonTotalPathLength, uint32_t photonNumScatters,
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
-    const float4& photonStartDirAndWlen, const I3CLSimStepCuda *step,
+    const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
     uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
@@ -234,7 +234,7 @@ __device__  __forceinline__ void checkForCollision_OnString(
                       geoLayerHeight[stringSet]);
 #ifdef STOP_PHOTONS_ON_DETECTION
   int highLayerZ =
-      int((photonPosAndTime.z + photonDirAndWlen.z * (*thisStepLength) -
+      int((photonPosAndTime.z + photonDirAndWlen.z * (thisStepLength) -
            geoLayerStartZ[stringSet]) /
           geoLayerHeight[stringSet]);
 #else
@@ -284,10 +284,10 @@ __device__  __forceinline__ void checkForCollision_OnString(
 
 #ifndef CABLE_RADIUS
     float domPosX, domPosY, domPosZ;
-    geometryGetDomPosition(stringNum, domNum, &domPosX, &domPosY, &domPosZ);
+    geometryGetDomPosition(stringNum, domNum, domPosX, domPosY, domPosZ);
 #else
     float domPosX, domPosY, domPosZ, cableOrientation;
-    geometryGetDomPosition(stringNum, domNum, &domPosX, &domPosY, &domPosZ,
+    geometryGetDomPosition(stringNum, domNum, domPosX, domPosY, domPosZ,
                            &cableOrientation);
 #endif
 
@@ -363,7 +363,7 @@ __device__  __forceinline__ void checkForCollision_OnString(
       // check if distance to intersection <= thisStepLength; if not then no
       // detection
 #ifdef STOP_PHOTONS_ON_DETECTION
-    if (smin1 < *thisStepLength)
+    if (smin1 < thisStepLength)
 #else
     if (smin1 < thisStepLength)
 #endif
@@ -371,10 +371,10 @@ __device__  __forceinline__ void checkForCollision_OnString(
 #ifdef STOP_PHOTONS_ON_DETECTION
       // record a hit (for later, the actual recording is done
       // in checkForCollision().)
-      *thisStepLength = smin1; // limit step length
-      *hitOnString = stringNum;
-      *hitOnDom = domNum;
-      *hitRecorded = true;
+      thisStepLength = smin1; // limit step length
+      hitOnString = stringNum;
+      hitOnDom = domNum;
+      hitRecorded = true;
       // continue searching, maybe we hit a closer OM..
       // (in that case, no hit will be saved for this one)
 #else // STOP_PHOTONS_ON_DETECTION
@@ -400,14 +400,14 @@ __device__  __forceinline__ void checkForCollision_InCell(
     const float photonDirLenXYSqr, const float4& photonPosAndTime,
     const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
-    float *thisStepLength, bool *hitRecorded, unsigned short *hitOnString,
-    unsigned short *hitOnDom,
+    float &thisStepLength, bool &hitRecorded, unsigned short &hitOnString,
+    unsigned short &hitOnDom,
 #else
     float thisStepLength, float inv_groupvel,
     float photonTotalPathLength, uint32_t photonNumScatters,
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
-    const float4& photonStartDirAndWlen, const I3CLSimStepCuda *step,
+    const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
     uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
@@ -427,11 +427,11 @@ __device__  __forceinline__ void checkForCollision_InCell(
 
 #ifdef STOP_PHOTONS_ON_DETECTION
   int highCellX =
-      int((photonPosAndTime.x + photonDirAndWlen.x * (*thisStepLength) -
+      int((photonPosAndTime.x + photonDirAndWlen.x * (thisStepLength) -
            this_geoCellStartX) /
           this_geoCellWidthX);
   int highCellY =
-      int((photonPosAndTime.y + photonDirAndWlen.y * (*thisStepLength) -
+      int((photonPosAndTime.y + photonDirAndWlen.y * (thisStepLength) -
            this_geoCellStartY) /
           this_geoCellWidthY);
 #else
@@ -509,14 +509,14 @@ __device__  __forceinline__ void checkForCollision_InCells(
     const float photonDirLenXYSqr, const float4& photonPosAndTime,
     const float4& photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
-    float *thisStepLength, bool *hitRecorded, unsigned short *hitOnString,
-    unsigned short *hitOnDom,
+    float &thisStepLength, bool &hitRecorded, unsigned short &hitOnString,
+    unsigned short &hitOnDom,
 #else
     float thisStepLength, float inv_groupvel,
     float photonTotalPathLength, uint32_t photonNumScatters,
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
-    const float4& photonStartDirAndWlen, const I3CLSimStepCuda *step,
+    const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
     uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
@@ -623,9 +623,9 @@ __device__  __forceinline__ bool checkForCollision(
     float inv_groupvel, float photonTotalPathLength,
     uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
-    const float4& photonStartDirAndWlen, const I3CLSimStepCuda *step,
+    const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
 #ifdef STOP_PHOTONS_ON_DETECTION
-    float *thisStepLength,
+    float &thisStepLength,
 #else
     float thisStepLength,
 #endif
@@ -664,7 +664,7 @@ __device__  __forceinline__ bool checkForCollision(
   checkForCollision_InCells(
       photonDirLenXYSqr, photonPosAndTime, photonDirAndWlen,
 #ifdef STOP_PHOTONS_ON_DETECTION
-      thisStepLength, &hitRecorded, &hitOnString, &hitOnDom,
+      thisStepLength, hitRecorded, hitOnString, hitOnDom,
 #else // STOP_PHOTONS_ON_DETECTION
       thisStepLength, inv_groupvel, photonTotalPathLength, photonNumScatters,
       distanceTraveledInAbsorptionLengths, photonStartPosAndTime,
@@ -689,7 +689,7 @@ __device__  __forceinline__ bool checkForCollision(
 
 
   if (hitRecorded) {
-    saveHit(photonPosAndTime, photonDirAndWlen, *thisStepLength, inv_groupvel,
+    saveHit(photonPosAndTime, photonDirAndWlen, thisStepLength, inv_groupvel,
             photonTotalPathLength, photonNumScatters,
             distanceTraveledInAbsorptionLengths, photonStartPosAndTime,
             photonStartDirAndWlen, step, hitOnString, hitOnDom, hitIndex,
@@ -792,28 +792,28 @@ __device__  __forceinline__ void scatterDirectionByAngle(float cosa, float sina,
   //       (*direction).z*(*direction).z);
 }
 
-__device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *step,
+__device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda &step,
                                       const float4& stepDir, RNG_ARGS,
                                       float4 &photonPosAndTime,
                                       float4 &photonDirAndWlen) {
   float shiftMultiplied =
-      step->dirAndLengthAndBeta.z * RNG_CALL_UNIFORM_CO;
+      step.dirAndLengthAndBeta.z * RNG_CALL_UNIFORM_CO;
   float inverseParticleSpeed =
-      1.f/(speedOfLight * step->dirAndLengthAndBeta.w);
+      1.f/(speedOfLight * step.dirAndLengthAndBeta.w);
 
   // move along the step direction
   photonPosAndTime =
-      float4{step->posAndTime.x + stepDir.x * shiftMultiplied,
-             step->posAndTime.y + stepDir.y * shiftMultiplied,
-             step->posAndTime.z + stepDir.z * shiftMultiplied,
-             step->posAndTime.w + inverseParticleSpeed * shiftMultiplied};
+      float4{step.posAndTime.x + stepDir.x * shiftMultiplied,
+             step.posAndTime.y + stepDir.y * shiftMultiplied,
+             step.posAndTime.z + stepDir.z * shiftMultiplied,
+             step.posAndTime.w + inverseParticleSpeed * shiftMultiplied};
 
   // determine the photon layer (clamp if necessary)
   unsigned int layer = min(max(findLayerForGivenZPos((photonPosAndTime).z), 0),
                            MEDIUM_LAYERS - 1);
 
 #ifndef NO_FLASHER
-  if (step->sourceType == 0) {
+  if (step.sourceType == 0) {
 #endif
     // sourceType==0 is always Cherenkov light with the correct angle w.r.t. the
     // particle/step
@@ -822,7 +822,7 @@ __device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *st
     const float wavelength = generateWavelength_0(RNG_ARGS_TO_CALL);
 
     const float cosCherenkov =
-        min(ONE, 1.f/(step->dirAndLengthAndBeta.w *
+        min(ONE, 1.f/(step.dirAndLengthAndBeta.w *
                           getPhaseRefIndex(
                               layer, wavelength))); // cos theta = 1/(beta*n)
     const float sinCherenkov = sqrtf(ONE - cosCherenkov * cosCherenkov);
@@ -843,7 +843,7 @@ __device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *st
     // steps >= 1 are flasher emissions, they do not need cherenkov rotation
 
     const float wavelength =
-        generateWavelength(uint(step->sourceType), RNG_ARGS_TO_CALL);
+        generateWavelength(uint(step.sourceType), RNG_ARGS_TO_CALL);
 
     // use the step direction as the photon direction
     (photonDirAndWlen).x = stepDir.x;
@@ -885,7 +885,7 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
         float distanceTraveledInAbsorptionLengths,
         const float4& photonStartPosAndTime,
         const float4& photonStartDirAndWlen,
-        const I3CLSimStepCuda *step,
+        const I3CLSimStepCuda &step,
         unsigned short hitOnString,
         unsigned short hitOnDom,
         uint32_t *hitIndex, // shared
@@ -911,10 +911,10 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
     // Emit photon position relative to the hit DOM
 #ifndef CABLE_RADIUS
     float domPosX, domPosY, domPosZ;
-    geometryGetDomPosition(hitOnString, hitOnDom, &domPosX, &domPosY, &domPosZ);
+    geometryGetDomPosition(hitOnString, hitOnDom, domPosX, domPosY, domPosZ);
 #else
     float domPosX, domPosY, domPosZ, cableOrientation;
-    geometryGetDomPosition(hitOnString, hitOnDom, &domPosX, &domPosY, &domPosZ,
+    geometryGetDomPosition(hitOnString, hitOnDom, domPosX, domPosY, domPosZ,
                            &cableOrientation);
 #endif
 #ifdef PANCAKE_FACTOR
@@ -947,8 +947,8 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
     outputPhotons[myIndex].cherenkovDist =
         photonTotalPathLength + thisStepLength;
     outputPhotons[myIndex].numScatters = photonNumScatters;
-    outputPhotons[myIndex].weight = step->weight / getWavelengthBias(photonDirAndWlen.w);
-    outputPhotons[myIndex].identifier = step->identifier;
+    outputPhotons[myIndex].weight = step.weight / getWavelengthBias(photonDirAndWlen.w);
+    outputPhotons[myIndex].identifier = step.identifier;
 
     outputPhotons[myIndex].stringID = short(hitOnString);
     outputPhotons[myIndex].omID = ushort(hitOnDom);

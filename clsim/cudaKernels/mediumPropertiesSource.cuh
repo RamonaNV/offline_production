@@ -387,44 +387,44 @@ __device__ __forceinline__ float getDirectionalAbsLenCorrFactor(float4 vec) {
 
 ///////////////// START pre-scattering direction transformation ////////////////
 
-__device__ __forceinline__ void transformDirectionPreScatter(float4 *vec);
+__device__ __forceinline__ void transformDirectionPreScatter(float4& vec);
 
-__device__ __forceinline__ void transformDirectionPreScatter(float4 *vec) {
-  *vec = (float4){(9.9245941798e-01f * (*vec).x) +
-                      (5.5392208739e-02f * (*vec).y) + (0.f * (*vec).z),
-                  (5.5392208739e-02f * (*vec).x) +
-                      (9.7292513613e-01f * (*vec).y) + (0.f * (*vec).z),
-                  (0.f * (*vec).x) + (0.f * (*vec).y) +
-                      (1.0389389999e+00f * (*vec).z),
-                  (*vec).w};
+__device__ __forceinline__ void transformDirectionPreScatter(float4& vec) {
+  vec = float4{(9.9245941798e-01f * vec.x) +
+                      (5.5392208739e-02f * vec.y) + (0.f * vec.z),
+                  (5.5392208739e-02f * vec.x) +
+                      (9.7292513613e-01f * vec.y) + (0.f * vec.z),
+                  (0.f * vec.x) + (0.f * vec.y) +
+                      (1.0389389999e+00f * vec.z),
+                  vec.w};
 
   const float norm =
-      rsqrt((*vec).x * (*vec).x + (*vec).y * (*vec).y + (*vec).z * (*vec).z);
-  (*vec).x = (*vec).x * norm;
-  (*vec).y = (*vec).y * norm;
-  (*vec).z = (*vec).z * norm;
+      rsqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
+  vec.x = vec.x * norm;
+  vec.y = vec.y * norm;
+  vec.z = vec.z * norm;
 }
 ///////////////// END pre-scattering direction transformation ////////////////
 
 ///////////////// START post-scattering direction transformation
 ///////////////////
 
-__device__  __forceinline__   void transformDirectionPostScatter(float4 *vec);
+__device__  __forceinline__   void transformDirectionPostScatter(float4& vec);
 
-__device__  __forceinline__   void transformDirectionPostScatter(float4 *vec) {
-  *vec = (float4){(1.0108098679e+00f * (*vec).x) +
-                      (-5.7549125949e-02f * (*vec).y) + (0.f * (*vec).z),
-                  (-5.7549125949e-02f * (*vec).x) +
-                      (1.0311047952e+00f * (*vec).y) + (0.f * (*vec).z),
-                  (0.f * (*vec).x) + (0.f * (*vec).y) +
-                      (9.6252041756e-01f * (*vec).z),
-                  (*vec).w};
+__device__  __forceinline__   void transformDirectionPostScatter(float4& vec) {
+  vec = float4{(1.0108098679e+00f * vec.x) +
+                      (-5.7549125949e-02f * vec.y) + (0.f * vec.z),
+                  (-5.7549125949e-02f * vec.x) +
+                      (1.0311047952e+00f * vec.y) + (0.f * vec.z),
+                  (0.f * vec.x) + (0.f * vec.y) +
+                      (9.6252041756e-01f * vec.z),
+                  vec.w};
 
   const float norm =
-      rsqrt((*vec).x * (*vec).x + (*vec).y * (*vec).y + (*vec).z * (*vec).z);
-  (*vec).x = (*vec).x * norm;
-  (*vec).y = (*vec).y * norm;
-  (*vec).z = (*vec).z * norm;
+      rsqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
+  vec.x = vec.x * norm;
+  vec.y = vec.y * norm;
+  vec.z = vec.z * norm;
 }
 ///////////////// END post-scattering direction transformation ////////////////
 
@@ -671,9 +671,9 @@ __constant__ float
         // distances[5]
 };
 
-__device__  __forceinline__   float getTiltZShift(float4 vec);
+__device__  __forceinline__   float getTiltZShift(float4& vec);
 
-__device__  __forceinline__   float getTiltZShift(float4 vec) {
+__device__  __forceinline__   float getTiltZShift(float4& vec) {
   const float z_rescaled = (vec.z - getTiltZShift_data_firstZCoord) /
                            getTiltZShift_data_zCoordSpacing;
   const int k = min(max(__float2int_rd(z_rescaled), 0),

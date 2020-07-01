@@ -148,7 +148,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
            cudaFree(d_geolayer); 
       }
 
-      printf( "photon hits = %u from %d steps \n", h_totalHitIndex, nsteps);
+      printf( "photon hits = %f from %d steps \n", h_totalHitIndex/float(nbenchmarks+1), nsteps);
    
       //check phtoton hits out:
       //for (int i = numberPhotons-10; i< numberPhotons; ++i)printf(" %d photon= %d has hit DOM= %u \n",i, h_cudaphotons[i].stringID , h_cudaphotons[i].omID);       
@@ -248,7 +248,7 @@ const I3CLSimStepCuda step = inputSteps[i];
     if (abs_lens_left < EPSILON) {
 
       // create a new photon
-      createPhotonFromTrack(&step, stepDir, RNG_ARGS_TO_CALL, photonPosAndTime,
+      createPhotonFromTrack(step, stepDir, RNG_ARGS_TO_CALL, photonPosAndTime,
                         photonDirAndWlen);
 
       // save the start position and time
@@ -419,9 +419,9 @@ collided =
           checkForCollision(photonPosAndTime, photonDirAndWlen, inv_groupvel,
                             photonTotalPathLength, photonNumScatters,
                             abs_lens_initial - abs_lens_left,
-                            photonStartPosAndTime, photonStartDirAndWlen, &step,
+                            photonStartPosAndTime, photonStartDirAndWlen, step,
 #ifdef STOP_PHOTONS_ON_DETECTION
-                            &distancePropagated,
+                            distancePropagated,
 #else  // STOP_PHOTONS_ON_DETECTION
                       distancePropagated,
 #endif // STOP_PHOTONS_ON_DETECTION
@@ -473,7 +473,7 @@ collided =
                 0., // photon has already been propagated to the next position
                 inv_groupvel, photonTotalPathLength, photonNumScatters,
                 abs_lens_initial, photonStartPosAndTime, photonStartDirAndWlen,
-                &step,
+                step,
                 0, // string id (not used in this case)
                 0, // dom id (not used in this case)
                 hitIndex, maxHitIndex, outputPhotons
@@ -498,7 +498,7 @@ collided =
 
 
 // optional direction transformation (for ice anisotropy)
-      transformDirectionPreScatter(&photonDirAndWlen);
+      transformDirectionPreScatter(photonDirAndWlen);
 
       // choose a scattering angle
       const float cosScatAngle = makeScatteringCosAngle(RNG_ARGS_TO_CALL);
@@ -508,7 +508,7 @@ collided =
       scatterDirectionByAngle(cosScatAngle, sinScatAngle, photonDirAndWlen,RNG_CALL_UNIFORM_CO);
 
       // optional direction transformation (for ice anisotropy)
-      transformDirectionPostScatter(&photonDirAndWlen);
+      transformDirectionPostScatter(photonDirAndWlen);
 
 
 #ifdef PRINTF_ENABLED

@@ -1838,7 +1838,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
     NSteps = int(steps->size());
   }
 
-int nbenchmarks =10;
+int nbenchmarks = 8;
 //workgroupSize_ = 512;
 
   printf(" -------------  CUDA ------------- \n");
@@ -1916,12 +1916,11 @@ try {
 }
 
     printf("\n -- num threads per block = %u------- \n",workgroupSize_);
-    printf("avrg runtime CUDA kernel %f [ms] \n", totalCudaKernelTime/float(nbenchmarks) );
-    printf("avrg runtime CL   kernel    %f [ms] \n", totalCLKernelTime/float(nbenchmarks) );
+    printf("total runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );
+    printf("total runtime CL   kernel    %f [ms] \n", totalCLKernelTime  );
+    printf("avrg runtime CUDA  kernel    %f [ms] \n", totalCudaKernelTime/float(nbenchmarks) );
+    printf("avrg runtime CL    kernel    %f [ms] \n", totalCLKernelTime/float(nbenchmarks) );
     printf(" ------------- ------------- \n \n");
-
-
-
 
  
   I3CLSimPhotonSeriesPtr photons;
@@ -1940,7 +1939,7 @@ try {
       waitForOpenCLEventYield(copyComplete);
     }
 
-    printf("photon hits = %u from %d steps \n", numberOfGeneratedPhotons,
+    printf("photon hits = %f from %d steps \n", numberOfGeneratedPhotons/float(nbenchmarks+1),
            NSteps);
 
     if (numberOfGeneratedPhotons > maxNumOutputPhotons_) {

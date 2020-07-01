@@ -15607,12 +15607,12 @@ __constant__ float geoDomPosStringMeanPosY[GEO_DOM_POS_NUM_STRINGS] = {
 
 
 
-__device__ __forceinline__ void geometryGetDomPosition(unsigned short stringNum, unsigned short domNum, float *domPosX, float *domPosY, float *domPosZ )
+__device__ __forceinline__ void geometryGetDomPosition(unsigned short stringNum, unsigned short domNum, float &domPosX, float &domPosY, float &domPosZ )
 {
     const unsigned int index = geoDomPosStringStartIndexInTemplateDomList[stringNum]+uint(domNum);
-    *domPosX = float(geoDomPosTemplatePositionsX_flat[index])*GEO_DOM_POS_MAX_ABS_X_MULTIPLIER_IN_TEMPLATE + geoDomPosStringMeanPosX[stringNum];
-    *domPosY = float(geoDomPosTemplatePositionsY_flat[index])*GEO_DOM_POS_MAX_ABS_Y_MULTIPLIER_IN_TEMPLATE + geoDomPosStringMeanPosY[stringNum];
-    *domPosZ = geoDomPosTemplatePositionsZ_flat[index];
+    domPosX = float(geoDomPosTemplatePositionsX_flat[index])*GEO_DOM_POS_MAX_ABS_X_MULTIPLIER_IN_TEMPLATE + geoDomPosStringMeanPosX[stringNum];
+    domPosY = float(geoDomPosTemplatePositionsY_flat[index])*GEO_DOM_POS_MAX_ABS_Y_MULTIPLIER_IN_TEMPLATE + geoDomPosStringMeanPosY[stringNum];
+    domPosZ = geoDomPosTemplatePositionsZ_flat[index];
 }
 
 // end of auto-generated code created by generate_get_dom_position_code()

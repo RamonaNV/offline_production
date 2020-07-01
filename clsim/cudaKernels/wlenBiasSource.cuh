@@ -27,8 +27,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 __device__ __forceinline__ float getWavelengthBias(float wavelength);
 __device__ __forceinline__ void
-getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int *bin,
-                                                 float *fraction);
+getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int &bin,
+                                                 float &fraction);
 
 __constant__ float getWavelengthBias_data[43] = {
     6.3743244437e-05f, 9.3689183241e-05f, 8.5079797546e-05f, 6.6027579216e-05f,
@@ -45,28 +45,28 @@ __constant__ float getWavelengthBias_data[43] = {
 };
 
 __device__ __forceinline__ void
-getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int *bin,
-                                                 float *fraction) {
+getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int &bin,
+                                                 float &fraction) {
   float fbin;
-  *fraction = modf((wavelength - 2.6000000000e-07f) / 1.0000000000e-08f, &fbin);
+  fraction = modf((wavelength - 2.6000000000e-07f) / 1.0000000000e-08f, &fbin);
 
   int ibin = (int)fbin;
 
-  if ((ibin < 0) || ((ibin == 0) && (*fraction < 0))) {
+  if ((ibin < 0) || ((ibin == 0) && (fraction < 0))) {
     ibin = 0;
-    *fraction = 0.f;
+    fraction = 0.f;
   } else if (ibin >= 43 - 1) {
     ibin = 43 - 2;
-    *fraction = 1.f;
+    fraction = 1.f;
   }
 
-  *bin = ibin;
+  bin = ibin;
 }
 
 __device__ __forceinline__ float getWavelengthBias(float wavelength) {
   int bin;
   float fraction;
-  getWavelengthBias_getInterpolationBinAndFraction(wavelength, &bin, &fraction);
+  getWavelengthBias_getInterpolationBinAndFraction(wavelength, bin, fraction);
 
   return mix(getWavelengthBias_data[bin], getWavelengthBias_data[bin + 1],
              fraction);
