@@ -54,22 +54,22 @@ public:
    {}
   
 
-   __host__ __device__ inline float GetPosX() const {return ((const float *)&posAndTime)[0];}
-   __host__ __device__ inline float GetPosY() const {return ((const float *)&posAndTime)[1];}
-   __host__ __device__ inline float GetPosZ() const {return ((const float *)&posAndTime)[2];}
-   __host__  __device__ inline float GetTime() const {return ((const float *)&posAndTime)[3];}
-   __host__ __device__ inline float GetDirTheta() const {return ((const float *)&dirAndLengthAndBeta)[0];}
-   __host__  __device__ inline float GetDirPhi() const {return ((const float *)&dirAndLengthAndBeta)[1];}
-    __host__  __device__ inline float GetLength() const {return ((const float *)&dirAndLengthAndBeta)[2];}
-    __host__  __device__ inline float GetBeta() const {return ((const float *)&dirAndLengthAndBeta)[3];}
-    __host__  __device__ inline uint32_t GetNumPhotons() const {return numPhotons;}
-    __host__  __device__ inline float GetWeight() const {return weight;}
-    __host__  __device__ inline uint32_t GetID() const {return identifier;}
-    __host__  __device__ inline uint8_t GetSourceType() const {return sourceType;}
+   __host__ __device__ __forceinline__ float GetPosX() const {return ((const float *)&posAndTime)[0];}
+   __host__ __device__ __forceinline__ float GetPosY() const {return ((const float *)&posAndTime)[1];}
+   __host__ __device__ __forceinline__ float GetPosZ() const {return ((const float *)&posAndTime)[2];}
+   __host__  __device__ __forceinline__ float GetTime() const {return ((const float *)&posAndTime)[3];}
+   __host__ __device__ __forceinline__ float GetDirTheta() const {return ((const float *)&dirAndLengthAndBeta)[0];}
+   __host__  __device__ __forceinline__ float GetDirPhi() const {return ((const float *)&dirAndLengthAndBeta)[1];}
+    __host__  __device__ __forceinline__ float GetLength() const {return ((const float *)&dirAndLengthAndBeta)[2];}
+    __host__  __device__ __forceinline__ float GetBeta() const {return ((const float *)&dirAndLengthAndBeta)[3];}
+    __host__  __device__ __forceinline__ uint32_t GetNumPhotons() const {return numPhotons;}
+    __host__  __device__ __forceinline__ float GetWeight() const {return weight;}
+    __host__  __device__ __forceinline__ uint32_t GetID() const {return identifier;}
+    __host__  __device__ __forceinline__ uint8_t GetSourceType() const {return sourceType;}
    
-    __host__   inline I3PositionPtr GetPos() const {return I3PositionPtr(new I3Position(((const float *)&posAndTime)[0], ((const float *)&posAndTime)[1], ((const float *)&posAndTime)[2]));}
+    __host__   __forceinline__ I3PositionPtr GetPos() const {return I3PositionPtr(new I3Position(((const float *)&posAndTime)[0], ((const float *)&posAndTime)[1], ((const float *)&posAndTime)[2]));}
 
-    __host__    inline I3DirectionPtr GetDir() const 
+    __host__    __forceinline__ I3DirectionPtr GetDir() const 
     {
         I3DirectionPtr retval(new I3Direction());
         retval->SetThetaPhi(((const float *)&dirAndLengthAndBeta)[0], ((const float *)&dirAndLengthAndBeta)[1]);
@@ -77,22 +77,22 @@ public:
     } 
     
         
-    __host__  __device__ inline void SetPosX(const float &val) {((float *)&posAndTime)[0]=val;}
-    __host__  __device__ inline void SetPosY(const float &val) {((float *)&posAndTime)[1]=val;}
-    __host__  __device__ inline void SetPosZ(const float &val) {((float *)&posAndTime)[2]=val;}
-    __host__  __device__ inline void SetTime(const float &val) {((float *)&posAndTime)[3]=val;}
-    __host__   __device__ inline void SetDirTheta(const float &val) {((float *)&dirAndLengthAndBeta)[0]=val;}
-    __host__   __device__ inline void SetDirPhi(const float &val) {((float *)&dirAndLengthAndBeta)[1]=val;}
-    __host__   __device__ inline void SetLength(const float &val) {((float *)&dirAndLengthAndBeta)[2]=val;}
-    __host__   __device__ inline void SetBeta(const float &val) {((float *)&dirAndLengthAndBeta)[3]=val;}
-    __host__   __device__ inline void SetNumPhotons(const uint32_t &val) {numPhotons=val;}
-    __host__   __device__ inline void SetWeight(const float &val) {weight=val;}
-    __host__  __device__ inline void SetID(const uint32_t &val) {identifier=val;}
-    __host__  __device__ inline void SetSourceType(const uint8_t &val) {sourceType=val;}
+    __host__  __device__ __forceinline__ void SetPosX(const float &val) {((float *)&posAndTime)[0]=val;}
+    __host__  __device__ __forceinline__ void SetPosY(const float &val) {((float *)&posAndTime)[1]=val;}
+    __host__  __device__ __forceinline__ void SetPosZ(const float &val) {((float *)&posAndTime)[2]=val;}
+    __host__  __device__ __forceinline__ void SetTime(const float &val) {((float *)&posAndTime)[3]=val;}
+    __host__   __device__ __forceinline__ void SetDirTheta(const float &val) {((float *)&dirAndLengthAndBeta)[0]=val;}
+    __host__   __device__ __forceinline__ void SetDirPhi(const float &val) {((float *)&dirAndLengthAndBeta)[1]=val;}
+    __host__   __device__ __forceinline__ void SetLength(const float &val) {((float *)&dirAndLengthAndBeta)[2]=val;}
+    __host__   __device__ __forceinline__ void SetBeta(const float &val) {((float *)&dirAndLengthAndBeta)[3]=val;}
+    __host__   __device__ __forceinline__ void SetNumPhotons(const uint32_t &val) {numPhotons=val;}
+    __host__   __device__ __forceinline__ void SetWeight(const float &val) {weight=val;}
+    __host__  __device__ __forceinline__ void SetID(const uint32_t &val) {identifier=val;}
+    __host__  __device__ __forceinline__ void SetSourceType(const uint8_t &val) {sourceType=val;}
  
  
    
-    __host__   __device__ inline void SetDir(const double &x, const double &y, const double &z) 
+    __host__   __device__ __forceinline__ void SetDir(const double &x, const double &y, const double &z) 
     {
        
         ((float *)&dirAndLengthAndBeta)[0]=CalcTheta(x,y,z);

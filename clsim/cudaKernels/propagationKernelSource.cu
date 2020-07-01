@@ -181,10 +181,6 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
   unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
   int global_size = gridDim.x * blockDim.x;
 
-  if(i >=nsteps) return;
-  
- // if(i ==0) printf("CUDA kernel... (thread %u of %u)\n", i, global_size);
-
   #ifndef SAVE_ALL_PHOTONS
  
  //const  unsigned short * geoLayerToOMNumIndexPerStringSetLocal = geoLayerToOMNumIndexPerStringSet;
@@ -194,9 +190,14 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
 for (int ii = blockIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; ii+= blockDim.x){
       geoLayerToOMNumIndexPerStringSetLocal[ii] =geoLayerToOMNumIndexPerStringSet[ii]; 
 }  
-
+  __syncthreads();
   
   #endif
+
+
+  if(i >=nsteps) return;
+  
+ // if(i ==0) printf("CUDA kernel... (thread %u of %u)\n", i, global_size);
 
   #ifdef SAVE_PHOTON_HISTORY
       float4 currentPhotonHistory[NUM_PHOTONS_IN_HISTORY];
@@ -205,8 +206,8 @@ for (int ii = blockIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; 
   // download MWC RNG state
   uint64_t real_rnd_x = MWC_RNG_x[i];
   uint32_t real_rnd_a = MWC_RNG_a[i];
-  uint64_t *rnd_x = &real_rnd_x;
-  uint32_t *rnd_a = &real_rnd_a;
+  //uint64_t *rnd_x = &real_rnd_x;
+  //uint32_t *rnd_a = &real_rnd_a;
  
   
 const I3CLSimStepCuda step = inputSteps[i];
