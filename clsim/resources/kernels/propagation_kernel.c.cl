@@ -435,9 +435,12 @@ __kernel void propKernel(
     __global uint* MWC_RNG_a)
 {
     unsigned int i = get_global_id(0);
- unsigned int global_size = get_global_size(0);
- 
-//if(i==0) printf("CL kernel... (work item %u of %u)\n", i, global_size);
+
+#ifdef PRINTF_ENABLED
+    unsigned int global_size = get_global_size(0);
+    //dbg_printf("Start kernel... (work item %u of %u)\n", i, global_size);
+#endif
+
 #ifndef SAVE_ALL_PHOTONS
     __local unsigned short geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
 

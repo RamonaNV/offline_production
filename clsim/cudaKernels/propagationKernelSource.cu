@@ -116,14 +116,14 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
 
     
             //measure benchmark:
-            for (int b = 0 ; b< nbenchmarks; ++b){
+            for (int b = 0 ; b< nbenchmarks+1; ++b){
                   std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
                   propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
                   cudaDeviceSynchronize(); 
                   std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
-                 // if(  b>0|| nbenchmarks==0) {   
+                if(  b>0|| nbenchmarks==0) {   
                         totalCudaKernelTime +=  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
-                 // }
+                }
             }
 
 
@@ -192,9 +192,7 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
    __shared__    unsigned short   geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
 
 for (int ii = blockIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; ii+= blockDim.x){
-
       geoLayerToOMNumIndexPerStringSetLocal[ii] =geoLayerToOMNumIndexPerStringSet[ii]; 
- 
 }  
 
   

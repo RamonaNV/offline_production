@@ -1838,7 +1838,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
     NSteps = int(steps->size());
   }
 
-int nbenchmarks =1;
+int nbenchmarks =10;
 workgroupSize_ = 512;
 
   printf(" -------------  CUDA ------------- \n");
@@ -1854,7 +1854,7 @@ workgroupSize_ = 512;
   printf(" -------------  done CUDA ------------- \n");
   printf("\n");
 
- 
+ workgroupSize_ = 256;
   // CL PART
   printf(" -------------  CL ------------- \n");
   // uncomment for profiling CUDA ncu :
@@ -1879,7 +1879,7 @@ workgroupSize_ = 512;
   }
 
  
-for (int b = 0 ; b< nbenchmarks ; ++b){
+for (int b = 0 ; b< nbenchmarks+1 ; ++b){
   std::chrono::time_point<std::chrono::system_clock> startTimeCL = std::chrono::system_clock::now();
     cl::Event kernelFinishEvent;
   queue_[0]->enqueueNDRangeKernel(
@@ -1909,10 +1909,10 @@ try {
   std::chrono::time_point<std::chrono::system_clock> endTimeCL =
       std::chrono::system_clock::now();
   
-  //if( b>0 || nbenchmarks==0) {
+  if( b>0 || nbenchmarks==0) {
       totalCLKernelTime += std::chrono::duration_cast<std::chrono::milliseconds>(
                     endTimeCL - startTimeCL).count();
-  //}
+   }
 }
 
     printf("\n -- num threads per block = %u------- \n",workgroupSize_);
