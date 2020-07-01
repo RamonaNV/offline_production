@@ -1839,7 +1839,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
   }
 
 int nbenchmarks =10;
-workgroupSize_ = 512;
+//workgroupSize_ = 512;
 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -1848,7 +1848,7 @@ workgroupSize_ = 512;
                        maxNumOutputPhotons_,
                        &geoLayerToOMNumIndexPerStringSetInfo_[0],
                        geoLayerToOMNumIndexPerStringSetInfo_.size(),
-                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, totalCudaKernelTime, nbenchmarks, workgroupSize_);
+                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, totalCudaKernelTime, nbenchmarks, 512);
 
   finalizeCUDA();
   printf(" -------------  done CUDA ------------- \n");

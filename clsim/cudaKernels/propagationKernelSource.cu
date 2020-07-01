@@ -189,7 +189,7 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
  
  //const  unsigned short * geoLayerToOMNumIndexPerStringSetLocal = geoLayerToOMNumIndexPerStringSet;
   
-   __shared__    unsigned short   geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
+__shared__    unsigned short   geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
 
 for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; ii+= blockDim.x){
       geoLayerToOMNumIndexPerStringSetLocal[ii] =geoLayerToOMNumIndexPerStringSet[ii]; 
