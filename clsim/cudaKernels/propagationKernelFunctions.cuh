@@ -502,7 +502,7 @@ __device__  __forceinline__ void checkForCollision_InCell(
     }
   }
 
- // __syncthreads(); //onecellsyncthreads
+  //onecellsyncthreads  __syncthreads(); 
 }
 
 __device__  __forceinline__ void checkForCollision_InCells(
@@ -614,7 +614,7 @@ __device__  __forceinline__ void checkForCollision_InCells(
 
 #undef DO_CHECK
 
- __syncthreads(); //cellsyncthreads
+  __syncthreads(); //cellsyncthreads
 
 }
 

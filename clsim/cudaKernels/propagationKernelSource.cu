@@ -25,8 +25,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <propagationKernelFunctions.cuh>
 
  //__device__ global random arrays
- __device__ uint64_t* d_MWC_RNG_x;
- __device__ uint32_t* d_MWC_RNG_a;
+ __device__ __shared__ uint64_t* d_MWC_RNG_x;
+ __device__ __shared__ uint32_t* d_MWC_RNG_a;
  
 #define CUDA_ERR_CHECK(e) if(cudaError_t(e)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(e)), __LINE__);
 #define CUDA_CHECK_CALL cudaError_t err = cudaGetLastError(); if(cudaError_t(err)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(err)), __LINE__-1);
@@ -46,7 +46,7 @@ const  unsigned short* __restrict__  geoLayerToOMNumIndexPerStringSet,
 #endif
   const I3CLSimStepCuda*  __restrict__  inputSteps,      // deviceBuffer_InputSteps
            int nsteps,
-           I3CLSimPhotonCuda *outputPhotons, // deviceBuffer_OutputPhotons
+           I3CLSimPhotonCuda* __restrict__  outputPhotons, // deviceBuffer_OutputPhotons
 
 #ifdef SAVE_PHOTON_HISTORY
            float4 *photonHistory,
@@ -64,19 +64,20 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
       CUDA_ERR_CHECK(cudaMemcpy(d_MWC_RNG_x, MWC_RNG_x, maxNumWorkitems* sizeof(uint64_t),cudaMemcpyHostToDevice));
       
       cudaDeviceSynchronize();
-      printf("RNG is set up on CUDA gpu. \n");
+      printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
 }
 
 
-void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, uint32_t hitIndex, 
+void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
       uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a  ){
+        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, const int  threadsperblock,
+         float& totalCudaKernelTime, const int nbenchmarks ){
 
   
       int nlaunches = (nsteps+nsteps-1)/nsteps;
        
       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
-      init_RDM_CUDA( nsteps, MWC_RNG_x,  MWC_RNG_a);
+      init_RDM_CUDA( sizeRNG, MWC_RNG_x,  MWC_RNG_a);
       
       printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, nlaunches, nsteps);
       uint32_t h_totalHitIndex =0;
@@ -84,9 +85,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
 	CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
       CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer*sizeof(unsigned short),cudaMemcpyHostToDevice));
       
-      float timer = 0;
-      std::chrono::time_point<std::chrono::system_clock> startTimeCuda, endTimeCuda;
-
+ 
       //these multiple launches correspond to numBuffers..   
       for (int ilaunch= 0 ; ilaunch<nlaunches; ++ilaunch )
       {
@@ -97,29 +96,35 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
             
             for (int i =0; i<launchnsteps; i++){
                   h_cudastep[i] = I3CLSimStep(in_steps[i+ilaunch*nsteps]); 
+                  
             } 
-            startTimeCuda = std::chrono::system_clock::now();
-            
+                 
             I3CLSimStepCuda * d_cudastep;
             CUDA_ERR_CHECK(cudaMalloc( (void**)&d_cudastep , launchnsteps*sizeof(I3CLSimStepCuda)));
             CUDA_ERR_CHECK(cudaMemcpy(d_cudastep, h_cudastep, launchnsteps*sizeof(I3CLSimStepCuda),cudaMemcpyHostToDevice));
             
             uint32_t *d_hitIndex;
-            uint32_t h_hitIndex[1]; h_hitIndex[0]= hitIndex;
+            uint32_t h_hitIndex[1]; h_hitIndex[0]= 0;
             CUDA_ERR_CHECK(cudaMalloc((void**)&d_hitIndex , 1 * sizeof(uint32_t)));
             CUDA_ERR_CHECK(cudaMemcpy(d_hitIndex, h_hitIndex,  1*sizeof(uint32_t),cudaMemcpyHostToDevice));
 
             I3CLSimPhotonCuda * d_cudaphotons;
             CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons , maxHitIndex*sizeof(I3CLSimPhotonCuda)));
 
-            int numthr =   512;
-            int numBlocks =  (launchnsteps+numthr-1)/numthr;
-            printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, numthr, launchnsteps);
-            std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-            propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
-            cudaDeviceSynchronize(); 
-            std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();CUDA_CHECK_CALL
-            timer =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+         //   int numthr =   512;
+            int numBlocks =  (launchnsteps+threadsperblock-1)/threadsperblock;
+            printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, threadsperblock, launchnsteps);
+
+    
+            //measure benchmark:
+            for (int b = 0 ; b< nbenchmarks; ++b){
+                  std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
+                  propKernel<<<numBlocks, threadsperblock>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+                  cudaDeviceSynchronize(); 
+                  std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
+               if(b>0)   totalCudaKernelTime +=  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+            }
+
 
             CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
             uint32_t  numberPhotons = h_hitIndex[0];
@@ -135,20 +140,15 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
             struct I3CLSimPhotonCuda* h_cudaphotons = (struct I3CLSimPhotonCuda*) malloc(numberPhotons*sizeof(struct I3CLSimPhotonCuda));
             CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
             cudaDeviceSynchronize();  
-            endTimeCuda   = std::chrono::system_clock::now();
-
-
-           free(h_cudastep);     
+    
+           free(h_cudastep);    
            cudaFree(d_cudaphotons); 
            cudaFree(d_cudastep); 
-
+           cudaFree(d_geolayer); 
       }
-     
-      printf("runtime kernel only %f [ms] \n",timer );
-      timer =  std::chrono::duration_cast<std::chrono::milliseconds>(endTimeCuda - startTimeCuda).count();
-      printf("runtime with copying back %f [ms] \n",timer );
-      printf( "photon hits = %u from %d steps \n", h_totalHitIndex, nsteps);
 
+      printf( "photon hits = %u from %d steps \n", h_totalHitIndex, nsteps);
+   
       //check phtoton hits out:
       //for (int i = numberPhotons-10; i< numberPhotons; ++i)printf(" %d photon= %d has hit DOM= %u \n",i, h_cudaphotons[i].stringID , h_cudaphotons[i].omID);       
 }
@@ -157,6 +157,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
 void finalizeCUDA(){
       cudaFree(d_MWC_RNG_a);
       cudaFree(d_MWC_RNG_x);
+      cudaDeviceSynchronize();  
 }
 
 
@@ -168,7 +169,7 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
 #endif
             const I3CLSimStepCuda* __restrict__ inputSteps,      // deviceBuffer_InputSteps
            int nsteps,
-           I3CLSimPhotonCuda *outputPhotons, // deviceBuffer_OutputPhotons
+           I3CLSimPhotonCuda* __restrict__ outputPhotons, // deviceBuffer_OutputPhotons
 
 #ifdef SAVE_PHOTON_HISTORY
            float4 *photonHistory,
@@ -412,7 +413,8 @@ const I3CLSimStepCuda step = inputSteps[i];
 #else                              // DEBUG_STORE_GENERATED_PHOTONS
     bool
 #endif                             // DEBUG_STORE_GENERATED_PHOTONS
-      collided =
+      
+collided =
 #endif // STOP_PHOTONS_ON_DETECTION
           checkForCollision(photonPosAndTime, photonDirAndWlen, inv_groupvel,
                             photonTotalPathLength, photonNumScatters,
@@ -531,10 +533,9 @@ const I3CLSimStepCuda step = inputSteps[i];
   // dbg_printf("Kernel finished.\n");
 #endif
 
-
+ 
   // upload MWC RNG state
   MWC_RNG_x[i] = real_rnd_x;
   MWC_RNG_a[i] = real_rnd_a;
  
-
 }
