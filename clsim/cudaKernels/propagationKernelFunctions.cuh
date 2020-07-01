@@ -54,13 +54,13 @@ __device__ __forceinline__ int findLayerForGivenZPos(float posZ);
 __device__ __forceinline__ float mediumLayerBoundary(int layer);
 
 __device__  __forceinline__ void scatterDirectionByAngle(float cosa, float sina,
-                                        float4 *direction,
+                                        float4 &direction,
                                         float randomNumber);
 
 __device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *step,
                                       const float4& stepDir, RNG_ARGS,
-                                      float4 *photonPosAndTime,
-                                      float4 *photonDirAndWlen);
+                                      float4 &photonPosAndTime,
+                                      float4 &photonDirAndWlen);
 
  
 __device__ __forceinline__ float2 sphDirFromCar(float4 carDir);
@@ -614,7 +614,7 @@ __device__  __forceinline__ void checkForCollision_InCells(
 
 #undef DO_CHECK
 
-  __syncthreads(); //cellsyncthreads
+   __syncthreads(); //cellsyncthreads
 
 }
 
@@ -748,7 +748,7 @@ __device__ __forceinline__ float mediumLayerBoundary(int layer) {
 }
 
 __device__  __forceinline__ void scatterDirectionByAngle(float cosa, float sina,
-                                        float4 *direction,
+                                        float4& direction,
                                         float randomNumber) {
  
   // randomize direction of scattering (rotation around old direction axis)  
@@ -759,31 +759,31 @@ __device__  __forceinline__ void scatterDirectionByAngle(float cosa, float sina,
 
   // Rotate new direction into absolute frame of reference
   const float sinth =
-  sqrtf(max(ZERO, ONE - (*direction).z * (*direction).z));
+  sqrtf(max(ZERO, ONE - (direction).z * (direction).z));
 
   if (sinth > 0.f) { // Current direction not vertical, so rotate
-    const float4 oldDir = *direction;
+    const float4 oldDir = direction;
 
-    (*direction).x =
+    (direction).x =
         oldDir.x * cosa -
         ((oldDir.y * cosb + oldDir.z * oldDir.x * sinb) * sina)/ sinth;
-    (*direction).y =
+    (direction).y =
         oldDir.y * cosa +
         ((oldDir.x * cosb - oldDir.z * oldDir.y * sinb) * sina)/ sinth;
-    (*direction).z = oldDir.z * cosa + sina * sinb * sinth;
+    (direction).z = oldDir.z * cosa + sina * sinb * sinth;
   } else { // Current direction is vertical, so this is trivial
-    (*direction).x = sina * cosb;
-    (*direction).y = sina * sinb;
-    (*direction).z = cosa * sign((*direction).z);
+    (direction).x = sina * cosb;
+    (direction).y = sina * sinb;
+    (direction).z = cosa * sign((direction).z);
   }
 
   {
     const float recip_length = rsqrtf(
-        sqr((*direction).x) + sqr((*direction).y) + sqr((*direction).z));
+        sqr((direction).x) + sqr((direction).y) + sqr((direction).z));
 
-    (*direction).x *= recip_length;
-    (*direction).y *= recip_length;
-    (*direction).z *= recip_length;
+    (direction).x *= recip_length;
+    (direction).y *= recip_length;
+    (direction).z *= recip_length;
   }
 
   // printf("direction after=(%f,%f,%f) len^2=%f\n",
@@ -794,22 +794,22 @@ __device__  __forceinline__ void scatterDirectionByAngle(float cosa, float sina,
 
 __device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *step,
                                       const float4& stepDir, RNG_ARGS,
-                                      float4 *photonPosAndTime,
-                                      float4 *photonDirAndWlen) {
+                                      float4 &photonPosAndTime,
+                                      float4 &photonDirAndWlen) {
   float shiftMultiplied =
       step->dirAndLengthAndBeta.z * RNG_CALL_UNIFORM_CO;
   float inverseParticleSpeed =
       1.f/(speedOfLight * step->dirAndLengthAndBeta.w);
 
   // move along the step direction
-  *photonPosAndTime =
+  photonPosAndTime =
       float4{step->posAndTime.x + stepDir.x * shiftMultiplied,
              step->posAndTime.y + stepDir.y * shiftMultiplied,
              step->posAndTime.z + stepDir.z * shiftMultiplied,
              step->posAndTime.w + inverseParticleSpeed * shiftMultiplied};
 
   // determine the photon layer (clamp if necessary)
-  unsigned int layer = min(max(findLayerForGivenZPos((*photonPosAndTime).z), 0),
+  unsigned int layer = min(max(findLayerForGivenZPos((photonPosAndTime).z), 0),
                            MEDIUM_LAYERS - 1);
 
 #ifndef NO_FLASHER
@@ -829,10 +829,10 @@ __device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *st
     // determine the photon direction
 
     // start with the track direction
-    (*photonDirAndWlen).x = stepDir.x;
-    (*photonDirAndWlen).y = stepDir.y;
-    (*photonDirAndWlen).z = stepDir.z;
-    (*photonDirAndWlen).w = wavelength;
+    (photonDirAndWlen).x = stepDir.x;
+    (photonDirAndWlen).y = stepDir.y;
+    (photonDirAndWlen).z = stepDir.z;
+    (photonDirAndWlen).w = wavelength;
 
     // and now rotate to cherenkov emission direction
     scatterDirectionByAngle(cosCherenkov, sinCherenkov, photonDirAndWlen,
@@ -846,10 +846,10 @@ __device__  __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda *st
         generateWavelength(uint(step->sourceType), RNG_ARGS_TO_CALL);
 
     // use the step direction as the photon direction
-    (*photonDirAndWlen).x = stepDir.x;
-    (*photonDirAndWlen).y = stepDir.y;
-    (*photonDirAndWlen).z = stepDir.z;
-    (*photonDirAndWlen).w = wavelength;
+    (photonDirAndWlen).x = stepDir.x;
+    (photonDirAndWlen).y = stepDir.y;
+    (photonDirAndWlen).z = stepDir.z;
+    (photonDirAndWlen).w = wavelength;
   }
 #endif
 }

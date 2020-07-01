@@ -179,7 +179,7 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
            {
 
   unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-  int global_size = gridDim.x * blockDim.x;
+  //int global_size = gridDim.x * blockDim.x;
 
   #ifndef SAVE_ALL_PHOTONS
  
@@ -248,8 +248,8 @@ const I3CLSimStepCuda step = inputSteps[i];
     if (abs_lens_left < EPSILON) {
 
       // create a new photon
-      createPhotonFromTrack(&step, stepDir, RNG_ARGS_TO_CALL, &photonPosAndTime,
-                            &photonDirAndWlen);
+      createPhotonFromTrack(&step, stepDir, RNG_ARGS_TO_CALL, photonPosAndTime,
+                        photonDirAndWlen);
 
       // save the start position and time
       photonStartPosAndTime = photonPosAndTime;
@@ -505,7 +505,7 @@ collided =
       const float sinScatAngle = sqrt(ONE - sqr(cosScatAngle));
 
       // change the current direction by that angle
-      scatterDirectionByAngle(cosScatAngle, sinScatAngle, &photonDirAndWlen,RNG_CALL_UNIFORM_CO);
+      scatterDirectionByAngle(cosScatAngle, sinScatAngle, photonDirAndWlen,RNG_CALL_UNIFORM_CO);
 
       // optional direction transformation (for ice anisotropy)
       transformDirectionPostScatter(&photonDirAndWlen);
