@@ -103,6 +103,8 @@ maxNumWorkitems_(10240)
 
     std::cout << " !!! this code has been adapted to run the porpagation kernel "
                 "sperately in CL and CUDA." << std::endl;
+    
+    runVecAddCUDABenchmark();
 
     if (!randomService_) log_fatal("You need to supply a I3RandomService.");
     
@@ -1838,8 +1840,11 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
     NSteps = int(steps->size());
   }
 
-int nbenchmarks = 10;
+
  
+runVecAddCUDABenchmark();
+
+int nbenchmarks = 0;
 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -1879,9 +1884,8 @@ int nbenchmarks = 10;
   }
 
  
-for (int b = 0 ; b<= nbenchmarks ; ++b){
-  std::chrono::time_point<std::chrono::system_clock> startTimeCL = std::chrono::system_clock::now();
-    cl::Event kernelFinishEvent;
+
+ cl::Event kernelFinishEvent;
   queue_[0]->enqueueNDRangeKernel(
       *(kernel_[0]),
       cl::NullRange,       // current implementations force this to be NULL
@@ -1891,7 +1895,35 @@ for (int b = 0 ; b<= nbenchmarks ; ++b){
       &kernelFinishEvent);
   queue_[0]->flush();
 
-  try {
+ try {
+    // wait for the kernel to finish
+    waitForOpenCLEventYield(kernelFinishEvent);
+  } catch (cl::Error &err) {
+    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
+              err.err());
+  }
+try {
+    // wait for the queue to really finish (just to make sure)
+    queue_[0]->finish();
+  } catch (cl::Error &err) {
+    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
+              err.err());
+  }
+
+
+  std::chrono::time_point<std::chrono::system_clock> startTimeCL = std::chrono::system_clock::now();
+ for (int b = 0 ; b< nbenchmarks ; ++b){
+    queue_[0]->enqueueNDRangeKernel(
+        *(kernel_[0]),
+        cl::NullRange,       // current implementations force this to be NULL
+        cl::NDRange(NSteps), // number of work items
+        cl::NDRange(workgroupSize_),
+        &(bufferWriteEvents),  // wait for buffers to be filled
+        &kernelFinishEvent);
+    queue_[0]->flush();
+    
+}
+ try {
     // wait for the kernel to finish
     waitForOpenCLEventYield(kernelFinishEvent);
   } catch (cl::Error &err) {
@@ -1908,12 +1940,12 @@ try {
 
   std::chrono::time_point<std::chrono::system_clock> endTimeCL =
       std::chrono::system_clock::now();
-  
-  if( b>0 || nbenchmarks==0) {
-      totalCLKernelTime += std::chrono::duration_cast<std::chrono::milliseconds>(
+
+   totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(
                     endTimeCL - startTimeCL).count();
-   }
-}
+
+
+
 
     printf("\n -- num threads per block = %u------- \n",workgroupSize_);
     printf("total runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );

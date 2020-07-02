@@ -24,6 +24,69 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <propagationKernelSource.cuh>
 #include <propagationKernelFunctions.cuh>
 
+
+
+__global__ void avector_add(const int *A, const int *B, int *C, int n ) {
+      // Get the index of the current element to be processed
+         int i = threadIdx.x + blockIdx.x * blockDim.x;
+                  //     // Do the operation
+
+                 if(i<n) C[i] = A[i] + B[i];
+                        }
+
+
+
+void runVecAddCUDABenchmark(){
+      int nbenchmarks = 10;
+      int NTHREADSPERBLOCK = 128;
+      int LIST_SIZE = 25e7;
+
+      int *A = (int*)malloc(sizeof(int)*LIST_SIZE);
+      int *B = (int*)malloc(sizeof(int)*LIST_SIZE);
+      for(int i = 0; i < LIST_SIZE; i++) {
+          A[i] = i;
+          B[i] = LIST_SIZE - i;
+      }
+
+      // CUDA memory Malloc PART
+      int *d_a,*d_b, *d_c;
+      int *c= (int*)malloc(sizeof(int)*LIST_SIZE);
+      cudaMalloc(&d_a, LIST_SIZE*sizeof(int));
+      cudaMalloc(&d_b, LIST_SIZE*sizeof(int));
+      cudaMalloc(&d_c, LIST_SIZE*sizeof(int));
+      cudaMemcpy(d_a, A, LIST_SIZE*sizeof(int), cudaMemcpyHostToDevice);
+      cudaMemcpy(d_b, B, LIST_SIZE*sizeof(int), cudaMemcpyHostToDevice);
+      float totalCudaKernelTime = 0.0;
+      avector_add<<<(LIST_SIZE+NTHREADSPERBLOCK-1)/NTHREADSPERBLOCK, NTHREADSPERBLOCK>>>(d_a ,d_b,d_c, LIST_SIZE);
+        
+      std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
+      for (int b = 0 ; b<= nbenchmarks; ++b){    
+        avector_add<<<(LIST_SIZE+NTHREADSPERBLOCK-1)/NTHREADSPERBLOCK, NTHREADSPERBLOCK>>>(d_a ,d_b,d_c, LIST_SIZE);
+        }
+        cudaDeviceSynchronize(); 
+        std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
+        totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+       
+       printf("--------- %d ---------- \n ", LIST_SIZE);
+        printf(" vector add avrg (of %d)  time = %f ms \n ", nbenchmarks,totalCudaKernelTime/nbenchmarks );
+        printf("----------------------- \n ");
+
+
+      cudaMemcpy(c, d_c, LIST_SIZE*sizeof(int), cudaMemcpyDeviceToHost);
+
+      int i = 10;
+      if( A[i] + B[i] != c[i] )
+            printf("error: CUDA %d + %d = %d\n", A[i], B[i], c[i]);
+      cudaFree(d_a);
+      cudaFree(d_b);
+      cudaFree(d_c);
+
+      printf("--------- %d ---------- \n ", LIST_SIZE);
+      printf(" vector add avrg (of %d)  time = %f ms \n ", nbenchmarks,totalCudaKernelTime/nbenchmarks );
+      printf("----------------------- \n ");
+}
+
+
  //__device__ global random arrays
  __device__  uint64_t* d_MWC_RNG_x;
  __device__  uint32_t* d_MWC_RNG_a;
@@ -115,19 +178,21 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, numthr, launchnsteps);
 
     
-            //measure benchmark:
-            for (int b = 0 ; b<= nbenchmarks; ++b){
-                  std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
+            float totalCudaKernelTime = 0.0;
+            propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+            cudaDeviceSynchronize(); 
+
+            std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
+            for (int b = 0 ; b< nbenchmarks; ++b){    
                   propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
-                  cudaDeviceSynchronize(); 
-                  std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
-                if(  b>0|| nbenchmarks==0) {   
-                        totalCudaKernelTime +=  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
-                }
             }
+              cudaDeviceSynchronize(); 
+              std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
+              totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+            
 
-
-            CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
+              
+             CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
             uint32_t  numberPhotons = h_hitIndex[0];
             h_totalHitIndex += h_hitIndex[0];
             

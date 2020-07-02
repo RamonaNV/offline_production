@@ -39,4 +39,5 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
     uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a,  int sizeRNG, float& totalCudaKernelTime,const int nbenchmarks,size_t threadsPerBlock );
 
 
+void runVecAddCUDABenchmark();
 #endif  // PROPAGATIONKERNELSOURCE_CUH
