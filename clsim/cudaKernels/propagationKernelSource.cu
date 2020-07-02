@@ -56,11 +56,13 @@ void runVecAddCUDABenchmark(){
       cudaMalloc(&d_c, LIST_SIZE*sizeof(int));
       cudaMemcpy(d_a, A, LIST_SIZE*sizeof(int), cudaMemcpyHostToDevice);
       cudaMemcpy(d_b, B, LIST_SIZE*sizeof(int), cudaMemcpyHostToDevice);
+
       float totalCudaKernelTime = 0.0;
       avector_add<<<(LIST_SIZE+NTHREADSPERBLOCK-1)/NTHREADSPERBLOCK, NTHREADSPERBLOCK>>>(d_a ,d_b,d_c, LIST_SIZE);
-        
+      cudaDeviceSynchronize(); 
+
       std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-      for (int b = 0 ; b<= nbenchmarks; ++b){    
+      for (int b = 0 ; b<  nbenchmarks; ++b){    
         avector_add<<<(LIST_SIZE+NTHREADSPERBLOCK-1)/NTHREADSPERBLOCK, NTHREADSPERBLOCK>>>(d_a ,d_b,d_c, LIST_SIZE);
         }
         cudaDeviceSynchronize(); 
@@ -178,7 +180,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, numthr, launchnsteps);
 
     
-            float totalCudaKernelTime = 0.0;
+         
             propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
             cudaDeviceSynchronize(); 
 

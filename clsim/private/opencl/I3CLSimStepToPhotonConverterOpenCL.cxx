@@ -1842,9 +1842,9 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
 
 
  
-runVecAddCUDABenchmark();
+//runVecAddCUDABenchmark();
 
-int nbenchmarks = 0;
+int nbenchmarks = 10;
 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -1864,9 +1864,7 @@ int nbenchmarks = 0;
   printf(" -------------  CL ------------- \n");
   // uncomment for profiling CUDA ncu :
  // NSteps = 1;
- float totalCLKernelTime = 0;
-
- 
+  
   try {
     queue_[0]->enqueueWriteBuffer(
         *deviceBuffer_CurrentNumOutputPhotons[0], CL_FALSE, 0, sizeof(uint32_t),
@@ -1941,7 +1939,7 @@ try {
   std::chrono::time_point<std::chrono::system_clock> endTimeCL =
       std::chrono::system_clock::now();
 
-   totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+ float  totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(
                     endTimeCL - startTimeCL).count();
 
 
