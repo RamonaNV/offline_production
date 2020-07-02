@@ -260,11 +260,12 @@ __device__  __forceinline__ void checkForCollision_OnString(
 #undef numComponents
 #endif
 
+    
   //__constant__ const unsigned short
   //*geoLayerToOMNumIndex=geoLayerToOMNumIndexPerStringSet + (
   //uint(stringSet)*GEO_LAYER_STRINGSET_MAX_NUM_LAYERS) + lowLayerZ;
-  //__shared__
-  const unsigned short *geoLayerToOMNumIndex =
+  //  __local const unsigned short *geoLayerToOMNumIndex=geoLayerToOMNumIndexPerStringSetLocal + (convert_uint(stringSet)*GEO_LAYER_STRINGSET_MAX_NUM_LAYERS) + lowLayerZ;
+   const unsigned short *geoLayerToOMNumIndex =
       geoLayerToOMNumIndexPerStringSetLocal +( uint32_t(stringSet) * GEO_LAYER_STRINGSET_MAX_NUM_LAYERS) + lowLayerZ;
 
 
@@ -724,7 +725,7 @@ __device__  __forceinline__ bool checkForCollision(
 //__device__ inline float my_recip(const float a) { return 1.f / a; }
 //__device__ inline float my_powr(const float a, const float b) { return powf(a, b); }
 //__device__ inline float my_sqrt(const float a) { return sqrtf(a); }
-//__device__ inline float my_rsqrt(const float a) { return rsqrtf(a); }
+//__device__ __forceinline__ float my_rsqrt(const float a) { return rsqrtf(a); } // __frsqrt_rn
 //__device__ inline float my_cos(const float a) { return cosf(a); }
 //__device__ inline float my_sin(const float a) { return sinf(a); }
 //__device__ inline float my_log(const float a) { return logf(a); }

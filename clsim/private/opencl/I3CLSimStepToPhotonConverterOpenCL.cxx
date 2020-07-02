@@ -1838,8 +1838,8 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
     NSteps = int(steps->size());
   }
 
-int nbenchmarks = 8;
-//workgroupSize_ = 512;
+int nbenchmarks = 10;
+ 
 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -1879,7 +1879,7 @@ int nbenchmarks = 8;
   }
 
  
-for (int b = 0 ; b< nbenchmarks+1 ; ++b){
+for (int b = 0 ; b<= nbenchmarks ; ++b){
   std::chrono::time_point<std::chrono::system_clock> startTimeCL = std::chrono::system_clock::now();
     cl::Event kernelFinishEvent;
   queue_[0]->enqueueNDRangeKernel(

@@ -116,7 +116,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
 
     
             //measure benchmark:
-            for (int b = 0 ; b< nbenchmarks+1; ++b){
+            for (int b = 0 ; b<= nbenchmarks; ++b){
                   std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
                   propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
                   cudaDeviceSynchronize(); 
@@ -183,9 +183,7 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
 
   #ifndef SAVE_ALL_PHOTONS
  
- //const  unsigned short * geoLayerToOMNumIndexPerStringSetLocal = geoLayerToOMNumIndexPerStringSet;
-  
-__shared__    unsigned short   geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
+  __shared__    unsigned short   geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
 
 for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; ii+= blockDim.x){
       geoLayerToOMNumIndexPerStringSetLocal[ii] =geoLayerToOMNumIndexPerStringSet[ii]; 
@@ -206,8 +204,8 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
   // download MWC RNG state
   uint64_t real_rnd_x = MWC_RNG_x[i];
   uint32_t real_rnd_a = MWC_RNG_a[i];
-  //uint64_t *rnd_x = &real_rnd_x;
-  //uint32_t *rnd_a = &real_rnd_a;
+  uint64_t *rnd_x = &real_rnd_x;
+  uint32_t *rnd_a = &real_rnd_a;
  
   
 const I3CLSimStepCuda step = inputSteps[i];
@@ -215,7 +213,7 @@ const I3CLSimStepCuda step = inputSteps[i];
   {
     const float rho = sinf(step.dirAndLengthAndBeta.x); // sin(theta)
     stepDir =
-        (float4){rho * cosf(step.dirAndLengthAndBeta.y), // rho*cos(phi)
+        float4{rho * cosf(step.dirAndLengthAndBeta.y), // rho*cos(phi)
                       rho * sinf(step.dirAndLengthAndBeta.y), // rho*sin(phi)
                       cosf(step.dirAndLengthAndBeta.x),       // cos(phi)
                       ZERO};
@@ -383,7 +381,7 @@ const I3CLSimStepCuda step = inputSteps[i];
 #endif
 
 #ifdef PRINTF_ENABLED
-      printf("   - distancePropagated=%f\n", distancePropagated);
+  //    printf("   - distancePropagated=%f\n", distancePropagated);
 #endif
 
       // get overburden for distance
