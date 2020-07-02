@@ -101,7 +101,7 @@ void runVecAddCUDABenchmark(){
 // SAVE_PHOTON_HISTORY  and SAVE_ALL_PHOTONS are not define for now, i.e. commented out these snippets,
 // s.t. it corresponds to the default contstructor of I3CLSimStepToPhotonConverterOpenCL
 
-__global__ void
+__global__ __launch_bounds__(512,4) void
 propKernel(uint32_t *hitIndex,   // deviceBuffer_CurrentNumOutputPhotons
            uint32_t maxHitIndex, // maxNumOutputPhotons_
 #ifndef SAVE_ALL_PHOTONS
