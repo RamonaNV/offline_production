@@ -663,6 +663,7 @@ void I3CLSimStepToPhotonConverterOpenCL::SetupQueueAndKernel(const cl::Platform 
         BuildOptions += "-DNO_FLASHER ";
     }
 
+    std::cout << BuildOptions << std::endl;
     cl::Program program;
     try {
         // build the program
