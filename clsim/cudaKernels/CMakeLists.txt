@@ -1,6 +1,6 @@
 
 find_package(CUDAToolkit REQUIRED)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_75")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_75 -use_fast_math")
 
 add_library(thiscudalib SHARED
   propagationKernelSource.cu

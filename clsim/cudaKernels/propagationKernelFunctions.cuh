@@ -502,8 +502,7 @@ __device__  __forceinline__ void checkForCollision_InCell(
           geoLayerToOMNumIndexPerStringSetLocal);
     }
   }
-
-  //onecellsyncthreads 
+ 
 }
 
 __device__  __forceinline__ void checkForCollision_InCells(
@@ -615,7 +614,8 @@ __device__  __forceinline__ void checkForCollision_InCells(
 
 #undef DO_CHECK
 
-   __syncthreads(); //cellsyncthreads
+
+      __syncthreads(); //cellsyncthreads   //__syncwarp();
 
 }
 
@@ -900,7 +900,7 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
 ) {
 
   //PRINTL
-  uint32_t myIndex = 1+atomicAdd(&hitIndex[0], 1); 
+  uint32_t myIndex = 1+(*hitIndex)++; //atomicAdd(&hitIndex[0], 1); 
   
 
   if (myIndex < maxHitIndex) {

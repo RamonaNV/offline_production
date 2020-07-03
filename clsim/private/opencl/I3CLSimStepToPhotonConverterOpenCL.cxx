@@ -104,7 +104,7 @@ maxNumWorkitems_(10240)
     std::cout << " !!! this code has been adapted to run the porpagation kernel "
                 "sperately in CL and CUDA." << std::endl;
     
-    runVecAddCUDABenchmark();
+    
 
     if (!randomService_) log_fatal("You need to supply a I3RandomService.");
     
@@ -353,7 +353,7 @@ void I3CLSimStepToPhotonConverterOpenCL::Initialize()
     }
     
     log_debug("Device buffers are set up.");
-    
+
     log_debug("Configuring kernel.");
     for (unsigned int i=0;i<numBuffers;++i)
     {
@@ -1842,10 +1842,8 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
 
 
  
-//runVecAddCUDABenchmark();
-
 int nbenchmarks = 10;
-
+ 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
 
@@ -1864,7 +1862,7 @@ int nbenchmarks = 10;
   printf(" -------------  CL ------------- \n");
   // uncomment for profiling CUDA ncu :
  // NSteps = 1;
-  
+ 
   try {
     queue_[0]->enqueueWriteBuffer(
         *deviceBuffer_CurrentNumOutputPhotons[0], CL_FALSE, 0, sizeof(uint32_t),
@@ -1942,14 +1940,11 @@ try {
  float  totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(
                     endTimeCL - startTimeCL).count();
 
-
-
-
-    printf("\n -- num threads per block = %u------- \n",workgroupSize_);
+    printf("\n -- %d runs with num threads per block CUDA = 512,  CL = %u------- \n", nbenchmarks ,workgroupSize_);
     printf("total runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );
     printf("total runtime CL   kernel    %f [ms] \n", totalCLKernelTime  );
-    printf("avrg runtime CUDA  kernel    %f [ms] \n", totalCudaKernelTime/float(nbenchmarks) );
-    printf("avrg runtime CL    kernel    %f [ms] \n", totalCLKernelTime/float(nbenchmarks) );
+    printf("avrg runtime CUDA   kernel     %f [ms] \n", totalCudaKernelTime/float(nbenchmarks) );
+    printf("avrg runtime CL     kernel     %f [ms] \n", totalCLKernelTime/float(nbenchmarks) );
     printf(" ------------- ------------- \n \n");
 
  
@@ -2028,7 +2023,7 @@ try {
     log_fatal("OpenCL ERROR (memcpy from device): %s (%i)", err.what(),
               err.err());
   }
- 
+
     // we finished simulating.
     // signal the caller by putting it's id on the 
     // output queue.
@@ -2057,10 +2052,10 @@ try {
             shouldBreak=true;
             return;
         }
-    }
+    } 
+ 
 
-  printf(" ------------- done with launching CL with extracted step "
-         "------------- \n");
+ 
 }
 
 void I3CLSimStepToPhotonConverterOpenCL::CLCUDAThread(

@@ -24,77 +24,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <propagationKernelSource.cuh>
 #include <propagationKernelFunctions.cuh>
 
-
-
-__global__ void avector_add(const int *A, const int *B, int *C, int n ) {
-      // Get the index of the current element to be processed
-         int i = threadIdx.x + blockIdx.x * blockDim.x;
-                  //     // Do the operation
-
-                 if(i<n) C[i] = A[i] + B[i];
-                        }
-
-
-
-void runVecAddCUDABenchmark(){
-      int nbenchmarks = 10;
-      int NTHREADSPERBLOCK = 128;
-      int LIST_SIZE = 25e7;
-
-      int *A = (int*)malloc(sizeof(int)*LIST_SIZE);
-      int *B = (int*)malloc(sizeof(int)*LIST_SIZE);
-      for(int i = 0; i < LIST_SIZE; i++) {
-          A[i] = i;
-          B[i] = LIST_SIZE - i;
-      }
-
-      // CUDA memory Malloc PART
-      int *d_a,*d_b, *d_c;
-      int *c= (int*)malloc(sizeof(int)*LIST_SIZE);
-      cudaMalloc(&d_a, LIST_SIZE*sizeof(int));
-      cudaMalloc(&d_b, LIST_SIZE*sizeof(int));
-      cudaMalloc(&d_c, LIST_SIZE*sizeof(int));
-      cudaMemcpy(d_a, A, LIST_SIZE*sizeof(int), cudaMemcpyHostToDevice);
-      cudaMemcpy(d_b, B, LIST_SIZE*sizeof(int), cudaMemcpyHostToDevice);
-
-      float totalCudaKernelTime = 0.0;
-      avector_add<<<(LIST_SIZE+NTHREADSPERBLOCK-1)/NTHREADSPERBLOCK, NTHREADSPERBLOCK>>>(d_a ,d_b,d_c, LIST_SIZE);
-      cudaDeviceSynchronize(); 
-
-      std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-      for (int b = 0 ; b<  nbenchmarks; ++b){    
-        avector_add<<<(LIST_SIZE+NTHREADSPERBLOCK-1)/NTHREADSPERBLOCK, NTHREADSPERBLOCK>>>(d_a ,d_b,d_c, LIST_SIZE);
-        }
-        cudaDeviceSynchronize(); 
-        std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
-        totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
-       
-       printf("--------- %d ---------- \n ", LIST_SIZE);
-        printf(" vector add avrg (of %d)  time = %f ms \n ", nbenchmarks,totalCudaKernelTime/nbenchmarks );
-        printf("----------------------- \n ");
-
-
-      cudaMemcpy(c, d_c, LIST_SIZE*sizeof(int), cudaMemcpyDeviceToHost);
-
-      int i = 10;
-      if( A[i] + B[i] != c[i] )
-            printf("error: CUDA %d + %d = %d\n", A[i], B[i], c[i]);
-      cudaFree(d_a);
-      cudaFree(d_b);
-      cudaFree(d_c);
-
-      printf("--------- %d ---------- \n ", LIST_SIZE);
-      printf(" vector add avrg (of %d)  time = %f ms \n ", nbenchmarks,totalCudaKernelTime/nbenchmarks );
-      printf("----------------------- \n ");
-}
-
+#define MAX_HITS_PER_STEP 1000
 
  //__device__ global random arrays
  __device__  uint64_t* d_MWC_RNG_x;
  __device__  uint32_t* d_MWC_RNG_a;
- 
+
+ cudaError_t gl_err;
 #define CUDA_ERR_CHECK(e) if(cudaError_t(e)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(e)), __LINE__);
-#define CUDA_CHECK_CALL cudaError_t err = cudaGetLastError(); if(cudaError_t(err)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(err)), __LINE__-1);
+#define CUDA_CHECK_CALL   gl_err = cudaGetLastError(); if(cudaError_t(gl_err)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(gl_err)), __LINE__-1);
 //#define PRINTLC     printf("thread 0 - in line %d \n", __LINE__);  
 
 
@@ -105,13 +43,13 @@ void runVecAddCUDABenchmark(){
 
 __global__ __launch_bounds__(512,4) void
 propKernel(uint32_t *hitIndex,   // deviceBuffer_CurrentNumOutputPhotons
-           uint32_t maxHitIndex, // maxNumOutputPhotons_
+      const   uint32_t maxHitIndex, // maxNumOutputPhotons_
 #ifndef SAVE_ALL_PHOTONS
 const  unsigned short* __restrict__  geoLayerToOMNumIndexPerStringSet,
 #endif
   const I3CLSimStepCuda*  __restrict__  inputSteps,      // deviceBuffer_InputSteps
            int nsteps,
-           I3CLSimPhotonCuda* __restrict__  outputPhotons, // deviceBuffer_OutputPhotons
+           I3CLSimPhotonCuda* __restrict__  outputPhotonsGlobal, // deviceBuffer_OutputPhotons
 
 #ifdef SAVE_PHOTON_HISTORY
            float4 *photonHistory,
@@ -134,7 +72,7 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
-      uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
+     const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
         uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime, const int nbenchmarks, size_t threadsPerBlock ){
 
   
@@ -177,12 +115,15 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
 
             int numthr =   int(threadsPerBlock);
             int numBlocks =  (launchnsteps+numthr-1)/numthr;
-            printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, numthr, launchnsteps);
+            
 
-    
-         
-            propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
-            cudaDeviceSynchronize(); 
+            printf("maxHitIndex %u \n",maxHitIndex);
+           const uint32_t maxHitIndexPerThread = maxHitIndex/nsteps;
+            printf("avrg over thread maxHitIndex  %u and fixed MAX_HITS_PER_STEP %d \n",maxHitIndexPerThread,MAX_HITS_PER_STEP ); 
+  
+            printf("launching kernel propKernel<<< %d , %d, %u >>>( .., nsteps=%d)  \n", numBlocks, numthr, 0, launchnsteps);
+            propKernel<<<numBlocks, numthr >>>(d_hitIndex, maxHitIndex,  d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+            cudaDeviceSynchronize(); CUDA_CHECK_CALL
 
             std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
             for (int b = 0 ; b< nbenchmarks; ++b){    
@@ -191,8 +132,8 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
               cudaDeviceSynchronize(); 
               std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
               totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
-            
-
+             
+              CUDA_CHECK_CALL
               
              CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
             uint32_t  numberPhotons = h_hitIndex[0];
@@ -231,13 +172,13 @@ void finalizeCUDA(){
 
 __global__ void 
 propKernel(uint32_t *hitIndex,         // deviceBuffer_CurrentNumOutputPhotons
-           const uint32_t maxHitIndex, // maxNumOutputPhotons_
+      const     uint32_t maxHitIndex, // maxNumOutputPhotons_
 #ifndef SAVE_ALL_PHOTONS
 const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
 #endif
             const I3CLSimStepCuda* __restrict__ inputSteps,      // deviceBuffer_InputSteps
            int nsteps,
-           I3CLSimPhotonCuda* __restrict__ outputPhotons, // deviceBuffer_OutputPhotons
+           I3CLSimPhotonCuda* __restrict__ outputPhotonsGlobal, // deviceBuffer_OutputPhotons
 
 #ifdef SAVE_PHOTON_HISTORY
            float4 *photonHistory,
@@ -258,6 +199,18 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
   __syncthreads();
   
   #endif
+
+ 
+  I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_STEP];
+  uint32_t localIndexCount = 0;
+
+ // extern __shared__    I3CLSimPhotonCuda outputPhotons[] ;
+/*
+  for (int ii = threadIdx.x ; ii<maxHitIndex; ii+= blockDim.x){
+      outputPhotons[ii] =outputPhotonsGlobal[ii]; 
+  }  
+    __syncthreads();*/
+ 
 
 
   if(i >=nsteps) return;
@@ -490,7 +443,7 @@ collided =
 #else  // STOP_PHOTONS_ON_DETECTION
                       distancePropagated,
 #endif // STOP_PHOTONS_ON_DETECTION
-                            hitIndex, maxHitIndex, outputPhotons,
+                        &localIndexCount, MAX_HITS_PER_STEP, outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
                             photonHistory, currentPhotonHistory,
 #endif // SAVE_PHOTON_HISTORY
@@ -541,7 +494,7 @@ collided =
                 step,
                 0, // string id (not used in this case)
                 0, // dom id (not used in this case)
-                hitIndex, maxHitIndex, outputPhotons
+                &localIndexCount, MAX_HITS_PER_STEP, outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
                 ,
                 photonHistory, currentPhotonHistory
@@ -603,4 +556,16 @@ collided =
   MWC_RNG_x[i] = real_rnd_x;
   MWC_RNG_a[i] = real_rnd_a;
  
+
+//add local phtons to global
+uint32_t startIndex = atomicAdd(&hitIndex[0], localIndexCount ); 
+
+int globindex = startIndex; 
+
+      while( globindex <startIndex+localIndexCount && globindex < maxHitIndex  )
+      {
+            outputPhotonsGlobal[globindex] = outputPhotons[globindex-startIndex]; 
+            ++globindex;
+      }  
+
 }
