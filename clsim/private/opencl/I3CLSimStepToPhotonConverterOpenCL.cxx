@@ -1851,7 +1851,7 @@ int nbenchmarks = 10;
                        maxNumOutputPhotons_,
                        &geoLayerToOMNumIndexPerStringSetInfo_[0],
                        geoLayerToOMNumIndexPerStringSetInfo_.size(),
-                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, totalCudaKernelTime, nbenchmarks, 512);
+                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, totalCudaKernelTime, nbenchmarks);
 
   finalizeCUDA();
   printf(" -------------  done CUDA ------------- \n");
@@ -1940,7 +1940,7 @@ try {
  float  totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(
                     endTimeCL - startTimeCL).count();
 
-    printf("\n -- %d runs with num threads per block CUDA = 512,  CL = %u------- \n", nbenchmarks ,workgroupSize_);
+    printf("\n -- %d runs with num threads per block CUDA =  %d,  CL = %u------- \n", nbenchmarks, NTHREADS_PER_BLOCK, workgroupSize_);
     printf("total runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );
     printf("total runtime CL   kernel    %f [ms] \n", totalCLKernelTime  );
     printf("avrg runtime CUDA   kernel     %f [ms] \n", totalCudaKernelTime/float(nbenchmarks) );

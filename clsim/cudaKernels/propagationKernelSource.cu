@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #define MAX_HITS_PER_STEP 1000
 
+
  //__device__ global random arrays
  __device__  uint64_t* d_MWC_RNG_x;
  __device__  uint32_t* d_MWC_RNG_a;
@@ -41,7 +42,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // SAVE_PHOTON_HISTORY  and SAVE_ALL_PHOTONS are not define for now, i.e. commented out these snippets,
 // s.t. it corresponds to the default contstructor of I3CLSimStepToPhotonConverterOpenCL
 
-__global__ __launch_bounds__(512,4) void
+__global__ __launch_bounds__(NTHREADS_PER_BLOCK,4) void
 propKernel(uint32_t *hitIndex,   // deviceBuffer_CurrentNumOutputPhotons
       const   uint32_t maxHitIndex, // maxNumOutputPhotons_
 #ifndef SAVE_ALL_PHOTONS
@@ -73,7 +74,7 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
      const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime, const int nbenchmarks, size_t threadsPerBlock ){
+        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime, const int nbenchmarks){
 
   
       int nlaunches = (nsteps+nsteps-1)/nsteps;
@@ -113,21 +114,21 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             I3CLSimPhotonCuda * d_cudaphotons;
             CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons , maxHitIndex*sizeof(I3CLSimPhotonCuda)));
 
-            int numthr =   int(threadsPerBlock);
-            int numBlocks =  (launchnsteps+numthr-1)/numthr;
+ 
+            int numBlocks =  (launchnsteps+NTHREADS_PER_BLOCK-1)/NTHREADS_PER_BLOCK;
             
 
             printf("maxHitIndex %u \n",maxHitIndex);
            const uint32_t maxHitIndexPerThread = maxHitIndex/nsteps;
             printf("avrg over thread maxHitIndex  %u and fixed MAX_HITS_PER_STEP %d \n",maxHitIndexPerThread,MAX_HITS_PER_STEP ); 
   
-            printf("launching kernel propKernel<<< %d , %d, %u >>>( .., nsteps=%d)  \n", numBlocks, numthr, 0, launchnsteps);
-            propKernel<<<numBlocks, numthr >>>(d_hitIndex, maxHitIndex,  d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+            printf("launching kernel propKernel<<< %d , %d, %u >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, 0, launchnsteps);
+            propKernel<<<numBlocks, NTHREADS_PER_BLOCK >>>(d_hitIndex, maxHitIndex,  d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
             cudaDeviceSynchronize(); CUDA_CHECK_CALL
 
             std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
             for (int b = 0 ; b< nbenchmarks; ++b){    
-                  propKernel<<<numBlocks, numthr>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+                  propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
             }
               cudaDeviceSynchronize(); 
               std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
