@@ -117,18 +117,20 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
  
             int numBlocks =  (launchnsteps+NTHREADS_PER_BLOCK-1)/NTHREADS_PER_BLOCK;
             
+            unsigned int sharedMem =  sizeof(struct I3CLSimStepCuda)*100; //MAX_HITS_PER_STEP;
+ 
 
             printf("maxHitIndex %u \n",maxHitIndex);
            const uint32_t maxHitIndexPerThread = maxHitIndex/nsteps;
             printf("avrg over thread maxHitIndex  %u and fixed MAX_HITS_PER_STEP %d \n",maxHitIndexPerThread,MAX_HITS_PER_STEP ); 
   
-            printf("launching kernel propKernel<<< %d , %d, %u >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, 0, launchnsteps);
-            propKernel<<<numBlocks, NTHREADS_PER_BLOCK >>>(d_hitIndex, maxHitIndex,  d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+          printf("launching kernel propKernel<<< %d , %d, %u>>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, sharedMem, launchnsteps);
+            propKernel<<<numBlocks, NTHREADS_PER_BLOCK,sharedMem >>>(d_hitIndex, maxHitIndex,  d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
             cudaDeviceSynchronize(); CUDA_CHECK_CALL
 
             std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
             for (int b = 0 ; b< nbenchmarks; ++b){    
-                  propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+                  propKernel<<<numBlocks, NTHREADS_PER_BLOCK,sharedMem>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
             }
               cudaDeviceSynchronize(); 
               std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
@@ -202,15 +204,11 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
   #endif
 
  
-  I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_STEP];
+  //I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_STEP];
   uint32_t localIndexCount = 0;
 
- // extern __shared__    I3CLSimPhotonCuda outputPhotons[] ;
-/*
-  for (int ii = threadIdx.x ; ii<maxHitIndex; ii+= blockDim.x){
-      outputPhotons[ii] =outputPhotonsGlobal[ii]; 
-  }  
-    __syncthreads();*/
+  extern __shared__  I3CLSimPhotonCuda outputPhotons[];
+    __syncthreads();
  
 
 
@@ -552,11 +550,11 @@ collided =
   // dbg_printf("Kernel finished.\n");
 #endif
 
- 
-  // upload MWC RNG state
-  MWC_RNG_x[i] = real_rnd_x;
-  MWC_RNG_a[i] = real_rnd_a;
- 
+         // upload MWC RNG state
+         MWC_RNG_x[i] = real_rnd_x;
+         MWC_RNG_a[i] = real_rnd_a;
+        
+
 
 //add local phtons to global
 uint32_t startIndex = atomicAdd(&hitIndex[0], localIndexCount ); 
@@ -567,6 +565,6 @@ int globindex = startIndex;
       {
             outputPhotonsGlobal[globindex] = outputPhotons[globindex-startIndex]; 
             ++globindex;
-      }  
-
+      }
+       
 }
