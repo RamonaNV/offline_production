@@ -32,7 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <opencl/mwcrng_init.h>
 #include <dataStructCuda.cuh>
 
-#define NTHREADS_PER_BLOCK 256
+#define NTHREADS_PER_BLOCK 512
 
 
 void finalizeCUDA();

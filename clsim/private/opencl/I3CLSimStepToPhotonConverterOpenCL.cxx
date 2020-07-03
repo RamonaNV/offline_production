@@ -104,7 +104,6 @@ maxNumWorkitems_(10240)
     std::cout << " !!! this code has been adapted to run the porpagation kernel "
                 "sperately in CL and CUDA." << std::endl;
     
-    runVecAddCUDABenchmark();
 
     if (!randomService_) log_fatal("You need to supply a I3RandomService.");
     
@@ -1840,10 +1839,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
     NSteps = int(steps->size());
   }
 
-
  
-//runVecAddCUDABenchmark();
-
 int nbenchmarks = 10;
 
   printf(" -------------  CUDA ------------- \n");
@@ -1945,7 +1941,7 @@ try {
 
 
 
-    printf("\n   %d runs with num threads per block CUDA =  %d,  CL = %u  \n", nbenchmarks, NTHREADS_PER_BLOCK, workgroupSize_);
+    printf("\n   %d runs with num threads per block CUDA =  %d,  CL = %d \n", nbenchmarks, NTHREADS_PER_BLOCK, workgroupSize_);
     printf("total runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );
     printf("total runtime CL   kernel    %f [ms] \n", totalCLKernelTime  );
     printf("avrg runtime CUDA  kernel      %f [ms] \n", totalCudaKernelTime/float(nbenchmarks) );
