@@ -32,12 +32,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <opencl/mwcrng_init.h>
 #include <dataStructCuda.cuh>
 
+#define NTHREADS_PER_BLOCK 256
+
+
 void finalizeCUDA();
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
     uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-    uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a,  int sizeRNG, float& totalCudaKernelTime,const int nbenchmarks,size_t threadsPerBlock );
+    uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a,  int sizeRNG, float& totalCudaKernelTime,const int nbenchmarks);
 
 
-void runVecAddCUDABenchmark();
+    
+
+
 #endif  // PROPAGATIONKERNELSOURCE_CUH

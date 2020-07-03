@@ -81,7 +81,7 @@ __host__ __device__ struct __attribute__((packed)) I3CLSimPhotonCuda {
   float distInAbsLens;    //    32bit float
                           // total: 20x 32bit float = 80 bytes
 
-  __host__ I3CLSimPhotonCuda()
+  __host__ __device__ I3CLSimPhotonCuda()
 :posAndTime{0,0,0,0}
 {}
 
