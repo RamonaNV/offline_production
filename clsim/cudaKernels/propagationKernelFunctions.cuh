@@ -45,7 +45,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //#define PRINTLROOT   if( blockIdx.x * blockDim.x + threadIdx.x ==0){      printf("thread 0 - in line %d and function %s \n", __LINE__, __func__);  }
 //#define PRINTL        printf("thread %d - in line %d and function %s \n", blockIdx.x * blockDim.x + threadIdx.x, __LINE__, __func__);  
 
-
+#define MAX_HITS_PER_STEP 500
 
 ///////////////// forward declarations
 
@@ -899,9 +899,9 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
 #endif
 ) {
 
-  //PRINTL
-  uint32_t myIndex = 1+(*hitIndex)++; //atomicAdd(&hitIndex[0], 1); 
   
+
+  uint32_t myIndex = 1+atomicAdd(&hitIndex[0], 1); 
 
   if (myIndex < maxHitIndex) {
 #ifdef PRINTF_ENABLED

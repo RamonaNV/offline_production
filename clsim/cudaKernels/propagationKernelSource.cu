@@ -24,7 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <propagationKernelSource.cuh>
 #include <propagationKernelFunctions.cuh>
 
-#define MAX_HITS_PER_STEP 1000
+
 
 
  //__device__ global random arrays
@@ -205,8 +205,8 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
 
  
   //I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_STEP];
-  uint32_t localIndexCount = 0;
-
+  __shared__ uint32_t localIndexCount[1];
+  localIndexCount[0] = 0;
   extern __shared__  I3CLSimPhotonCuda outputPhotons[];
     __syncthreads();
  
@@ -442,7 +442,7 @@ collided =
 #else  // STOP_PHOTONS_ON_DETECTION
                       distancePropagated,
 #endif // STOP_PHOTONS_ON_DETECTION
-                        &localIndexCount, MAX_HITS_PER_STEP, outputPhotons,
+                        localIndexCount, MAX_HITS_PER_STEP, outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
                             photonHistory, currentPhotonHistory,
 #endif // SAVE_PHOTON_HISTORY
@@ -493,7 +493,7 @@ collided =
                 step,
                 0, // string id (not used in this case)
                 0, // dom id (not used in this case)
-                &localIndexCount, MAX_HITS_PER_STEP, outputPhotons
+                localIndexCount, MAX_HITS_PER_STEP, outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
                 ,
                 photonHistory, currentPhotonHistory
@@ -557,14 +557,17 @@ collided =
 
 
 //add local phtons to global
-uint32_t startIndex = atomicAdd(&hitIndex[0], localIndexCount ); 
+//uint32_t startIndex = atomicAdd(&hitIndex[0], localIndexCount ); 
+ 
+uint32_t globindex =threadIdx.x;  
 
-int globindex = startIndex; 
-
-      while( globindex <startIndex+localIndexCount && globindex < maxHitIndex  )
+      while(  globindex <localIndexCount[0]  &&   globindex < maxHitIndex  )
       {
-            outputPhotonsGlobal[globindex] = outputPhotons[globindex-startIndex]; 
-            ++globindex;
+            outputPhotonsGlobal[globindex] = outputPhotons[globindex]; 
+             globindex += blockIdx.x * blockDim.x;
       }
+ 
+      atomicAdd(&hitIndex[0], localIndexCount[0] );
+
        
 }
