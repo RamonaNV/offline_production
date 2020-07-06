@@ -117,12 +117,12 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
  
             int numBlocks =  (launchnsteps+NTHREADS_PER_BLOCK-1)/NTHREADS_PER_BLOCK;
             
-            unsigned int sharedMem =  sizeof(struct I3CLSimStepCuda)*100; //MAX_HITS_PER_STEP;
+            unsigned int sharedMem =  sizeof(struct I3CLSimStepCuda)*MAX_HITS_PER_SHARED; //MAX_HITS_PER_STEP;
  
 
             printf("maxHitIndex %u \n",maxHitIndex);
            const uint32_t maxHitIndexPerThread = maxHitIndex/nsteps;
-            printf("avrg over thread maxHitIndex  %u and fixed MAX_HITS_PER_STEP %d \n",maxHitIndexPerThread,MAX_HITS_PER_STEP ); 
+            printf("avrg over thread maxHitIndex  %u and fixed MAX_HITS_PER_SHARED %d \n",maxHitIndexPerThread,MAX_HITS_PER_SHARED ); 
   
           printf("launching kernel propKernel<<< %d , %d, %u>>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, sharedMem, launchnsteps);
             propKernel<<<numBlocks, NTHREADS_PER_BLOCK,sharedMem >>>(d_hitIndex, maxHitIndex,  d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
@@ -205,9 +205,10 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
 
  
   //I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_STEP];
-  __shared__ uint32_t localIndexCount[1];
-  localIndexCount[0] = 0;
-  extern __shared__  I3CLSimPhotonCuda outputPhotons[];
+  __shared__ uint32_t localIndexCount;
+  if (threadIdx.x == 0) localIndexCount = 0;
+
+  extern __shared__  I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_SHARED ];
     __syncthreads();
  
 
@@ -442,7 +443,7 @@ collided =
 #else  // STOP_PHOTONS_ON_DETECTION
                       distancePropagated,
 #endif // STOP_PHOTONS_ON_DETECTION
-                        localIndexCount, MAX_HITS_PER_STEP, outputPhotons,
+                        &localIndexCount, MAX_HITS_PER_SHARED, outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
                             photonHistory, currentPhotonHistory,
 #endif // SAVE_PHOTON_HISTORY
@@ -493,7 +494,7 @@ collided =
                 step,
                 0, // string id (not used in this case)
                 0, // dom id (not used in this case)
-                localIndexCount, MAX_HITS_PER_STEP, outputPhotons
+                &localIndexCount, MAX_HITS_PER_SHARED, outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
                 ,
                 photonHistory, currentPhotonHistory
@@ -556,18 +557,21 @@ collided =
         
 
 
-//add local phtons to global
-//uint32_t startIndex = atomicAdd(&hitIndex[0], localIndexCount ); 
- 
-uint32_t globindex =threadIdx.x;  
+//add shared phtons to global phtonons
+__shared__ uint32_t globStartIndex;
+if(threadIdx.x ==0 )
+{
+      globStartIndex = atomicAdd(&hitIndex[0], localIndexCount );
+} 
 
-      while(  globindex <localIndexCount[0]  &&   globindex < maxHitIndex  )
+uint32_t sharedIndex = threadIdx.x;
+
+      while(  sharedIndex <localIndexCount  &&   globStartIndex+sharedIndex < maxHitIndex  )
       {
-            outputPhotonsGlobal[globindex] = outputPhotons[globindex]; 
-             globindex += blockIdx.x * blockDim.x;
+            outputPhotonsGlobal[globStartIndex+sharedIndex] = outputPhotons[sharedIndex]; 
+            sharedIndex+= blockDim.x;
       }
  
-      atomicAdd(&hitIndex[0], localIndexCount[0] );
 
        
 }
