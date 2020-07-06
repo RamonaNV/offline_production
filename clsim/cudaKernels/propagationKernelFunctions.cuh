@@ -45,7 +45,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //#define PRINTLROOT   if( blockIdx.x * blockDim.x + threadIdx.x ==0){      printf("thread 0 - in line %d and function %s \n", __LINE__, __func__);  }
 //#define PRINTL        printf("thread %d - in line %d and function %s \n", blockIdx.x * blockDim.x + threadIdx.x, __LINE__, __func__);  
 
-#define MAX_HITS_PER_SHARED 100
+#define MAX_HITS_PER_SHARED 50
 
 ///////////////// forward declarations
 
@@ -615,7 +615,7 @@ __device__  __forceinline__ void checkForCollision_InCells(
 #undef DO_CHECK
 
 
-      __syncthreads(); //cellsyncthreads   //__syncwarp();
+    //  __syncthreads();  
 
 }
 
@@ -709,8 +709,6 @@ __device__  __forceinline__ bool checkForCollision(
   return false;
 #endif // STOP_PHOTONS_ON_DETECTION
 #endif // DEBUG_STORE_GENERATED_PHOTONS
-
-// __syncthreads();
 
 }
 

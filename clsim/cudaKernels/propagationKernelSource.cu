@@ -262,7 +262,8 @@ const I3CLSimStepCuda step = inputSteps[i];
 #endif
   float inv_groupvel = ZERO;
 
-  while (photonsLeftToPropagate > 0) {
+  while (photonsLeftToPropagate > 0)
+   {
     if (abs_lens_left < EPSILON) {
 
       // create a new photon
@@ -558,22 +559,28 @@ collided =
 
 
 //add shared phtons to global phtonons
+
+//no empty spaces:
 __shared__ uint32_t globStartIndex;
+ __syncthreads();
 if(threadIdx.x ==0 )
 {
       globStartIndex = atomicAdd(&hitIndex[0], localIndexCount );
 } 
-__syncthreads();
-
+ __syncthreads();
+ 
+// with empty spaces:
+/*
+uint32_t globStartIndex = blockIdx.x *MAX_HITS_PER_SHARED; 
+if ( threadIdx.x ==0 )
+atomicAdd(&hitIndex[0], localIndexCount );*/
 
 uint32_t sharedIndex = threadIdx.x;
 
-      while(  sharedIndex <localIndexCount  &&   globStartIndex+sharedIndex < maxHitIndex  )
-      {
-            outputPhotonsGlobal[globStartIndex+sharedIndex] = outputPhotons[sharedIndex]; 
-            sharedIndex+= blockDim.x;
-      }
- 
 
-       
+for (; sharedIndex<localIndexCount && globStartIndex+sharedIndex < maxHitIndex ; sharedIndex+= blockDim.x )
+{  
+      outputPhotonsGlobal[globStartIndex+sharedIndex] = outputPhotons[sharedIndex]; 
+}
+
 }
