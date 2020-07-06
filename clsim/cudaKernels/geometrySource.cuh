@@ -33,7 +33,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define GEO_DOM_POS_MAX_ABS_Y_MULTIPLIER_IN_TEMPLATE 8.5555066791e-06f
 
 #define GEO_DOM_POS_NUM_FLAT_LIST_ENTRIES 5100
-__constant__ short geoDomPosTemplatePositionsX_flat[GEO_DOM_POS_NUM_FLAT_LIST_ENTRIES] = {
+__device__ short geoDomPosTemplatePositionsX_flat[GEO_DOM_POS_NUM_FLAT_LIST_ENTRIES] = {
   0,
   0,
   0,
@@ -5135,7 +5135,7 @@ __constant__ short geoDomPosTemplatePositionsX_flat[GEO_DOM_POS_NUM_FLAT_LIST_EN
   0,
   0,
 };
-__constant__ short geoDomPosTemplatePositionsY_flat[GEO_DOM_POS_NUM_FLAT_LIST_ENTRIES] = {
+__device__ short geoDomPosTemplatePositionsY_flat[GEO_DOM_POS_NUM_FLAT_LIST_ENTRIES] = {
   0,
   0,
   0,
@@ -10237,7 +10237,7 @@ __constant__ short geoDomPosTemplatePositionsY_flat[GEO_DOM_POS_NUM_FLAT_LIST_EN
   0,
   0,
 };
-__constant__ float geoDomPosTemplatePositionsZ_flat[GEO_DOM_POS_NUM_FLAT_LIST_ENTRIES] = {
+__device__ float geoDomPosTemplatePositionsZ_flat[GEO_DOM_POS_NUM_FLAT_LIST_ENTRIES] = {
   4.9602999878e+02f,
   4.7901000977e+02f,
   4.6198999023e+02f,
@@ -15340,7 +15340,7 @@ __constant__ float geoDomPosTemplatePositionsZ_flat[GEO_DOM_POS_NUM_FLAT_LIST_EN
   -5.0073001099e+02f,
 };
 #define GEO_DOM_POS_NUM_STRINGS 86
-__constant__ unsigned int geoDomPosStringStartIndexInTemplateDomList[GEO_DOM_POS_NUM_STRINGS] = {
+__device__ unsigned int geoDomPosStringStartIndexInTemplateDomList[GEO_DOM_POS_NUM_STRINGS] = {
   0,
   60,
   120,
@@ -15428,7 +15428,7 @@ __constant__ unsigned int geoDomPosStringStartIndexInTemplateDomList[GEO_DOM_POS
   4980,
   5040,
 };
-__constant__ float geoDomPosStringMeanPosX[GEO_DOM_POS_NUM_STRINGS] = {
+__device__ float geoDomPosStringMeanPosX[GEO_DOM_POS_NUM_STRINGS] = {
   -2.5614001465e+02f,
   -1.3280000305e+02f,
   -9.1300001144e+00f,
@@ -15516,7 +15516,7 @@ __constant__ float geoDomPosStringMeanPosX[GEO_DOM_POS_NUM_STRINGS] = {
   -9.6800003052e+00f,
   -1.0970000267e+01f,
 };
-__constant__ float geoDomPosStringMeanPosY[GEO_DOM_POS_NUM_STRINGS] = {
+__device__ float geoDomPosStringMeanPosY[GEO_DOM_POS_NUM_STRINGS] = {
   -5.2108001709e+02f,
   -5.0145001221e+02f,
   -4.8173999023e+02f,
@@ -15622,7 +15622,7 @@ __device__ __forceinline__ void geometryGetDomPosition(unsigned short stringNum,
 #define GEO_LAYER_STRINGSET_NUM 12
 #define GEO_LAYER_STRINGSET_MAX_NUM_LAYERS 99
 
-__constant__   float geoStringPosX[NUM_STRINGS] = {
+__device__   float geoStringPosX[NUM_STRINGS] = {
   -2.5614001465e+02f, 
   -1.3280000305e+02f, 
   -9.1300001144e+00f, 
@@ -15711,7 +15711,7 @@ __constant__   float geoStringPosX[NUM_STRINGS] = {
   -1.0970000267e+01f, 
 };
 
-__constant__ float geoStringPosY[NUM_STRINGS] = {
+__device__ float geoStringPosY[NUM_STRINGS] = {
   -5.2108001709e+02f, 
   -5.0145001221e+02f, 
   -4.8173999023e+02f, 
@@ -15801,7 +15801,7 @@ __constant__ float geoStringPosY[NUM_STRINGS] = {
 };
 
 #define GEO_STRING_MAX_RADIUS 4.9992936932e-01f
-__constant__ float geoStringRadius[NUM_STRINGS] = {
+__device__ float geoStringRadius[NUM_STRINGS] = {
   1.6510000000e-01f, 
   1.6510000000e-01f, 
   1.6510000000e-01f, 
@@ -15890,7 +15890,7 @@ __constant__ float geoStringRadius[NUM_STRINGS] = {
   1.6510000000e-01f, 
 };
 
-__constant__ float geoStringMinZ[NUM_STRINGS] = {
+__device__ float geoStringMinZ[NUM_STRINGS] = {
   -5.0439999390e+02f, 
   -5.0414999390e+02f, 
   -5.0498999023e+02f, 
@@ -15979,7 +15979,7 @@ __constant__ float geoStringMinZ[NUM_STRINGS] = {
   -5.0073001099e+02f, 
 };
 
-__constant__ float geoStringMaxZ[NUM_STRINGS] = {
+__device__ float geoStringMaxZ[NUM_STRINGS] = {
   4.9602999878e+02f, 
   5.0007000732e+02f, 
   4.9923001099e+02f, 
@@ -16075,7 +16075,7 @@ __constant__ float geoStringMaxZ[NUM_STRINGS] = {
 #define GEO_CELL_WIDTH_Y_0 3.5335049580e+01f
 #define GEO_CELL_START_X_0 -1.1135100267e+01f
 #define GEO_CELL_START_Y_0 -1.0568509664e+02f
-__constant__ unsigned short geoCellIndex_0[GEO_CELL_NUM_X_0*GEO_CELL_NUM_Y_0] = {
+__device__ unsigned short geoCellIndex_0[GEO_CELL_NUM_X_0*GEO_CELL_NUM_Y_0] = {
   84, 
   78, 
   83, 
@@ -16100,7 +16100,7 @@ __constant__ unsigned short geoCellIndex_0[GEO_CELL_NUM_X_0*GEO_CELL_NUM_Y_0] = 
 #define GEO_CELL_WIDTH_Y_1 8.5909184757e+01f
 #define GEO_CELL_START_X_1 -5.7106512441e+02f
 #define GEO_CELL_START_Y_1 -5.2124511709e+02f
-__constant__ unsigned short geoCellIndex_1[GEO_CELL_NUM_X_1*GEO_CELL_NUM_Y_1] = {
+__device__ unsigned short geoCellIndex_1[GEO_CELL_NUM_X_1*GEO_CELL_NUM_Y_1] = {
   0xFFFF, 
   0xFFFF, 
   0xFFFF, 
@@ -16247,7 +16247,7 @@ __constant__ unsigned short geoCellIndex_1[GEO_CELL_NUM_X_1*GEO_CELL_NUM_Y_1] = 
   0xFFFF, 
 };
 
-__constant__ unsigned char geoStringInStringSet[NUM_STRINGS] = {
+__device__ unsigned char geoStringInStringSet[NUM_STRINGS] = {
   0, 
   0, 
   0, 
@@ -16335,7 +16335,7 @@ __constant__ unsigned char geoStringInStringSet[NUM_STRINGS] = {
   10, 
   11, 
 };
-__constant__ unsigned short geoLayerNum[GEO_LAYER_STRINGSET_NUM] = {
+__device__ unsigned short geoLayerNum[GEO_LAYER_STRINGSET_NUM] = {
   60, 
   60, 
   60, 
@@ -16349,7 +16349,7 @@ __constant__ unsigned short geoLayerNum[GEO_LAYER_STRINGSET_NUM] = {
   99, 
   99, 
 };
-__constant__ float geoLayerStartZ[GEO_LAYER_STRINGSET_NUM] = {
+__device__ float geoLayerStartZ[GEO_LAYER_STRINGSET_NUM] = {
   -5.1287821417e+02f, 
   -4.9606032653e+02f, 
   -5.2133034632e+02f, 
@@ -16363,7 +16363,7 @@ __constant__ float geoLayerStartZ[GEO_LAYER_STRINGSET_NUM] = {
   -5.0301258488e+02f, 
   -5.0447001109e+02f, 
 };
-__constant__ float geoLayerHeight[GEO_LAYER_STRINGSET_NUM] = {
+__device__ float geoLayerHeight[GEO_LAYER_STRINGSET_NUM] = {
   1.6956440554e+01f, 
   1.7020677470e+01f, 
   1.7020677987e+01f, 

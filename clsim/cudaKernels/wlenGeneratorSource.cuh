@@ -28,7 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #define _generateWavelength_0NUM_DIST_ENTRIES 43
 
-__constant__ float
+__device__ float
     _generateWavelength_0distYValues[_generateWavelength_0NUM_DIST_ENTRIES] = {
         6.9460614465e+03f, 9.4161450667e+03f, 7.9111126641e+03f,
         5.6966857194e+03f, 2.4261531760e+03f, 1.4550822538e+05f,
@@ -47,7 +47,7 @@ __constant__ float
         7.4530418929e+03f,
 };
 
-__constant__ float _generateWavelength_0distYCumulativeValues
+__device__ float _generateWavelength_0distYCumulativeValues
     [_generateWavelength_0NUM_DIST_ENTRIES] = {
         0.0000000000e+00f, 8.1811032566e-05f, 1.6844732122e-04f,
         2.3648631314e-04f, 2.7710050761e-04f, 1.0167724004e-03f,

@@ -1842,7 +1842,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
 
 
  
-int nbenchmarks = 1;
+int nbenchmarks = 10;
  
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;

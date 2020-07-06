@@ -137,7 +137,7 @@ __device__ __forceinline__ float getGroupVelocity(unsigned int layer, float wave
 }
 ///////////////// START scattering length (optimized) ////////////////
 
-__constant__ float getScatteringLength_b400[171] = {
+__device__ float getScatteringLength_b400[171] = {
     1.1969400000e+00f, 1.2689300000e+00f, 1.5214900000e+00f, 1.2308500000e+00f,
     1.0183500000e+00f, 9.0122400000e-01f, 5.5284400000e-01f, 2.2785500000e-01f,
     1.0955600000e-01f, 8.5857400000e-02f, 1.0712800000e-01f, 1.2706000000e-01f,
@@ -196,7 +196,7 @@ __device__ float __forceinline__ getScatteringLength(unsigned int layer, float w
 
 ///////////////// START absorption length (optimized) ////////////////
 
-__constant__ float getAbsorptionLength_aDust400[171] = {
+__device__ float getAbsorptionLength_aDust400[171] = {
     9.9900000000e+02f, 3.4163500000e-02f, 4.1300000000e-02f, 3.3092800000e-02f,
     2.7146400000e-02f, 2.3892000000e-02f, 1.4336600000e-02f, 5.6772100000e-03f,
     2.6409800000e-03f, 2.0470500000e-03f, 2.5798400000e-03f, 3.0834800000e-03f,
@@ -242,7 +242,7 @@ __constant__ float getAbsorptionLength_aDust400[171] = {
     4.2932700000e-02f, 4.2821700000e-02f, 4.2255700000e-02f,
 };
 
-__constant__ float getAbsorptionLength_deltaTau[171] = {
+__device__ float getAbsorptionLength_deltaTau[171] = {
     2.7820200000e+01f,  2.7511400000e+01f,  2.7202600000e+01f,
     2.6893800000e+01f,  2.6585000000e+01f,  2.6276200000e+01f,
     2.5967400000e+01f,  2.5658600000e+01f,  2.5349800000e+01f,
@@ -435,13 +435,13 @@ __device__  __forceinline__   void transformDirectionPostScatter(float4& vec) {
 #define getTiltZShift_data_firstZCoord -5.0040000000e+02f
 #define getTiltZShift_data_zCoordSpacing 1.0000000000e+01f
 
-__constant__ float getTiltZShift_data_distancesFromOriginAlongTilt
+__device__ float getTiltZShift_data_distancesFromOriginAlongTilt
     [getTiltZShift_data_numDistances] = {
         -5.3141900000e+02f, -4.5488200000e+02f, 0.f,
         1.6520200000e+02f,  4.4547700000e+02f,  5.2077000000e+02f,
 };
 
-__constant__ float
+__device__ float
     getTiltZShift_data_zCorrections[getTiltZShift_data_numDistances *
                                     getTiltZShift_data_numZCoords] = {
         4.1940800000e+01f, 4.1188100000e+01f, 4.0435400000e+01f,

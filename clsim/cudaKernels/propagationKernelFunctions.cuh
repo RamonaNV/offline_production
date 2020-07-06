@@ -82,9 +82,9 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
 
 ///////////////////////// some constants
  
-__constant__ float speedOfLight = 0.299792458f;      // [m/ns]F
-__constant__ float recip_speedOfLight = 3.33564095f; // [ns/m]
-__constant__ float PI = 3.14159265359f;
+constexpr float speedOfLight = 0.299792458f;      // [m/ns]F
+constexpr float recip_speedOfLight = 3.33564095f; // [ns/m]
+constexpr float PI = 3.14159265359f;
  
 
 ///////////////////////////
@@ -897,10 +897,8 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
 #endif
 ) {
 
-  
-
   uint32_t myIndex = atomicAdd(&hitIndex[0], 1); 
-//  __syncthreads();
+ 
 
   if (myIndex < maxHitIndex) {
 #ifdef PRINTF_ENABLED
