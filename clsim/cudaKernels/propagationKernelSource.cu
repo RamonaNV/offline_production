@@ -563,6 +563,8 @@ if(threadIdx.x ==0 )
 {
       globStartIndex = atomicAdd(&hitIndex[0], localIndexCount );
 } 
+__syncthreads();
+
 
 uint32_t sharedIndex = threadIdx.x;
 
