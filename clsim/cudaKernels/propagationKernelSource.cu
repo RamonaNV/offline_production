@@ -24,7 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <propagationKernelSource.cuh>
 #include <propagationKernelFunctions.cuh>
 
- 
+#include <fstream>
 
  //__device__ global random arrays
  __device__  uint64_t* d_MWC_RNG_x;
@@ -56,6 +56,30 @@ const  unsigned short* __restrict__  geoLayerToOMNumIndexPerStringSet,
            float4 *photonHistory,
 #endif
            uint64_t* __restrict__  MWC_RNG_x, uint32_t* __restrict__  MWC_RNG_a);
+
+
+void photonsToFile(const std::string& filename, I3CLSimPhotonCuda *photons, unsigned int nphotons){
+      std::cout<< " writing "<< nphotons << " to file "<< filename<<std::endl;
+      std::ofstream outputFile; outputFile.open (filename);
+      for (unsigned int i = 0; i <  nphotons; i++)
+      {  
+              outputFile <<photons[i].posAndTime.x << "," << photons[i].posAndTime.y << "," << photons[i].numScatters << std::endl;
+      }
+      outputFile.close();
+}
+
+
+void photonsToFile(const std::string& filename, I3CLSimPhoton *photons, unsigned int nphotons){
+      std::cout<< " writing "<< nphotons << " to file "<< filename<<std::endl;
+      std::ofstream  outputFile;  outputFile.open (filename);
+      for (unsigned int i = 0; i <  nphotons; i++)
+      {  
+            outputFile <<photons[i].GetPosX() << "," << photons[i].GetPosY() << "," << photons[i].GetNumScatters() << std::endl;
+      }
+      outputFile.close();
+
+}
+
 
 
 // maxNumbWOrkItems from  CL rndm arrays
@@ -140,11 +164,14 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
                   numberPhotons = maxHitIndex;
             }
      
+            
            // copy (max fo maxHitIndex) photons to host.
             struct I3CLSimPhotonCuda* h_cudaphotons = (struct I3CLSimPhotonCuda*) malloc(numberPhotons*sizeof(struct I3CLSimPhotonCuda));
             CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
             cudaDeviceSynchronize();  
-    
+            if(nbenchmarks == 0)    photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCuda.csv",h_cudaphotons, numberPhotons );
+
+
            free(h_cudastep);    
            cudaFree(d_cudaphotons); 
            cudaFree(d_cudastep); 
@@ -182,7 +209,8 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
            {
 
   unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-  //int global_size = gridDim.x * blockDim.x;
+  if(i >=nsteps) return;
+ // if(i ==0) printf("CUDA kernel... (thread %u of %u)\n", i, global_size);
 
   #ifndef SAVE_ALL_PHOTONS
  
@@ -196,10 +224,6 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
   #endif
 
 
-  if(i >=nsteps) return;
-  
- // if(i ==0) printf("CUDA kernel... (thread %u of %u)\n", i, global_size);
-
   #ifdef SAVE_PHOTON_HISTORY
       float4 currentPhotonHistory[NUM_PHOTONS_IN_HISTORY];
   #endif
@@ -210,7 +234,12 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
   uint64_t *rnd_x = &real_rnd_x;
   uint32_t *rnd_a = &real_rnd_a;
  
-  
+int timerThread = 10;
+uint64_t start, end, avrgcount;
+uint64_t timers[5]={0,0,0,0,0};
+uint64_t  counters[5] = {0,0,0,0,0};
+
+if ( i==timerThread )start = clock64();
 const I3CLSimStepCuda step = inputSteps[i];
   float4 stepDir;
   {
@@ -222,7 +251,9 @@ const I3CLSimStepCuda step = inputSteps[i];
                       ZERO};
   }
 
- 
+  if ( i==timerThread )  end = clock64();
+  if ( i==timerThread ) printf("loading  inputstep %u \n", end-start);
+
 #define EPSILON 0.00001f
  
   uint32_t photonsLeftToPropagate = step.numPhotons;
@@ -244,15 +275,25 @@ const I3CLSimStepCuda step = inputSteps[i];
 #error This kernel only works with a constant group velocity (constant w.r.t. layers)
 #endif
   float inv_groupvel = ZERO;
-
+  if ( i==timerThread ) avrgcount = 0;
   while (photonsLeftToPropagate > 0) {
+    if ( i==timerThread ) ++avrgcount;
     if (abs_lens_left < EPSILON) {
 
+      if( i==timerThread  )
+      {
+            start = clock64();
+      }
       // create a new photon
       createPhotonFromTrack(step, stepDir, RNG_ARGS_TO_CALL, photonPosAndTime,
                         photonDirAndWlen);
-
-      // save the start position and time
+      if( i==timerThread )
+      {
+            end = clock64();
+            timers[0] += (end-start);
+            ++ counters[0] ;
+      }
+// save the start position and time
       photonStartPosAndTime = photonPosAndTime;
       photonStartDirAndWlen = photonDirAndWlen;
 
@@ -403,7 +444,10 @@ const I3CLSimStepCuda step = inputSteps[i];
 
 
 #ifndef SAVE_ALL_PHOTONS
-
+if( i==timerThread )
+{
+      start = clock64();
+} 
     // no photon collission detection in case all photons should be saved
     // the photon is now either being absorbed or scattered.
     // Check for collisions in its way
@@ -412,9 +456,11 @@ const I3CLSimStepCuda step = inputSteps[i];
     bool collided;
     if (RNG_CALL_UNIFORM_OC > 0.9) // prescale: 10%
 #else                              // DEBUG_STORE_GENERATED_PHOTONS
-    bool
+    
+bool
 #endif                             // DEBUG_STORE_GENERATED_PHOTONS
-      
+           
+     
 collided =
 #endif // STOP_PHOTONS_ON_DETECTION
           checkForCollision(photonPosAndTime, photonDirAndWlen, inv_groupvel,
@@ -433,8 +479,14 @@ collided =
                             geoLayerToOMNumIndexPerStringSetLocal);
  
 
-                       
+if( i==timerThread  )
+{
+      end = clock64();
+      timers[1] += (end-start);
+      ++ counters[1] ;
  
+}            
+
 #ifdef STOP_PHOTONS_ON_DETECTION
 #ifdef DEBUG_STORE_GENERATED_PHOTONS
     collided = true;
@@ -486,8 +538,7 @@ collided =
       }
 #endif // SAVE_ALL_PHOTONS 
 
-    } else {
-      // photon was NOT absorbed. scatter it and re-start the loop
+    } else { // photon was NOT absorbed. scatter it and re-start the loop
 
 #ifdef SAVE_PHOTON_HISTORY
       // save the photon scatter point
@@ -496,7 +547,10 @@ collided =
       currentPhotonHistory[photonNumScatters % NUM_PHOTONS_IN_HISTORY].w =
           abs_lens_initial - abs_lens_left;
 #endif
-
+if( i==timerThread  )
+{
+      start = clock64();
+} 
 
 // optional direction transformation (for ice anisotropy)
       transformDirectionPreScatter(photonDirAndWlen);
@@ -522,11 +576,26 @@ collided =
 
       ++photonNumScatters;
 
+      if( i==timerThread )
+{
+      end = clock64();
+      timers[2] += (end-start);
+      ++ counters[2] ;
+
+}      
+
 #ifdef PRINTF_ENABLED
       // dbg_printf("    . the photon has now been scattered %u time(s).\n",
       // photonNumScatters);
 #endif
     }
+  }// end while
+
+  if ( i==timerThread ){
+         printf("per phototn avrg over %u photons counter in while loop %f \n",  step.numPhotons, float(avrgcount)/float( step.numPhotons ));
+         printf("avrg over  %u creating Photon %f \n", counters[0], float(timers[0])/float( counters[0]));
+         printf("avrg over %u check collision %f \n",counters[1], float(timers[1])/float( counters[1]));
+         printf("avrg over %u scattering      %f \n",counters[2], float(timers[2])/float( counters[2]));
   }
 
 #ifdef PRINTF_ENABLED

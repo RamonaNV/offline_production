@@ -615,8 +615,6 @@ __device__  __forceinline__ void checkForCollision_InCells(
 
 #undef DO_CHECK
 
-   __syncthreads(); //cellsyncthreads
-
 }
 
 __device__  __forceinline__ bool checkForCollision(
@@ -900,7 +898,7 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
 ) {
 
   //PRINTL
-  uint32_t myIndex = 1+atomicAdd(&hitIndex[0], 1); 
+  uint32_t myIndex = atomicAdd(&hitIndex[0], 1); 
   
 
   if (myIndex < maxHitIndex) {

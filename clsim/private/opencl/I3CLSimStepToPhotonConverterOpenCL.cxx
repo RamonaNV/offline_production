@@ -1841,7 +1841,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
   }
 
  
-int nbenchmarks = 10;
+int nbenchmarks = 0;
 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -2020,6 +2020,7 @@ try {
       }
     }
  
+   if(nbenchmarks == 0)    photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCL.csv", &((*photons)[0]), numberOfGeneratedPhotons );
 
   } catch (cl::Error &err) {
     log_fatal("OpenCL ERROR (memcpy from device): %s (%i)", err.what(),
@@ -2055,6 +2056,8 @@ try {
             return;
         }
     }
+
+  
 
 }
 
