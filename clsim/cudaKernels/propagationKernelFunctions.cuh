@@ -35,7 +35,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <mediumPropertiesSource.cuh>
 #include <wlenBiasSource.cuh>
 #include <wlenGeneratorSource.cuh>
-
+ 
 #include <dataStructCuda.cuh>
 
 #include <chrono>
