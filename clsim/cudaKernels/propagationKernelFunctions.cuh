@@ -82,9 +82,9 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
 
 ///////////////////////// some constants
  
-__constant__ float speedOfLight = 0.299792458f;      // [m/ns]F
-__constant__ float recip_speedOfLight = 3.33564095f; // [ns/m]
-__constant__ float PI = 3.14159265359f;
+constexpr float speedOfLight = 0.299792458f;      // [m/ns]F
+constexpr float recip_speedOfLight = 3.33564095f; // [ns/m]
+constexpr float PI = 3.14159265359f;
  
 
 ///////////////////////////
@@ -261,7 +261,7 @@ __device__  __forceinline__ void checkForCollision_OnString(
 #endif
 
     
-  //__constant__ const unsigned short
+  //__device__ const unsigned short
   //*geoLayerToOMNumIndex=geoLayerToOMNumIndexPerStringSet + (
   //uint(stringSet)*GEO_LAYER_STRINGSET_MAX_NUM_LAYERS) + lowLayerZ;
   //  __local const unsigned short *geoLayerToOMNumIndex=geoLayerToOMNumIndexPerStringSetLocal + (convert_uint(stringSet)*GEO_LAYER_STRINGSET_MAX_NUM_LAYERS) + lowLayerZ;
