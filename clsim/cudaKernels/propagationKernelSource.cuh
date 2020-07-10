@@ -42,5 +42,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
     uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a,  int sizeRNG, float& totalCudaKernelTime,const int nbenchmarks );
 
 
+    void photonsToFile(const std::string& filename, I3CLSimPhotonCuda *photons, unsigned int nphotons);
+    void photonsToFile(const std::string& filename, I3CLSimPhoton *photons, unsigned int nphotons);
  
 #endif  // PROPAGATIONKERNELSOURCE_CUH

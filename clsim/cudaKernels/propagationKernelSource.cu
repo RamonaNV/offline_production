@@ -58,6 +58,29 @@ const  unsigned short* __restrict__  geoLayerToOMNumIndexPerStringSet,
            uint64_t* __restrict__  MWC_RNG_x, uint32_t* __restrict__  MWC_RNG_a);
 
 
+void photonsToFile(const std::string& filename, I3CLSimPhotonCuda *photons, unsigned int nphotons){
+      std::cout<< " writing "<< nphotons << " to file "<< filename<<std::endl;
+      std::ofstream outputFile; outputFile.open (filename);
+      for (unsigned int i = 0; i <  nphotons; i++)
+      {  
+                  outputFile <<photons[i].posAndTime.x << "," << photons[i].posAndTime.y << "," << photons[i].numScatters << std::endl;
+      }
+      outputFile.close();
+}
+
+
+void photonsToFile(const std::string& filename, I3CLSimPhoton *photons, unsigned int nphotons){
+      std::cout<< " writing "<< nphotons << " to file "<< filename<<std::endl;
+      std::ofstream  outputFile;  outputFile.open (filename);
+      for (unsigned int i = 0; i <  nphotons; i++)
+      {  
+            outputFile <<photons[i].GetPosX() << "," << photons[i].GetPosY() << "," << photons[i].GetNumScatters() << std::endl;
+      }
+      outputFile.close();
+ }
+
+      
+
 // maxNumbWOrkItems from  CL rndm arrays
 void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG_a)  
 {
@@ -152,7 +175,9 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             struct I3CLSimPhotonCuda* h_cudaphotons = (struct I3CLSimPhotonCuda*) malloc(numberPhotons*sizeof(struct I3CLSimPhotonCuda));
             CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
             cudaDeviceSynchronize();  
-    
+
+            if(nbenchmarks == 0)    photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCudaSh.csv",h_cudaphotons, numberPhotons );
+            
            free(h_cudastep);    
            cudaFree(d_cudaphotons); 
            cudaFree(d_cudastep); 
@@ -444,11 +469,36 @@ collided =
 #else  // STOP_PHOTONS_ON_DETECTION
                       distancePropagated,
 #endif // STOP_PHOTONS_ON_DETECTION
-                        &localIndexCount, MAX_HITS_PER_SHARED, outputPhotons,
+                        &localIndexCount, hitIndex, maxHitIndex, outputPhotons,outputPhotonsGlobal,
 #ifdef SAVE_PHOTON_HISTORY
                             photonHistory, currentPhotonHistory,
 #endif // SAVE_PHOTON_HISTORY
                             geoLayerToOMNumIndexPerStringSetLocal);
+
+                            
+__syncthreads();
+if(localIndexCount>= 0) //MAX_HITS_PER_SHARED/2  )
+{
+    __shared__ uint32_t globStartIndex;
+ 
+  if(threadIdx.x ==0 )
+  {
+        globStartIndex = atomicAdd(&hitIndex[0], localIndexCount );
+  }     
+  __syncthreads();
+  
+  uint32_t sharedIndex = threadIdx.x;
+
+    for (; sharedIndex<localIndexCount && globStartIndex+sharedIndex < maxHitIndex ; sharedIndex+= blockDim.x )
+  {  
+        outputPhotonsGlobal[globStartIndex+sharedIndex] = outputPhotons[sharedIndex]; 
+  }
+  //reset shared  counter      
+  if(threadIdx.x ==0 ) localIndexCount = 0;
+
+}
+
+__syncthreads();
  
 
                        
@@ -495,7 +545,7 @@ collided =
                 step,
                 0, // string id (not used in this case)
                 0, // dom id (not used in this case)
-                &localIndexCount, MAX_HITS_PER_SHARED, outputPhotons
+                &localIndexCount, hitIndex, maxHitIndex, outputPhotons, outputPhotonsGlobal
 #ifdef SAVE_PHOTON_HISTORY
                 ,
                 photonHistory, currentPhotonHistory
@@ -556,31 +606,9 @@ collided =
          MWC_RNG_x[i] = real_rnd_x;
          MWC_RNG_a[i] = real_rnd_a;
         
+//copy rest that have not reached MAX_HITS_PER_SHARED
 
+// @todo
 
-//add shared phtons to global phtonons
-
-//no empty spaces:
-__shared__ uint32_t globStartIndex;
- __syncthreads();
-if(threadIdx.x ==0 )
-{
-      globStartIndex = atomicAdd(&hitIndex[0], localIndexCount );
-} 
- __syncthreads();
- 
-// with empty spaces:
-/*
-uint32_t globStartIndex = blockIdx.x *MAX_HITS_PER_SHARED; 
-if ( threadIdx.x ==0 )
-atomicAdd(&hitIndex[0], localIndexCount );*/
-
-uint32_t sharedIndex = threadIdx.x;
-
-
-for (; sharedIndex<localIndexCount && globStartIndex+sharedIndex < maxHitIndex ; sharedIndex+= blockDim.x )
-{  
-      outputPhotonsGlobal[globStartIndex+sharedIndex] = outputPhotons[sharedIndex]; 
-}
 
 }
