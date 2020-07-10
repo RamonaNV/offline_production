@@ -36,6 +36,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define CUDA_CHECK_CALL   gl_err = cudaGetLastError(); if(cudaError_t(gl_err)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(gl_err)), __LINE__-1);
 //#define PRINTLC     printf("thread 0 - in line %d \n", __LINE__);  
 
+#define TIMERS
+//#define SAVE_ALL_PHOTONS
+
+ 
+#ifdef TIMERS
+      __device__   float  counters[NTHREADS_PER_BLOCK][5] = {0.f};
+      __device__  uint64_t timers[NTHREADS_PER_BLOCK][5] = {0};
+#endif
 
 // remark: ignored tabulate version, removed ifdef TABULATE 
 // also removed ifdef DOUBLEPRECISION.
@@ -45,9 +53,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK,4) void
 propKernel(uint32_t *hitIndex,   // deviceBuffer_CurrentNumOutputPhotons
            const uint32_t maxHitIndex, // maxNumOutputPhotons_
-#ifndef SAVE_ALL_PHOTONS
 const  unsigned short* __restrict__  geoLayerToOMNumIndexPerStringSet,
-#endif
   const I3CLSimStepCuda*  __restrict__  inputSteps,      // deviceBuffer_InputSteps
            int nsteps,
            I3CLSimPhotonCuda* __restrict__  outputPhotons, // deviceBuffer_OutputPhotons
@@ -77,7 +83,6 @@ void photonsToFile(const std::string& filename, I3CLSimPhoton *photons, unsigned
             outputFile <<photons[i].GetPosX() << "," << photons[i].GetPosY() << "," << photons[i].GetNumScatters() << std::endl;
       }
       outputFile.close();
-
 }
 
 
@@ -100,7 +105,6 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
       const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
         uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime, const int nbenchmarks){
 
-  
       int nlaunches = (nsteps+nsteps-1)/nsteps;
        
       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
@@ -112,7 +116,6 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
 	CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
       CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer*sizeof(unsigned short),cudaMemcpyHostToDevice));
       
- 
       //these multiple launches correspond to numBuffers..   
       for (int ilaunch= 0 ; ilaunch<nlaunches; ++ilaunch )
       {
@@ -122,8 +125,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             struct I3CLSimStepCuda* h_cudastep = (struct I3CLSimStepCuda*) malloc(launchnsteps*sizeof(struct I3CLSimStepCuda));
             
             for (int i =0; i<launchnsteps; i++){
-                  h_cudastep[i] = I3CLSimStep(in_steps[i+ilaunch*nsteps]); 
-                  
+                  h_cudastep[i] = I3CLSimStep(in_steps[i+ilaunch*nsteps]);                  
             } 
                  
             I3CLSimStepCuda * d_cudastep;
@@ -151,9 +153,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
               cudaDeviceSynchronize(); 
               std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
               totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
-            
-
-              
+                    
              CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
             uint32_t  numberPhotons = h_hitIndex[0];
             h_totalHitIndex += h_hitIndex[0];
@@ -170,7 +170,6 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
             cudaDeviceSynchronize();  
             if(nbenchmarks == 0)    photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCuda.csv",h_cudaphotons, numberPhotons );
-
 
            free(h_cudastep);    
            cudaFree(d_cudaphotons); 
@@ -195,9 +194,7 @@ void finalizeCUDA(){
 __global__ void 
 propKernel(uint32_t *hitIndex,         // deviceBuffer_CurrentNumOutputPhotons
            const uint32_t maxHitIndex, // maxNumOutputPhotons_
-#ifndef SAVE_ALL_PHOTONS
 const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
-#endif
             const I3CLSimStepCuda* __restrict__ inputSteps,      // deviceBuffer_InputSteps
            int nsteps,
            I3CLSimPhotonCuda* __restrict__ outputPhotons, // deviceBuffer_OutputPhotons
@@ -234,12 +231,14 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
   uint64_t *rnd_x = &real_rnd_x;
   uint32_t *rnd_a = &real_rnd_a;
  
-int timerThread = 10;
-uint64_t start, end, avrgcount;
-uint64_t timers[5]={0,0,0,0,0};
-uint64_t  counters[5] = {0,0,0,0,0};
+#ifdef TIMERS
+uint64_t start, end;
+      int tid = threadIdx.x;
+      __syncthreads();
+      if(tid == 0) start = clock64();
+      
+#endif
 
-if ( i==timerThread )start = clock64();
 const I3CLSimStepCuda step = inputSteps[i];
   float4 stepDir;
   {
@@ -250,9 +249,15 @@ const I3CLSimStepCuda step = inputSteps[i];
                       cosf(step.dirAndLengthAndBeta.x),       // cos(phi)
                       ZERO};
   }
+ 
+#ifdef TIMERS
+      if( tid==0 )
+      {
+            end = clock64();
+            timers[blockIdx.x][4] += (end-start);
+      }
+#endif
 
-  if ( i==timerThread )  end = clock64();
-  if ( i==timerThread ) printf("loading  inputstep %u \n", end-start);
 
 #define EPSILON 0.00001f
  
@@ -275,38 +280,34 @@ const I3CLSimStepCuda step = inputSteps[i];
 #error This kernel only works with a constant group velocity (constant w.r.t. layers)
 #endif
   float inv_groupvel = ZERO;
-  if ( i==timerThread ) avrgcount = 0;
+ 
   while (photonsLeftToPropagate > 0) {
-    if ( i==timerThread ) ++avrgcount;
+ 
     if (abs_lens_left < EPSILON) {
 
-      if( i==timerThread  )
-      {
-            start = clock64();
-      }
+      #ifdef TIMERS
+            if( tid==0  ) start = clock64();
+      #endif
+
       // create a new photon
       createPhotonFromTrack(step, stepDir, RNG_ARGS_TO_CALL, photonPosAndTime,
                         photonDirAndWlen);
-      if( i==timerThread )
-      {
-            end = clock64();
-            timers[0] += (end-start);
-            ++ counters[0] ;
-      }
+      #ifdef TIMERS
+            if( tid==0 )
+            {
+                  end = clock64();
+                  timers[blockIdx.x][0] += (end-start);
+                  counters[blockIdx.x][0] += 1.f/ (nsteps/float(NTHREADS_PER_BLOCK) );
+            }
+
+ 
+      #endif
 // save the start position and time
       photonStartPosAndTime = photonPosAndTime;
       photonStartDirAndWlen = photonDirAndWlen;
 
       photonNumScatters = 0;
       photonTotalPathLength = ZERO;
-
-#ifdef PRINTF_ENABLED
-      printf("   created photon %u at: p=(%f,%f,%f), d=(%f,%f,%f), t=%f, "
-             "wlen=%fnm\n", step.numPhotons - photonsLeftToPropagate, photonPosAndTime.x,
-             photonPosAndTime.y, photonPosAndTime.z, photonDirAndWlen.x,
-             photonDirAndWlen.y, photonDirAndWlen.z, photonPosAndTime.w,
-             photonDirAndWlen.w / 1e-9f);
-#endif
 
 #ifdef getTiltZShift_IS_CONSTANT
       currentPhotonLayer = min(max(findLayerForGivenZPos(photonPosAndTime.z), 0), MEDIUM_LAYERS - 1);
@@ -325,9 +326,6 @@ const I3CLSimStepCuda step = inputSteps[i];
 #endif
       abs_lens_left = abs_lens_initial;
 
-#ifdef PRINTF_ENABLED
-      printf("   - total track length will be %f absorption lengths\n", abs_lens_left);
-#endif
     }
 
     // this block is along the lines of the PPC kernel
@@ -363,10 +361,7 @@ const I3CLSimStepCuda step = inputSteps[i];
 
       // track this thing to the next scattering point
       float sca_step_left = -logf(RNG_CALL_UNIFORM_OC);
-#ifdef PRINTF_ENABLED
-      // dbg_printf("   - next scatter in %f scattering lengths\n",
-      // sca_step_left);
-#endif
+
 
  float currentScaLen =  getScatteringLength(currentPhotonLayer, photonDirAndWlen.w);
  float currentAbsLen = getAbsorptionLength(currentPhotonLayer, photonDirAndWlen.w);
@@ -377,11 +372,6 @@ const I3CLSimStepCuda step = inputSteps[i];
  float aia =     (photon_dz * abs_lens_left -
            ((mediumBoundary - effective_z))/currentAbsLen) *
           (ONE / (float)MEDIUM_LAYER_THICKNESS);
-
-#ifdef PRINTF_ENABLED
-      // dbg_printf("   - ais=%f, aia=%f, j_initial=%i\n", ais, aia,
-      // currentPhotonLayer);
-#endif
 
       // propagate through layers
       int j = currentPhotonLayer;
@@ -400,10 +390,6 @@ const I3CLSimStepCuda step = inputSteps[i];
              ais -= 1.f/(currentScaLen), aia -= 1.f/(currentAbsLen))
           ++j;
       }
-
-#ifdef PRINTF_ENABLED
-      // dbg_printf("   - j_final=%i\n", j);
-#endif
 
       float distanceToAbsorption;
       if ((currentPhotonLayer == j) || ((my_fabs(photon_dz)) < EPSILON)) {
@@ -424,11 +410,7 @@ const I3CLSimStepCuda step = inputSteps[i];
       currentPhotonLayer = j;
 #endif
 
-#ifdef PRINTF_ENABLED
-  //    printf("   - distancePropagated=%f\n", distancePropagated);
-#endif
-
-      // get overburden for distance
+       // get overburden for distance
       if (distanceToAbsorption < distancePropagated) {
         distancePropagated = distanceToAbsorption;
         abs_lens_left = ZERO;
@@ -442,12 +424,12 @@ const I3CLSimStepCuda step = inputSteps[i];
     }
 
 
-
 #ifndef SAVE_ALL_PHOTONS
-if( i==timerThread )
-{
-      start = clock64();
-} 
+
+#ifdef TIMERS
+if( tid==0  ) start = clock64();
+#endif
+ 
     // no photon collission detection in case all photons should be saved
     // the photon is now either being absorbed or scattered.
     // Check for collisions in its way
@@ -461,7 +443,7 @@ bool
 #endif                             // DEBUG_STORE_GENERATED_PHOTONS
            
      
-collided =
+collided =  
 #endif // STOP_PHOTONS_ON_DETECTION
           checkForCollision(photonPosAndTime, photonDirAndWlen, inv_groupvel,
                             photonTotalPathLength, photonNumScatters,
@@ -478,31 +460,27 @@ collided =
 #endif // SAVE_PHOTON_HISTORY
                             geoLayerToOMNumIndexPerStringSetLocal);
  
-
-if( i==timerThread  )
-{
-      end = clock64();
-      timers[1] += (end-start);
-      ++ counters[1] ;
- 
-}            
+#ifdef TIMERS
+      if(tid==0 )
+      {
+            end = clock64();
+            timers[blockIdx.x][1] += (end-start);
+            counters[blockIdx.x][1] += 1.f/(nsteps/float(NTHREADS_PER_BLOCK));
+      }        
+     
+#endif
 
 #ifdef STOP_PHOTONS_ON_DETECTION
 #ifdef DEBUG_STORE_GENERATED_PHOTONS
     collided = true;
 #endif // DEBUG_STORE_GENERATED_PHOTONS
+
     if (collided) {
       // get rid of the photon if we detected it
       abs_lens_left = ZERO;
-
-#ifdef PRINTF_ENABLED
-      // dbg_printf("    . colission detected, step limited to
-      // thisStepLength=%f!\n",
-      //    distancePropagated);
-#endif // PRINTF_ENABLED
     }
 #endif // STOP_PHOTONS_ON_DETECTION
-
+ 
 #endif // not SAVE_ALL_PHOTONS
 
     // update the track to its next position
@@ -520,8 +498,7 @@ if( i==timerThread  )
 
 #if defined(SAVE_ALL_PHOTONS) && !defined(TABULATE)
       // save every. single. photon.
-
-      if (RNG_CALL_UNIFORM_CO < SAVE_ALL_PHOTONS_PRESCALE) {
+     // if (RNG_CALL_UNIFORM_CO < SAVE_ALL_PHOTONS_PRESCALE) {
         saveHit(photonPosAndTime, photonDirAndWlen,
                 0., // photon has already been propagated to the next position
                 inv_groupvel, photonTotalPathLength, photonNumScatters,
@@ -535,7 +512,7 @@ if( i==timerThread  )
                 photonHistory, currentPhotonHistory
 #endif // SAVE_PHOTON_HISTORY
         );
-      }
+     // }
 #endif // SAVE_ALL_PHOTONS 
 
     } else { // photon was NOT absorbed. scatter it and re-start the loop
@@ -547,10 +524,10 @@ if( i==timerThread  )
       currentPhotonHistory[photonNumScatters % NUM_PHOTONS_IN_HISTORY].w =
           abs_lens_initial - abs_lens_left;
 #endif
-if( i==timerThread  )
-{
-      start = clock64();
-} 
+
+#ifdef TIMERS
+      if( tid==0  ) start = clock64();
+#endif
 
 // optional direction transformation (for ice anisotropy)
       transformDirectionPreScatter(photonDirAndWlen);
@@ -565,44 +542,42 @@ if( i==timerThread  )
       // optional direction transformation (for ice anisotropy)
       transformDirectionPostScatter(photonDirAndWlen);
 
-
-#ifdef PRINTF_ENABLED
-      // dbg_printf("    . cos(scat_angle)=%f sin(scat_angle)=%f\n",
-      //    cosScatAngle, sinScatAngle);
-      // dbg_printf("    . photon direction after:  d=(%f,%f,%f), wlen=%f\n",
-      //    photonDirAndWlen.x, photonDirAndWlen.y, photonDirAndWlen.z,
-      //    photonDirAndWlen.w/1e-9f);
-#endif
-
       ++photonNumScatters;
-
-      if( i==timerThread )
-{
-      end = clock64();
-      timers[2] += (end-start);
-      ++ counters[2] ;
-
-}      
-
-#ifdef PRINTF_ENABLED
-      // dbg_printf("    . the photon has now been scattered %u time(s).\n",
-      // photonNumScatters);
+#ifdef TIMERS
+      if(tid==0  )
+      {
+          end = clock64();
+         timers[blockIdx.x][2] += (end-start);
+         counters[blockIdx.x][2] += 1.f/(nsteps/float(NTHREADS_PER_BLOCK));
+      }    
+         
 #endif
+
+
     }
   }// end while
 
-  if ( i==timerThread ){
-         printf("per phototn avrg over %u photons counter in while loop %f \n",  step.numPhotons, float(avrgcount)/float( step.numPhotons ));
-         printf("avrg over  %u creating Photon %f \n", counters[0], float(timers[0])/float( counters[0]));
-         printf("avrg over %u check collision %f \n",counters[1], float(timers[1])/float( counters[1]));
-         printf("avrg over %u scattering      %f \n",counters[2], float(timers[2])/float( counters[2]));
+#ifdef TIMERS
+__syncthreads();
+
+
+  if ( i==0 ){
+        //ugly reduction, dont care.
+      for (int ib = 0; ib<NTHREADS_PER_BLOCK; ++ib){
+            for (int ic = 0; ic<5; ++ic)
+            {
+                  timers[blockIdx.x][ic] += uint64_t(timers[ib][ic]/float(NTHREADS_PER_BLOCK));
+                  counters[blockIdx.x][ic] += counters[ib][ic];
+            }
+      }
+
+        printf("clock64 Cycles of ThreadBlock (=0), avrged by the function calls. \n");
+         printf("counted   %f repetition per thread of creating Photon %u \n", counters[blockIdx.x][0], (timers[blockIdx.x][0]));
+         printf("counted   %f repetition per thread if check collision %u \n",counters[blockIdx.x][1], (timers[blockIdx.x][1]));
+         printf("counted   %f repetition per thread of scattering      %u \n",counters[blockIdx.x][2], (timers[blockIdx.x][2]));
+         printf("laoding step takes    %u \n", timers[blockIdx.x][4]);
   }
-
-#ifdef PRINTF_ENABLED
-  // dbg_printf("Stop kernel... (work item %u of %u)\n", i, global_size);
-  // dbg_printf("Kernel finished.\n");
 #endif
-
  
   // upload MWC RNG state
   MWC_RNG_x[i] = real_rnd_x;

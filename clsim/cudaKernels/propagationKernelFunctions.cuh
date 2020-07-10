@@ -42,7 +42,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <ctime>
 
 //for debugging:
-//#define PRINTLROOT   if( blockIdx.x * blockDim.x + threadIdx.x ==0){      printf("thread 0 - in line %d and function %s \n", __LINE__, __func__);  }
+ #define PRINTLROOT   if( blockIdx.x * blockDim.x + threadIdx.x ==0){      printf("thread 0 - in line %d and function %s \n", __LINE__, __func__);  }
 //#define PRINTL        printf("thread %d - in line %d and function %s \n", blockIdx.x * blockDim.x + threadIdx.x, __LINE__, __func__);  
 
 
@@ -89,15 +89,6 @@ constexpr float PI = 3.14159265359f;
 
 ///////////////////////////
 
-//__device__ inline float my_divide(const float a, const float b);
-//__device__ inline float my_recip(const float a);
-//__device__ inline float my_powr(const float a, const float b);
-//__device__ inline float my_sqrt(const float a);
-//__device__ inline float my_rsqrt(const float a);
-//__device__ inline float my_cos(const float a);
-//__device__ inline float my_sin(const float a);
-//__device__ inline float my_log(const float a);
-//__device__ inline float my_exp(const float a);
 __device__ __forceinline__ float my_fabs(const float a);
 __device__ __forceinline__ float sqr(const float a);
 
@@ -525,7 +516,7 @@ __device__  __forceinline__ void checkForCollision_InCells(
 #endif
     const unsigned short *geoLayerToOMNumIndexPerStringSetLocal) 
     {
-      
+ 
   // using macros and hard-coded names is
   // not really the best thing to do here..
   // replace with a loop sometime.
@@ -614,7 +605,7 @@ __device__  __forceinline__ void checkForCollision_InCells(
 #endif
 
 #undef DO_CHECK
-
+ 
 }
 
 __device__  __forceinline__ bool checkForCollision(
@@ -718,17 +709,6 @@ __device__  __forceinline__ bool checkForCollision(
 #endif
 #endif
 
- 
-//__device__ inline float my_divide(const float a, const float b) { return a / b; }
-//__device__ inline float my_recip(const float a) { return 1.f / a; }
-//__device__ inline float my_powr(const float a, const float b) { return powf(a, b); }
-//__device__ inline float my_sqrt(const float a) { return sqrtf(a); }
-//__device__ __forceinline__ float my_rsqrt(const float a) { return rsqrtf(a); } // __frsqrt_rn
-//__device__ inline float my_cos(const float a) { return cosf(a); }
-//__device__ inline float my_sin(const float a) { return sinf(a); }
-//__device__ inline float my_log(const float a) { return logf(a); }
-//__device__ inline float my_exp(const float a) { return expf(a); }
- 
 #ifdef USE_FABS_WORKAROUND
 __device__ __forceinline__ float my_fabs(const float a) { return (a < ZERO) ? (-a) : (a); }
 #else
@@ -902,11 +882,7 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
   
 
   if (myIndex < maxHitIndex) {
-#ifdef PRINTF_ENABLED
-    // dbg_printf("     -> photon record added at position %u.\n",
-    //    myIndex);
-#endif
-
+ 
     // Emit photon position relative to the hit DOM
 #ifndef CABLE_RADIUS
     float domPosX, domPosY, domPosZ;
@@ -933,32 +909,34 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
       domPosZ += ((PANCAKE_FACTOR - ONE) / PANCAKE_FACTOR) * nz;
     }
 #endif
-
-    outputPhotons[myIndex].posAndTime = (float4){
+I3CLSimPhotonCuda outphoton;
+    outphoton.posAndTime = float4{
         photonPosAndTime.x + thisStepLength * photonDirAndWlen.x - domPosX,
         photonPosAndTime.y + thisStepLength * photonDirAndWlen.y - domPosY,
         photonPosAndTime.z + thisStepLength * photonDirAndWlen.z - domPosZ,
         photonPosAndTime.w + thisStepLength * inv_groupvel};
 
-    outputPhotons[myIndex].dir = sphDirFromCar(photonDirAndWlen);
-    outputPhotons[myIndex].wavelength = photonDirAndWlen.w;
+    outphoton.dir = sphDirFromCar(photonDirAndWlen);
+    outphoton.wavelength = photonDirAndWlen.w;
 
-    outputPhotons[myIndex].cherenkovDist =
+    outphoton.cherenkovDist =
         photonTotalPathLength + thisStepLength;
-    outputPhotons[myIndex].numScatters = photonNumScatters;
-    outputPhotons[myIndex].weight = step.weight / getWavelengthBias(photonDirAndWlen.w);
-    outputPhotons[myIndex].identifier = step.identifier;
+    outphoton.numScatters = photonNumScatters;
+    outphoton.weight = step.weight / getWavelengthBias(photonDirAndWlen.w);
+    outphoton.identifier = step.identifier;
 
-    outputPhotons[myIndex].stringID = short(hitOnString);
-    outputPhotons[myIndex].omID = ushort(hitOnDom);
+    outphoton.stringID = short(hitOnString);
+    outphoton.omID = ushort(hitOnDom);
 
-    outputPhotons[myIndex].startPosAndTime = photonStartPosAndTime;
+    outphoton.startPosAndTime = photonStartPosAndTime;
 
-    outputPhotons[myIndex].startDir = sphDirFromCar(photonStartDirAndWlen);
+    outphoton.startDir = sphDirFromCar(photonStartDirAndWlen);
 
-    outputPhotons[myIndex].groupVelocity = 1.f/(inv_groupvel);
+    outphoton.groupVelocity = 1.f/(inv_groupvel);
 
-    outputPhotons[myIndex].distInAbsLens = distanceTraveledInAbsorptionLengths;
+    outphoton.distInAbsLens = distanceTraveledInAbsorptionLengths;
+
+    outputPhotons[myIndex] = outphoton;
 
 #ifdef SAVE_PHOTON_HISTORY
     for (uint32_t i = 0; i < NUM_PHOTONS_IN_HISTORY; ++i) {
