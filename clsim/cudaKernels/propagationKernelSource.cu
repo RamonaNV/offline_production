@@ -469,15 +469,18 @@ collided =
 #else  // STOP_PHOTONS_ON_DETECTION
                       distancePropagated,
 #endif // STOP_PHOTONS_ON_DETECTION
-                        &localIndexCount, hitIndex, maxHitIndex, outputPhotons,outputPhotonsGlobal,
+                        &localIndexCount, maxHitIndex, outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
                             photonHistory, currentPhotonHistory,
 #endif // SAVE_PHOTON_HISTORY
                             geoLayerToOMNumIndexPerStringSetLocal);
 
+__shared__ uint32_t   movePhotons[1];
+*movePhotons  = uint32_t(MAX_HITS_PER_SHARED/2);
+if( photonNumScatters <=1) *movePhotons = 0;
                             
 __syncthreads();
-if(localIndexCount>= 0) //MAX_HITS_PER_SHARED/2  )
+if(localIndexCount> *movePhotons    )
 {
     __shared__ uint32_t globStartIndex;
  
@@ -545,7 +548,7 @@ __syncthreads();
                 step,
                 0, // string id (not used in this case)
                 0, // dom id (not used in this case)
-                &localIndexCount, hitIndex, maxHitIndex, outputPhotons, outputPhotonsGlobal
+                &localIndexCount, maxHitIndex, outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
                 ,
                 photonHistory, currentPhotonHistory

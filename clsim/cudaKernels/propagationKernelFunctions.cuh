@@ -45,11 +45,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //#define PRINTLROOT   if( blockIdx.x * blockDim.x + threadIdx.x ==0){      printf("thread 0 - in line %d and function %s \n", __LINE__, __func__);  }
 //#define PRINTL        printf("thread %d - in line %d and function %s \n", blockIdx.x * blockDim.x + threadIdx.x, __LINE__, __func__);  
 
-#define MAX_HITS_PER_SHARED 256
-
+#define MAX_HITS_PER_SHARED 32  
 
 ///////////////// forward declarations
-
+ 
 __device__ __forceinline__ int findLayerForGivenZPos(float posZ);
 
 __device__ __forceinline__ float mediumLayerBoundary(int layer);
@@ -73,8 +72,8 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
         float distanceTraveledInAbsorptionLengths,
         const float4& photonStartPosAndTime,
         const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
-        unsigned short hitOnString, unsigned short hitOnDom, uint32_t *hitShared, uint32_t *hitIndex, 
-        uint32_t maxHitIndex,   I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobalGlobal
+        unsigned short hitOnString, unsigned short hitOnDom, uint32_t *hitIndex,
+        uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
         ,
         float4 *photonHistory, float4 *currentPhotonHistory
@@ -114,7 +113,7 @@ __device__  __forceinline__ void checkForCollision_OnString(
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
     const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
-         uint32_t *hitShared,   uint32_t *hitIndex, uint32_t maxHitIndex,  I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobal,
+    uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
 #endif
@@ -133,7 +132,7 @@ __device__  __forceinline__ void checkForCollision_InCell(
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
     const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
-         uint32_t *hitShared,   uint32_t *hitIndex, uint32_t maxHitIndex,  I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobal,
+    uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
 #endif
@@ -157,7 +156,7 @@ __device__  __forceinline__ void checkForCollision_InCells(
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
     const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
-         uint32_t *hitShared,   uint32_t *hitIndex, uint32_t maxHitIndex,  I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobal,
+    uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
 #endif
@@ -175,7 +174,7 @@ __device__ __forceinline__ bool checkForCollision(
 #else
     float thisStepLength,
 #endif
-         uint32_t *hitShared,   uint32_t *hitIndex, uint32_t maxHitIndex,  I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobal,
+    uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
 #endif
@@ -193,7 +192,7 @@ __device__  __forceinline__ void checkForCollision_OnString(
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
     const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
-         uint32_t *hitShared,   uint32_t *hitIndex, uint32_t maxHitIndex,  I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobal,
+    uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
 #endif
@@ -386,7 +385,7 @@ __device__  __forceinline__ void checkForCollision_OnString(
               smin1, // this is the limited thisStepLength
               inv_groupvel, photonTotalPathLength, photonNumScatters,
               distanceTraveledInAbsorptionLengths, photonStartPosAndTime,
-              photonStartDirAndWlen, step, stringNum, domNum, sharedIndex, hitIndex,
+              photonStartDirAndWlen, step, stringNum, domNum, hitIndex,
               maxHitIndex, outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
               ,
@@ -410,7 +409,7 @@ __device__  __forceinline__ void checkForCollision_InCell(
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
     const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
-         uint32_t *hitShared,   uint32_t *hitIndex, uint32_t maxHitIndex,  I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobal,
+    uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
 #endif
@@ -494,7 +493,7 @@ __device__  __forceinline__ void checkForCollision_InCell(
 #else // STOP_PHOTONS_ON_DETECTION
           thisStepLength, inv_groupvel, photonTotalPathLength,
           photonNumScatters, distanceTraveledInAbsorptionLengths,
-          photonStartPosAndTime, photonStartDirAndWlen, step,sharedIndex, hitIndex,
+          photonStartPosAndTime, photonStartDirAndWlen, step, hitIndex,
           maxHitIndex, outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
           photonHistory, currentPhotonHistory,
@@ -518,7 +517,7 @@ __device__  __forceinline__ void checkForCollision_InCells(
     float distanceTraveledInAbsorptionLengths,
     const float4& photonStartPosAndTime,
     const float4& photonStartDirAndWlen, const I3CLSimStepCuda &step,
-         uint32_t *hitShared,   uint32_t *hitIndex, uint32_t maxHitIndex,  I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobal,
+    uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
 #endif
@@ -548,7 +547,7 @@ __device__  __forceinline__ void checkForCollision_InCells(
       photonDirLenXYSqr, photonPosAndTime, photonDirAndWlen, thisStepLength,   \
       inv_groupvel, photonTotalPathLength, photonNumScatters,                  \
       distanceTraveledInAbsorptionLengths, photonStartPosAndTime,              \
-      photonStartDirAndWlen, step, hitShared, hitIndex, maxHitIndex, outputPhotons,       \
+      photonStartDirAndWlen, step, hitIndex, maxHitIndex, outputPhotons,       \
       photonHistory, currentPhotonHistory,                                     \
       geoLayerToOMNumIndexPerStringSetLocal,                                   \
                                                                                \
@@ -562,7 +561,7 @@ __device__  __forceinline__ void checkForCollision_InCells(
       photonDirLenXYSqr, photonPosAndTime, photonDirAndWlen, thisStepLength,   \
       inv_groupvel, photonTotalPathLength, photonNumScatters,                  \
       distanceTraveledInAbsorptionLengths, photonStartPosAndTime,              \
-      photonStartDirAndWlen, step, hitShared, hitIndex, maxHitIndex, outputPhotons,       \
+      photonStartDirAndWlen, step, hitIndex, maxHitIndex, outputPhotons,       \
       geoLayerToOMNumIndexPerStringSetLocal,                                   \
                                                                                \
       geoCellIndex_##subdetectorNum, GEO_CELL_START_X_##subdetectorNum,        \
@@ -631,7 +630,7 @@ __device__  __forceinline__ bool checkForCollision(
 #else
     float thisStepLength,
 #endif
-         uint32_t *hitShared,   uint32_t *hitIndex, uint32_t maxHitIndex,  I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobal,
+    uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
     float4 *photonHistory, float4 *currentPhotonHistory,
 #endif
@@ -641,8 +640,8 @@ __device__  __forceinline__ bool checkForCollision(
   saveHit(photonPosAndTime, photonDirAndWlen, ZERO, inv_groupvel,
           photonTotalPathLength, photonNumScatters,
           distanceTraveledInAbsorptionLengths, photonStartPosAndTime,
-          photonStartDirAndWlen, step, 0, 0, hitShared, hitIndex, maxHitIndex,
-          outputPhotonsShared,  outputPhotonsGlobal
+          photonStartDirAndWlen, step, 0, 0, hitIndex, maxHitIndex,
+          outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
           ,
           photonHistory, currentPhotonHistory
@@ -670,7 +669,7 @@ __device__  __forceinline__ bool checkForCollision(
 #else // STOP_PHOTONS_ON_DETECTION
       thisStepLength, inv_groupvel, photonTotalPathLength, photonNumScatters,
       distanceTraveledInAbsorptionLengths, photonStartPosAndTime,
-      photonStartDirAndWlen, step, hitShared, hitIndex, maxHitIndex, outputPhotonsShared,  outputPhotonsGlobal,
+      photonStartDirAndWlen, step, hitIndex, maxHitIndex, outputPhotons,
 #ifdef SAVE_PHOTON_HISTORY
       photonHistory, currentPhotonHistory,
 #endif // SAVE_PHOTON_HISTORY
@@ -694,8 +693,8 @@ __device__  __forceinline__ bool checkForCollision(
     saveHit(photonPosAndTime, photonDirAndWlen, thisStepLength, inv_groupvel,
             photonTotalPathLength, photonNumScatters,
             distanceTraveledInAbsorptionLengths, photonStartPosAndTime,
-            photonStartDirAndWlen, step, hitOnString, hitOnDom, hitShared, hitIndex,
-            maxHitIndex, outputPhotonsShared,  outputPhotonsGlobal
+            photonStartDirAndWlen, step, hitOnString, hitOnDom, hitIndex,
+            maxHitIndex, outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
             ,
             photonHistory, currentPhotonHistory
@@ -888,10 +887,9 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
         const I3CLSimStepCuda &step,
         unsigned short hitOnString,
         unsigned short hitOnDom,
-        uint32_t *hitShared, //shared
-    uint32_t *hitIndex, // global
+        uint32_t *hitIndex, // shared
         uint32_t maxHitIndex,
-         I3CLSimPhotonCuda *outputPhotonsShared, I3CLSimPhotonCuda *outputPhotonsGlobal
+        I3CLSimPhotonCuda *outputPhotons
 #ifdef SAVE_PHOTON_HISTORY
         ,
         float4 *photonHistory,
@@ -899,10 +897,10 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
 #endif
 ) {
 
-  uint32_t myIndex = atomicAdd(&hitShared[0], 1); 
+  uint32_t myIndex = atomicAdd(&hitIndex[0], 1); 
  
 
-  if (myIndex < MAX_HITS_PER_SHARED) {
+  if (myIndex < maxHitIndex) {
 #ifdef PRINTF_ENABLED
     // dbg_printf("     -> photon record added at position %u.\n",
     //    myIndex);
@@ -935,31 +933,31 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
     }
 #endif
 
-    outputPhotonsShared[myIndex].posAndTime = (float4){
+    outputPhotons[myIndex].posAndTime = (float4){
         photonPosAndTime.x + thisStepLength * photonDirAndWlen.x - domPosX,
         photonPosAndTime.y + thisStepLength * photonDirAndWlen.y - domPosY,
         photonPosAndTime.z + thisStepLength * photonDirAndWlen.z - domPosZ,
         photonPosAndTime.w + thisStepLength * inv_groupvel};
 
-    outputPhotonsShared[myIndex].dir = sphDirFromCar(photonDirAndWlen);
-    outputPhotonsShared[myIndex].wavelength = photonDirAndWlen.w;
+    outputPhotons[myIndex].dir = sphDirFromCar(photonDirAndWlen);
+    outputPhotons[myIndex].wavelength = photonDirAndWlen.w;
 
-    outputPhotonsShared[myIndex].cherenkovDist =
+    outputPhotons[myIndex].cherenkovDist =
         photonTotalPathLength + thisStepLength;
-    outputPhotonsShared[myIndex].numScatters = photonNumScatters;
-    outputPhotonsShared[myIndex].weight = step.weight / getWavelengthBias(photonDirAndWlen.w);
-    outputPhotonsShared[myIndex].identifier = step.identifier;
+    outputPhotons[myIndex].numScatters = photonNumScatters;
+    outputPhotons[myIndex].weight = step.weight / getWavelengthBias(photonDirAndWlen.w);
+    outputPhotons[myIndex].identifier = step.identifier;
 
-    outputPhotonsShared[myIndex].stringID = short(hitOnString);
-    outputPhotonsShared[myIndex].omID = ushort(hitOnDom);
+    outputPhotons[myIndex].stringID = short(hitOnString);
+    outputPhotons[myIndex].omID = ushort(hitOnDom);
 
-    outputPhotonsShared[myIndex].startPosAndTime = photonStartPosAndTime;
+    outputPhotons[myIndex].startPosAndTime = photonStartPosAndTime;
 
-    outputPhotonsShared[myIndex].startDir = sphDirFromCar(photonStartDirAndWlen);
+    outputPhotons[myIndex].startDir = sphDirFromCar(photonStartDirAndWlen);
 
-    outputPhotonsShared[myIndex].groupVelocity = 1.f/(inv_groupvel);
+    outputPhotons[myIndex].groupVelocity = 1.f/(inv_groupvel);
 
-    outputPhotonsShared[myIndex].distInAbsLens = distanceTraveledInAbsorptionLengths;
+    outputPhotons[myIndex].distInAbsLens = distanceTraveledInAbsorptionLengths;
 
 #ifdef SAVE_PHOTON_HISTORY
     for (uint32_t i = 0; i < NUM_PHOTONS_IN_HISTORY; ++i) {
@@ -969,32 +967,6 @@ saveHit(const float4& photonPosAndTime, const float4& photonDirAndWlen,
 #endif
 
   }
- /*
-  __syncthreads();
-  if(*hitShared>= MAX_HITS_PER_SHARED  )
-  {
-      __shared__ uint32_t globStartIndex;
-      __syncthreads();
-    if(threadIdx.x ==0 )
-    {
-          globStartIndex = atomicAdd(&hitIndex[0], *hitShared );
-          //reset shared  counter      
-    }     
-    __syncthreads();
-    
-    uint32_t sharedIndex = threadIdx.x;
- 
-      for (; sharedIndex<*hitShared && globStartIndex+sharedIndex < maxHitIndex ; sharedIndex+= blockDim.x )
-    {  
-          outputPhotonsGlobal[globStartIndex+sharedIndex] = outputPhotonsShared[sharedIndex]; 
-    }
-
-    if(threadIdx.x ==0 ) *hitShared = 0;
- 
-  }
-
-  __syncthreads();*/
-
 }
 
 #endif // PROPAGATIONKERNELFUNCTIUONS_CUH
