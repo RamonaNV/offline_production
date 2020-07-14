@@ -1,4 +1,3 @@
-
 find_package(CUDAToolkit REQUIRED)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  -arch=sm_75 --keep  -use_fast_math --ptxas-options -v  --resource-usage")
 
