@@ -24,61 +24,51 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef MATHSTUFF_CUH
 #define MATHSTUFF_CUH
 
- 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
-
 #include <math.h>
 #include <math_constants.h>
-
 
 typedef float real_t;
 typedef float coord_t;
 
-__host__ __device__ __forceinline__ real_t
-getZenith(const coord_t &dx, const coord_t &dy, const coord_t &dz) {
-  const real_t rinv = rsqrt(dx * dx + dy * dy + dz * dz);
-  real_t theta = 0.;
-  if (1. / rinv && abs(dz * rinv) <= 1.) {
-    theta = acos(dz * rinv);
-  } else {
-    if (dz < 0.)
-      theta = CUDART_PI_F;
-  }
-  if (theta < 0.)
-    theta += 2. * CUDART_PI_F;
-  real_t zenith = CUDART_PI_F - theta;
-  if (zenith > CUDART_PI_F)
-    zenith -= CUDART_PI_F - (zenith - CUDART_PI_F);
+__host__ __device__ __forceinline__ real_t getZenith(const coord_t &dx, const coord_t &dy, const coord_t &dz)
+{
+    const real_t rinv = rsqrt(dx * dx + dy * dy + dz * dz);
+    real_t theta = 0.;
+    if (1. / rinv && abs(dz * rinv) <= 1.) {
+        theta = acos(dz * rinv);
+    } else {
+        if (dz < 0.) theta = CUDART_PI_F;
+    }
+    if (theta < 0.) theta += 2. * CUDART_PI_F;
+    real_t zenith = CUDART_PI_F - theta;
+    if (zenith > CUDART_PI_F) zenith -= CUDART_PI_F - (zenith - CUDART_PI_F);
 
-  return zenith;
+    return zenith;
 }
 
-__host__ __device__ __forceinline__ real_t
-getAzimuth(const coord_t &dx, const coord_t &dy, const coord_t &dz) {
-  real_t phi = 0;
-  if ((dx != 0.) || (dy != 0.))
-    phi = atan2(dy, dx);
-  if (phi < 0.)
-    phi += 2. * CUDART_PI_F;
+__host__ __device__ __forceinline__ real_t getAzimuth(const coord_t &dx, const coord_t &dy, const coord_t &dz)
+{
+    real_t phi = 0;
+    if ((dx != 0.) || (dy != 0.)) phi = atan2(dy, dx);
+    if (phi < 0.) phi += 2. * CUDART_PI_F;
 
-  real_t azimuth = phi + CUDART_PI_F;
-  azimuth -= (int)(azimuth / (2. * CUDART_PI_F)) * (2. * CUDART_PI_F);
-  return azimuth;
+    real_t azimuth = phi + CUDART_PI_F;
+    azimuth -= (int)(azimuth / (2. * CUDART_PI_F)) * (2. * CUDART_PI_F);
+    return azimuth;
 }
 
-__host__ __device__ __forceinline__ real_t
-CalcTheta(const coord_t &dx, const coord_t &dy, const coord_t &dz) {
-
-  return CUDART_PI_F - getZenith(dx, dy, dz);
+__host__ __device__ __forceinline__ real_t CalcTheta(const coord_t &dx, const coord_t &dy, const coord_t &dz)
+{
+    return CUDART_PI_F - getZenith(dx, dy, dz);
 }
 
-__host__ __device__ __forceinline__ real_t CalcPhi(const coord_t &dx, const coord_t &dy,
-                                          const coord_t &dz) {
-  real_t phi = CUDART_PI_F + getAzimuth(dx, dy, dz);
-  if (phi >= 2. * CUDART_PI_F)
-    phi -= 2. * CUDART_PI_F;
-  return phi;
+__host__ __device__ __forceinline__ real_t CalcPhi(const coord_t &dx, const coord_t &dy, const coord_t &dz)
+{
+    real_t phi = CUDART_PI_F + getAzimuth(dx, dy, dz);
+    if (phi >= 2. * CUDART_PI_F) phi -= 2. * CUDART_PI_F;
+    return phi;
 }
 
-#endif // MATHSTUF_CUH
+#endif  // MATHSTUF_CUH
