@@ -40,7 +40,7 @@ cudaError_t gl_err;
         printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(gl_err)), __LINE__ - 1);
 //#define PRINTLC     printf("thread 0 - in line %d \n", __LINE__);
 
-#define TIMERS
+// #define TIMERS  n 
 //#define SAVE_ALL_PHOTONS
 
 #ifdef TIMERS
@@ -215,10 +215,6 @@ __global__ void propKernel(uint32_t *hitIndex,          // deviceBuffer_CurrentN
 #endif
                            uint64_t *__restrict__ MWC_RNG_x, uint32_t *__restrict__ MWC_RNG_a)
 {
-    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= nsteps) return;
-        // if(i ==0) printf("CUDA kernel... (thread %u of %u)\n", i,
-        // global_size);
 
 #ifndef SAVE_ALL_PHOTONS
 
@@ -228,8 +224,10 @@ __global__ void propKernel(uint32_t *hitIndex,          // deviceBuffer_CurrentN
         geoLayerToOMNumIndexPerStringSetLocal[ii] = geoLayerToOMNumIndexPerStringSet[ii];
     }
     __syncthreads();
-
 #endif
+
+    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= nsteps) return;
 
 #ifdef SAVE_PHOTON_HISTORY
     float4 currentPhotonHistory[NUM_PHOTONS_IN_HISTORY];
