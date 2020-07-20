@@ -11,7 +11,7 @@ inline float rand_MWC_oc(ulong *x,uint *a);
 //////////////////////////////////////////////////////////////////////////////
 inline float rand_MWC_co(ulong *x,uint *a)
 {
-  //  float rndm[10] = {0.2, 0.6, 0.43, 0.21, 0.9, 0.76, 0.1, 0.6, 0.34, 0.78};   return rndm[*a%10];
+    float rndm[10] = {0.2, 0.6, 0.43, 0.21, 0.9, 0.76, 0.1, 0.6, 0.34, 0.78};   return rndm[*a%10];
   *x=(*x&0xfffffffful)*(*a)+(*x>>32);
 #ifdef USE_NATIVE_MATH
   return native_divide(convert_float_rtz((uint)(*x&0xfffffffful)),(float)0x100000000); // OpenCL - native divide

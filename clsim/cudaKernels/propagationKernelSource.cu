@@ -230,9 +230,12 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
 
  
   //I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_STEP];
-  __shared__ uint32_t localIndexCount;
-  if (threadIdx.x == 0) localIndexCount = 0;
-
+  __shared__ uint32_t localIndexCount, photonsLeftSharedSum; 
+  if (threadIdx.x == 0)
+  {
+      photonsLeftSharedSum = 0;
+      localIndexCount = 0;
+  } 
   extern __shared__  I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_SHARED ];
     __syncthreads();
  
@@ -268,6 +271,7 @@ const I3CLSimStepCuda step = inputSteps[i];
 #define EPSILON 0.00001f
  
   uint32_t photonsLeftToPropagate = step.numPhotons;
+  atomicAdd(&photonsLeftSharedSum, 1*(photonsLeftToPropagate<1) );
   float abs_lens_left = ZERO;
   float abs_lens_initial = ZERO;
 
@@ -475,12 +479,9 @@ collided =
 #endif // SAVE_PHOTON_HISTORY
                             geoLayerToOMNumIndexPerStringSetLocal);
 
-__shared__ uint32_t   movePhotons[1];
-*movePhotons  = uint32_t(MAX_HITS_PER_SHARED/2);
-if( photonNumScatters <=1) *movePhotons = 0;
-                            
+ 
 __syncthreads();
-if(localIndexCount> *movePhotons    )
+if(localIndexCount >= uint32_t(MAX_HITS_PER_SHARED-1) || photonsLeftSharedSum > 0 ) 
 {
     __shared__ uint32_t globStartIndex;
  
@@ -497,7 +498,10 @@ if(localIndexCount> *movePhotons    )
         outputPhotonsGlobal[globStartIndex+sharedIndex] = outputPhotons[sharedIndex]; 
   }
   //reset shared  counter      
-  if(threadIdx.x ==0 ) localIndexCount = 0;
+  if(threadIdx.x ==0 ){
+      localIndexCount = 0;
+  } 
+  
 
 }
 
@@ -536,6 +540,9 @@ __syncthreads();
       // photon was absorbed.
       // a new one will be generated at the begin of the loop.
       --photonsLeftToPropagate;
+      atomicAdd(&photonsLeftSharedSum, 1*(photonsLeftToPropagate<1) );
+ 
+
 
 #if defined(SAVE_ALL_PHOTONS) && !defined(TABULATE)
       // save every. single. photon.
@@ -581,22 +588,11 @@ __syncthreads();
 
       // optional direction transformation (for ice anisotropy)
       transformDirectionPostScatter(photonDirAndWlen);
-
-
-#ifdef PRINTF_ENABLED
-      // dbg_printf("    . cos(scat_angle)=%f sin(scat_angle)=%f\n",
-      //    cosScatAngle, sinScatAngle);
-      // dbg_printf("    . photon direction after:  d=(%f,%f,%f), wlen=%f\n",
-      //    photonDirAndWlen.x, photonDirAndWlen.y, photonDirAndWlen.z,
-      //    photonDirAndWlen.w/1e-9f);
-#endif
+ 
 
       ++photonNumScatters;
-
-#ifdef PRINTF_ENABLED
-      // dbg_printf("    . the photon has now been scattered %u time(s).\n",
-      // photonNumScatters);
-#endif
+  
+ 
     }
   }
 
