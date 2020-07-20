@@ -24,25 +24,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef PROPAGATIONKERNELSOURCE_CUH
 #define PROPAGATIONKERNELSOURCE_CUH
 
-#include <iostream>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 
+#include <iostream>
+
 //#include <dataStructCuda.cuh>
 #include <opencl/mwcrng_init.h>
+
 #include <dataStructCuda.cuh>
 
 #define NTHREADS_PER_BLOCK 512
 
-
 void finalizeCUDA();
 
-void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
-    uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-    uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a,  int sizeRNG, float& totalCudaKernelTime,const int nbenchmarks);
+void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, uint32_t maxHitIndex,
+                          unsigned short* geoLayerToOMNumIndexPerStringSet, int ngeolayer,
+                          uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a, int sizeRNG,
+                          float& totalCudaKernelTime, const int nbenchmarks);
 
-
-void photonsToFile(const std::string& filename, I3CLSimPhotonCuda *photons, unsigned int nphotons);
-void photonsToFile(const std::string& filename, I3CLSimPhoton *photons, unsigned int nphotons);
+void photonsToFile(const std::string& filename, I3CLSimPhotonCuda* photons, unsigned int nphotons);
+void photonsToFile(const std::string& filename, I3CLSimPhoton* photons, unsigned int nphotons);
 
 #endif  // PROPAGATIONKERNELSOURCE_CUH
