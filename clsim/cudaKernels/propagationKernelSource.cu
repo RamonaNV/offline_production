@@ -164,7 +164,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
 
             if(writePhotonsCsv)
             {
-                photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCudaSh.csv",h_cudaphotons, uint32_t(numberPhotons/float(nbenchmarks)) );
+                photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCudaSh.csv",h_cudaphotons, uint32_t(numberPhotons/float(nbenchmarks+1)) );
             }
             
            free(h_cudastep);    
