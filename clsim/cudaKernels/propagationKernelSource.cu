@@ -25,8 +25,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <propagationKernelFunctions.cuh>
 
 
-
-
  //__device__ global random arrays
  __device__  uint64_t* d_MWC_RNG_x;
  __device__  uint32_t* d_MWC_RNG_a;
@@ -97,32 +95,26 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
      const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime, const int nbenchmarks){
+        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv){
 
-  
-      int nlaunches = (nsteps+nsteps-1)/nsteps;
-       
-      //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
+       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
       init_RDM_CUDA( sizeRNG, MWC_RNG_x,  MWC_RNG_a);
       
-      printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, nlaunches, nsteps);
+      printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, 1, nsteps);
       uint32_t h_totalHitIndex =0;
       unsigned short *d_geolayer;
 	CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
       CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer*sizeof(unsigned short),cudaMemcpyHostToDevice));
       
- 
       //these multiple launches correspond to numBuffers..   
-      for (int ilaunch= 0 ; ilaunch<nlaunches; ++ilaunch )
-      {
-             
+      for (int ilaunch= 0 ; ilaunch<1; ++ilaunch )
+      {  
             int launchnsteps = ( (1+ilaunch)*nsteps<= nsteps) ?  nsteps : nsteps-ilaunch*nsteps;   
            
             struct I3CLSimStepCuda* h_cudastep = (struct I3CLSimStepCuda*) malloc(launchnsteps*sizeof(struct I3CLSimStepCuda));
             
             for (int i =0; i<launchnsteps; i++){
-                  h_cudastep[i] = I3CLSimStep(in_steps[i+ilaunch*nsteps]); 
-                  
+                  h_cudastep[i] = I3CLSimStep(in_steps[i+ilaunch*nsteps]);      
             } 
                  
             I3CLSimStepCuda * d_cudastep;
@@ -137,17 +129,12 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             I3CLSimPhotonCuda * d_cudaphotons;
             CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons , maxHitIndex*sizeof(I3CLSimPhotonCuda)));
 
- 
             int numBlocks =  (launchnsteps+NTHREADS_PER_BLOCK-1)/NTHREADS_PER_BLOCK;
-            
-            unsigned int sharedMem =  sizeof(struct I3CLSimStepCuda)*MAX_HITS_PER_SHARED; //MAX_HITS_PER_STEP;
+            uint32_t sharedMem =  sizeof(struct I3CLSimStepCuda)*MAX_HITS_PER_SHARED;
  
-
-            printf("maxHitIndex %u \n",maxHitIndex);
-           const uint32_t maxHitIndexPerThread = maxHitIndex/nsteps;
-            printf("avrg over thread maxHitIndex  %u and fixed MAX_HITS_PER_SHARED %d \n",maxHitIndexPerThread,MAX_HITS_PER_SHARED ); 
-  
-          printf("launching kernel propKernel<<< %d , %d, %u>>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, sharedMem, launchnsteps);
+            const uint32_t maxHitIndexPerThread = maxHitIndex/nsteps;
+            printf("remark: avrg over thread maxHitIndex  %u and fixed MAX_HITS_PER_SHARED %d \n",maxHitIndexPerThread,MAX_HITS_PER_SHARED ); 
+            printf("launching kernel propKernel<<< %d , %d, %u>>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, sharedMem, launchnsteps);
             propKernel<<<numBlocks, NTHREADS_PER_BLOCK,sharedMem >>>(d_hitIndex, maxHitIndex,  d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
             cudaDeviceSynchronize(); CUDA_CHECK_CALL
 
@@ -158,10 +145,9 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
               cudaDeviceSynchronize(); 
               std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
               totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
-             
               CUDA_CHECK_CALL
               
-             CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
+            CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
             uint32_t  numberPhotons = h_hitIndex[0];
             h_totalHitIndex += h_hitIndex[0];
             
@@ -176,7 +162,10 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
             cudaDeviceSynchronize();  
 
-            if(nbenchmarks == 0)    photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCudaSh.csv",h_cudaphotons, numberPhotons );
+            if(writePhotonsCsv)
+            {
+                photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCudaSh.csv",h_cudaphotons, uint32_t(numberPhotons/float(nbenchmarks)) );
+            }
             
            free(h_cudastep);    
            cudaFree(d_cudaphotons); 
@@ -184,8 +173,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
            cudaFree(d_geolayer); 
       }
 
-      printf( "photon hits = %f from %d steps \n", h_totalHitIndex/float(nbenchmarks+1), nsteps);
-   
+      printf( "photon hits = %f from %d steps \n", h_totalHitIndex/float(nbenchmarks+1), nsteps); 
       //check phtoton hits out:
       //for (int i = numberPhotons-10; i< numberPhotons; ++i)printf(" %d photon= %d has hit DOM= %u \n",i, h_cudaphotons[i].stringID , h_cudaphotons[i].omID);       
 }
@@ -271,7 +259,7 @@ const I3CLSimStepCuda step = inputSteps[i];
 #define EPSILON 0.00001f
  
   uint32_t photonsLeftToPropagate = step.numPhotons;
-  atomicAdd(&photonsLeftSharedSum, 1*(photonsLeftToPropagate<1) );
+  atomicAdd(&photonsLeftSharedSum, 1*(photonsLeftToPropagate<=1) );
   float abs_lens_left = ZERO;
   float abs_lens_initial = ZERO;
 
@@ -481,10 +469,11 @@ collided =
 
  
 __syncthreads();
+
 if(localIndexCount >= uint32_t(MAX_HITS_PER_SHARED-1) || photonsLeftSharedSum > 0 ) 
 {
     __shared__ uint32_t globStartIndex;
- 
+
   if(threadIdx.x ==0 )
   {
         globStartIndex = atomicAdd(&hitIndex[0], localIndexCount );
@@ -540,7 +529,8 @@ __syncthreads();
       // photon was absorbed.
       // a new one will be generated at the begin of the loop.
       --photonsLeftToPropagate;
-      atomicAdd(&photonsLeftSharedSum, 1*(photonsLeftToPropagate<1) );
+      atomicAdd(&photonsLeftSharedSum, 1*(photonsLeftToPropagate<=1) );
+
  
 
 

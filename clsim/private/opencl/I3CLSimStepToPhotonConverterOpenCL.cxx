@@ -1831,18 +1831,9 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
 
   // CUDA PART
 
-  int NSteps = steps->size();
-  int startExtract = 0;
-  // assert(NSteps + startExtract > int(steps->size()));
-  if (NSteps + startExtract > int(steps->size())) {
-    std::cerr << "not enough steps available, have=" << steps->size()
-              << " want=" << NSteps << " setting to max avail." << std::endl;
-    NSteps = int(steps->size());
-  }
-
-
- 
+int NSteps = steps->size();
 int nbenchmarks = 10;
+bool writePhotonsCsv = true;
  
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -1851,7 +1842,7 @@ int nbenchmarks = 10;
                        maxNumOutputPhotons_,
                        &geoLayerToOMNumIndexPerStringSetInfo_[0],
                        geoLayerToOMNumIndexPerStringSetInfo_.size(),
-                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, totalCudaKernelTime, nbenchmarks);
+                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, totalCudaKernelTime, nbenchmarks, writePhotonsCsv);
 
   finalizeCUDA();
   printf(" -------------  done CUDA ------------- \n");
@@ -1869,7 +1860,7 @@ int nbenchmarks = 10;
         &zeroCounterBufferSource, NULL, &(bufferWriteEvents[0]));
     queue_[0]->enqueueWriteBuffer(
         *deviceBuffer_InputSteps[0], CL_FALSE, 0, NSteps * sizeof(I3CLSimStep),
-        &((*steps)[startExtract]), NULL, &(bufferWriteEvents[1]));
+        &((*steps)[0]), NULL, &(bufferWriteEvents[1]));
     queue_[0]->flush(); // make sure it starts executing on the device
 
     log_trace("[%u] waiting for copy to finish", 0);
@@ -1878,8 +1869,6 @@ int nbenchmarks = 10;
     log_fatal("[%u] OpenCL ERROR (memcpy to device): %s (%i)", 0, err.what(),
               err.err());
   }
-
- 
 
  cl::Event kernelFinishEvent;
   queue_[0]->enqueueNDRangeKernel(
