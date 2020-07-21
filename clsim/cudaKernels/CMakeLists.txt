@@ -1,6 +1,6 @@
-
 find_package(CUDAToolkit REQUIRED)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  -arch=sm_75 --keep  -use_fast_math --ptxas-options -v  --resource-usage")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  -lineinfo") # source code information for profiling
 
 add_library(thiscudalib SHARED
   propagationKernelSource.cu
