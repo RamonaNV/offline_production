@@ -103,21 +103,20 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
       const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime, const int nbenchmarks){
-
-      int nlaunches = (nsteps+nsteps-1)/nsteps;
-       
+        uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG,
+         float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv){
+     
       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
       init_RDM_CUDA( sizeRNG, MWC_RNG_x,  MWC_RNG_a);
       
-      printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, nlaunches, nsteps);
+      printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, 1, nsteps);
       uint32_t h_totalHitIndex =0;
       unsigned short *d_geolayer;
 	CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
       CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer*sizeof(unsigned short),cudaMemcpyHostToDevice));
       
       //these multiple launches correspond to numBuffers..   
-      for (int ilaunch= 0 ; ilaunch<nlaunches; ++ilaunch )
+      for (int ilaunch= 0 ; ilaunch<1; ++ilaunch )
       {
              
             int launchnsteps = ( (1+ilaunch)*nsteps<= nsteps) ?  nsteps : nsteps-ilaunch*nsteps;   
@@ -163,13 +162,15 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
                   " of %" PRIu32 " photons", maxHitIndex, numberPhotons);
                   numberPhotons = maxHitIndex;
             }
-     
-            
+           
            // copy (max fo maxHitIndex) photons to host.
             struct I3CLSimPhotonCuda* h_cudaphotons = (struct I3CLSimPhotonCuda*) malloc(numberPhotons*sizeof(struct I3CLSimPhotonCuda));
             CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
             cudaDeviceSynchronize();  
-            if(nbenchmarks == 0)    photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCuda.csv",h_cudaphotons, numberPhotons );
+            if(writePhotonsCsv)
+            {
+              photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCuda.csv",h_cudaphotons, uint32_t(numberPhotons/float(nbenchmarks+1)) );
+            }
 
            free(h_cudastep);    
            cudaFree(d_cudaphotons); 

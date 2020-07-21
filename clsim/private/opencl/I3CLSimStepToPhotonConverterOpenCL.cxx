@@ -1829,19 +1829,12 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
   out_totalNumberOfPhotons = 0;
 #endif // DUMP_STATISTICS
 
+
   // CUDA PART
-
   int NSteps = steps->size();
-  int startExtract = 0;
-  // assert(NSteps + startExtract > int(steps->size()));
-  if (NSteps + startExtract > int(steps->size())) {
-    std::cerr << "not enough steps available, have=" << steps->size()
-              << " want=" << NSteps << " setting to max avail." << std::endl;
-    NSteps = int(steps->size());
-  }
-
- 
-int nbenchmarks = 1;
+  int nbenchmarks = 0;
+  //write some properites of photons to csv file to compare results
+  bool writePhotonsCsv = true;
 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -1850,14 +1843,11 @@ int nbenchmarks = 1;
                        maxNumOutputPhotons_,
                        &geoLayerToOMNumIndexPerStringSetInfo_[0],
                        geoLayerToOMNumIndexPerStringSetInfo_.size(),
-                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, totalCudaKernelTime, nbenchmarks);
+                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_,
+                        totalCudaKernelTime, nbenchmarks, writePhotonsCsv);
 
   finalizeCUDA();
   printf(" -------------  done CUDA ------------- \n");
-  printf("\n");
-
-
-  // CL PART
   printf(" -------------  CL ------------- \n");
   // uncomment for profiling CUDA ncu :
  // NSteps = 1;
@@ -1868,7 +1858,7 @@ int nbenchmarks = 1;
         &zeroCounterBufferSource, NULL, &(bufferWriteEvents[0]));
     queue_[0]->enqueueWriteBuffer(
         *deviceBuffer_InputSteps[0], CL_FALSE, 0, NSteps * sizeof(I3CLSimStep),
-        &((*steps)[startExtract]), NULL, &(bufferWriteEvents[1]));
+        &((*steps)[0]), NULL, &(bufferWriteEvents[1]));
     queue_[0]->flush(); // make sure it starts executing on the device
 
     log_trace("[%u] waiting for copy to finish", 0);
@@ -2019,8 +2009,11 @@ try {
             I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
       }
     }
- 
-   if(nbenchmarks == 0)    photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCL.csv", &((*photons)[0]), numberOfGeneratedPhotons );
+   if(writePhotonsCsv)
+    {
+      photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCL.csv", &((*photons)[0]), uint32_t(numberOfGeneratedPhotons/float(nbenchmarks+1)) );
+    }
+
 
   } catch (cl::Error &err) {
     log_fatal("OpenCL ERROR (memcpy from device): %s (%i)", err.what(),
