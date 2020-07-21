@@ -2007,7 +2007,7 @@ try {
       }
     }
  
-   if(nbenchmarks == 0)    photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCLSh.csv", &((*photons)[0]), numberOfGeneratedPhotons );
+      if(writePhotonsCsv) photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCLSh.csv", &((*photons)[0]), uint32_t(numberOfGeneratedPhotons/float(nbenchmarks+1))  );
 
 
   } catch (cl::Error &err) {
