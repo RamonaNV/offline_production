@@ -1929,9 +1929,6 @@ try {
  float  totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(
                     endTimeCL - startTimeCL).count();
 
-
-
-
     printf("\n   %d runs with num threads per block CUDA =  %d,  CL = %d \n", nbenchmarks, NTHREADS_PER_BLOCK, workgroupSize_);
     printf("total runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );
     printf("total runtime CL   kernel    %f [ms] \n", totalCLKernelTime  );
@@ -2009,6 +2006,7 @@ try {
             I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
       }
     }
+
    if(writePhotonsCsv)
     {
       photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCL.csv", &((*photons)[0]), uint32_t(numberOfGeneratedPhotons/float(nbenchmarks+1)) );
@@ -2061,7 +2059,6 @@ void I3CLSimStepToPhotonConverterOpenCL::CLCUDAThread(
     printf("Internal error: context is (null)");
 
   const std::size_t numBuffers = 1;
-
   checksizes(numBuffers);
 
     // notify the main thread that everything is set up
