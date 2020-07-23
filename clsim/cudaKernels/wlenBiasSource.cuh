@@ -25,11 +25,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 //#include <CLnoneCUDA.cuh>
 
-__device__ __forceinline__ float getWavelengthBias(float wavelength);
+__device__ __forceinline__ float getWavelengthBias(float wavelength,float* getWavelengthBias_dataShared);
 __device__ __forceinline__ void getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int &bin,
                                                                                  float &fraction);
 
-__constant__ float getWavelengthBias_data[43] = {
+__device__ float getWavelengthBias_data[43] = {
     6.3743244437e-05f, 9.3689183241e-05f, 8.5079797546e-05f, 6.6027579216e-05f, 3.0224487575e-05f, 1.9434074467e-03f,
     8.3768239340e-03f, 2.5880440148e-02f, 5.4108567428e-02f, 9.1253503761e-02f, 1.1007506732e-01f, 1.3161724587e-01f,
     1.4157858965e-01f, 1.4742781756e-01f, 1.5062904556e-01f, 1.5092873970e-01f, 1.4809603255e-01f, 1.4269860493e-01f,
@@ -59,13 +59,13 @@ __device__ __forceinline__ void getWavelengthBias_getInterpolationBinAndFraction
     bin = ibin;
 }
 
-__device__ __forceinline__ float getWavelengthBias(float wavelength)
+__device__ __forceinline__ float getWavelengthBias(float wavelength, float* getWavelengthBias_dataShared)
 {
     int bin;
     float fraction;
     getWavelengthBias_getInterpolationBinAndFraction(wavelength, bin, fraction);
 
-    return mix(getWavelengthBias_data[bin], getWavelengthBias_data[bin + 1], fraction);
+    return mix(getWavelengthBias_dataShared[bin], getWavelengthBias_dataShared[bin + 1], fraction);
 }
 
 #endif  // WLENBIASSOURCE_CUH

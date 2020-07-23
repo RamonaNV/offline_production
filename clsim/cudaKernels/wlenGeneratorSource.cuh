@@ -48,9 +48,9 @@ __device__ float _generateWavelength_0distYCumulativeValues[_generateWavelength_
     1.0000000000e+00f,
 };
 
-__device__ __forceinline__ float generateWavelength_0(RNG_ARGS);
+__device__ __forceinline__ float generateWavelength_0(RNG_ARGS, float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared);
 
-__device__ __forceinline__ float generateWavelength_0(RNG_ARGS)
+__device__ __forceinline__ float generateWavelength_0(RNG_ARGS, float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared)
 {
     const float randomNumber = RNG_CALL_UNIFORM_OC;
 
@@ -58,7 +58,7 @@ __device__ __forceinline__ float generateWavelength_0(RNG_ARGS)
     // float this_acu = _generateWavelength_0distYCumulativeValues[0];
     float this_acu = 0.f;  // this is 0 by definition!
     for (;;) {
-        float next_acu = _generateWavelength_0distYCumulativeValues[k + 1];
+        float next_acu = _generateWavelength_0distYCumulativeValuesShared[k + 1];
         if (next_acu >= randomNumber) break;
         this_acu = next_acu;
         ++k;
@@ -66,11 +66,11 @@ __device__ __forceinline__ float generateWavelength_0(RNG_ARGS)
 
     // look between bins k and k+1
 
-    const float b = _generateWavelength_0distYValues[k];
+    const float b = _generateWavelength_0distYValuesShared[k];
 
     const float x0 = __uint2float_rz(k) * (1.0000000000e-08f) + (2.6000000000e-07f);  // _rtz=="round to zero"
 
-    const float slope = (_generateWavelength_0distYValues[k + 1] - b) / (1.0000000000e-08f);
+    const float slope = (_generateWavelength_0distYValuesShared[k + 1] - b) / (1.0000000000e-08f);
     const float dy = randomNumber - this_acu;
 
     if ((b == 0.f) && (slope == 0.f)) {
@@ -85,11 +85,11 @@ __device__ __forceinline__ float generateWavelength_0(RNG_ARGS)
     }
 }
 
-__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS);
+__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS, float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared);
 
-__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS)
+__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS, float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared)
 {
-    return generateWavelength_0(RNG_ARGS_TO_CALL);
+    return generateWavelength_0(RNG_ARGS_TO_CALL,  _generateWavelength_0distYValuesShared,   _generateWavelength_0distYCumulativeValuesShared) ;
 }
 
 #endif
