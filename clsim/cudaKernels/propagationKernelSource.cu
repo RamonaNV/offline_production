@@ -218,11 +218,12 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
 
  
   //I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_STEP];
-  __shared__ uint32_t localIndexCount, photonsLeftSharedSum; 
+  __shared__ uint32_t localIndexCount, photonsLeftSharedSum, lastThread[2];
   if (threadIdx.x == 0)
   {
       photonsLeftSharedSum = 0;
       localIndexCount = 0;
+      lastThread[0] = 0; lastThread[1] =0;
   } 
   extern __shared__  I3CLSimPhotonCuda outputPhotons[MAX_HITS_PER_SHARED ];
     __syncthreads();
@@ -260,6 +261,14 @@ const I3CLSimStepCuda step = inputSteps[i];
  
   uint32_t photonsLeftToPropagate = step.numPhotons;
   atomicAdd(&photonsLeftSharedSum, 1*(photonsLeftToPropagate<=1) );
+
+      //get thread with highest number of photons
+      if( lastThread[1]< photonsLeftToPropagate )
+      {
+            lastThread[0] = threadIdx.x;
+            lastThread[1] = photonsLeftToPropagate;
+      }
+       
   float abs_lens_left = ZERO;
   float abs_lens_initial = ZERO;
 
@@ -467,14 +476,22 @@ collided =
 #endif // SAVE_PHOTON_HISTORY
                             geoLayerToOMNumIndexPerStringSetLocal);
 
- 
+
+__syncthreads();
+//get thread with highest number of photons
+if( lastThread[1]< photonsLeftToPropagate )
+{
+      lastThread[0] = threadIdx.x;
+      lastThread[1] = photonsLeftToPropagate;
+}
+
 __syncthreads();
 
-if(localIndexCount >= uint32_t(MAX_HITS_PER_SHARED-1) || photonsLeftSharedSum > 0 ) 
+if(localIndexCount >= uint32_t(MAX_HITS_PER_SHARED/2) || photonsLeftSharedSum > 0 ) 
 {
     __shared__ uint32_t globStartIndex;
 
-  if(threadIdx.x ==0 )
+  if(threadIdx.x ==lastThread[0] )
   {
         globStartIndex = atomicAdd(&hitIndex[0], localIndexCount );
   }     
@@ -482,16 +499,18 @@ if(localIndexCount >= uint32_t(MAX_HITS_PER_SHARED-1) || photonsLeftSharedSum > 
   
   uint32_t sharedIndex = threadIdx.x;
 
+  // ! bug ! todo there is a bug here, because not all threads are active at this point.
     for (; sharedIndex<localIndexCount && globStartIndex+sharedIndex < maxHitIndex ; sharedIndex+= blockDim.x )
   {  
         outputPhotonsGlobal[globStartIndex+sharedIndex] = outputPhotons[sharedIndex]; 
   }
   //reset shared  counter      
-  if(threadIdx.x ==0 ){
+  if(threadIdx.x==lastThread[0]){
       localIndexCount = 0;
   } 
   
-
+  __syncthreads();
+ 
 }
 
 __syncthreads();
@@ -530,8 +549,12 @@ __syncthreads();
       // a new one will be generated at the begin of the loop.
       --photonsLeftToPropagate;
       atomicAdd(&photonsLeftSharedSum, 1*(photonsLeftToPropagate<=1) );
-
- 
+      //get thread with highest number of photons
+      if( lastThread[0] == threadIdx.x )
+      {
+            lastThread[1] = photonsLeftToPropagate;
+      }
+      
 
 
 #if defined(SAVE_ALL_PHOTONS) && !defined(TABULATE)

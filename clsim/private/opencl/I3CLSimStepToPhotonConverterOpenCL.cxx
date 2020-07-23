@@ -1832,8 +1832,8 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
   // CUDA PART
 
 int NSteps = steps->size();
-int nbenchmarks = 10;
-bool writePhotonsCsv = true;
+int nbenchmarks = 5;
+bool writePhotonsCsv = false;
  
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
