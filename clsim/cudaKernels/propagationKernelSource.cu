@@ -27,8 +27,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <fstream>
 
  //__device__ global random arrays
- __device__  uint64_t* d_MWC_RNG_x;
- __device__  uint32_t* d_MWC_RNG_a;
+ uint64_t* d_MWC_RNG_x;
+ uint32_t* d_MWC_RNG_a;
  
  cudaError_t gl_err;
 
