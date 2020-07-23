@@ -26,11 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <fstream>
 
- //__device__ global random arrays
- uint64_t* d_MWC_RNG_x;
- uint32_t* d_MWC_RNG_a;
- 
- cudaError_t gl_err;
+cudaError_t gl_err;
 
 #define CUDA_ERR_CHECK(e) if(cudaError_t(e)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(e)), __LINE__);
 #define CUDA_CHECK_CALL   gl_err = cudaGetLastError(); if(cudaError_t(gl_err)!=cudaSuccess) printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(gl_err)), __LINE__-1);
@@ -88,16 +84,16 @@ void photonsToFile(const std::string& filename, I3CLSimPhoton *photons, unsigned
 
 
 // maxNumbWOrkItems from  CL rndm arrays
-void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG_a)  
+void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG_a, uint64_t** d_MWC_RNG_x, uint32_t** d_MWC_RNG_a)  
 {
-	CUDA_ERR_CHECK(cudaMalloc(&d_MWC_RNG_a , maxNumWorkitems* sizeof(uint32_t)));
-	CUDA_ERR_CHECK(cudaMalloc(&d_MWC_RNG_x , maxNumWorkitems * sizeof(uint64_t)));
+	CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a , maxNumWorkitems* sizeof(uint32_t)));
+	CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_x , maxNumWorkitems * sizeof(uint64_t)));
    
-	CUDA_ERR_CHECK(cudaMemcpy(d_MWC_RNG_a, MWC_RNG_a,  maxNumWorkitems*sizeof(uint32_t),cudaMemcpyHostToDevice));
-      CUDA_ERR_CHECK(cudaMemcpy(d_MWC_RNG_x, MWC_RNG_x, maxNumWorkitems* sizeof(uint64_t),cudaMemcpyHostToDevice));
+	CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_a, MWC_RNG_a,  maxNumWorkitems*sizeof(uint32_t),cudaMemcpyHostToDevice));
+    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_x, MWC_RNG_x, maxNumWorkitems* sizeof(uint64_t),cudaMemcpyHostToDevice));
       
-      cudaDeviceSynchronize();
-      printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
+    cudaDeviceSynchronize();
+    printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
 }
 
 
@@ -107,12 +103,14 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
          float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv, const std::string& csvFilename){
      
       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
-      init_RDM_CUDA( sizeRNG, MWC_RNG_x,  MWC_RNG_a);
+      uint64_t* d_MWC_RNG_x;
+      uint32_t* d_MWC_RNG_a;
+      init_RDM_CUDA( sizeRNG, MWC_RNG_x,  MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
       
       printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, 1, nsteps);
       uint32_t h_totalHitIndex =0;
       unsigned short *d_geolayer;
-	CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
+	  CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
       CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer*sizeof(unsigned short),cudaMemcpyHostToDevice));
       
       //these multiple launches correspond to numBuffers..   
@@ -178,16 +176,16 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
            cudaFree(d_geolayer); 
       }
 
-      printf( "photon hits = %f from %d steps \n", h_totalHitIndex/float(nbenchmarks+1), nsteps);
+    cudaFree(d_MWC_RNG_a);
+    cudaFree(d_MWC_RNG_x);
+    printf( "photon hits = %f from %d steps \n", h_totalHitIndex/float(nbenchmarks+1), nsteps);
    
-      //check phtoton hits out:
-      //for (int i = numberPhotons-10; i< numberPhotons; ++i)printf(" %d photon= %d has hit DOM= %u \n",i, h_cudaphotons[i].stringID , h_cudaphotons[i].omID);       
+    //check phtoton hits out:
+    //for (int i = numberPhotons-10; i< numberPhotons; ++i)printf(" %d photon= %d has hit DOM= %u \n",i, h_cudaphotons[i].stringID , h_cudaphotons[i].omID);       
 }
 
 
 void finalizeCUDA(){
-      cudaFree(d_MWC_RNG_a);
-      cudaFree(d_MWC_RNG_x);
       cudaDeviceSynchronize();  
 }
 
