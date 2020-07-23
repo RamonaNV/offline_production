@@ -66,7 +66,7 @@ const  unsigned short* __restrict__  geoLayerToOMNumIndexPerStringSet,
 
 void photonsToFile(const std::string& filename, I3CLSimPhotonCuda *photons, unsigned int nphotons){
       std::cout<< " writing "<< nphotons << " to file "<< filename<<std::endl;
-      std::ofstream outputFile; outputFile.open (filename);
+      std::ofstream outputFile; outputFile.open (filename + "photonsCuda.csv");
       for (unsigned int i = 0; i <  nphotons; i++)
       {  
               outputFile <<photons[i].posAndTime.x << "," << photons[i].posAndTime.y << "," << photons[i].numScatters << std::endl;
@@ -77,7 +77,7 @@ void photonsToFile(const std::string& filename, I3CLSimPhotonCuda *photons, unsi
 
 void photonsToFile(const std::string& filename, I3CLSimPhoton *photons, unsigned int nphotons){
       std::cout<< " writing "<< nphotons << " to file "<< filename<<std::endl;
-      std::ofstream  outputFile;  outputFile.open (filename);
+      std::ofstream  outputFile;  outputFile.open (filename + "photonsCL.csv");
       for (unsigned int i = 0; i <  nphotons; i++)
       {  
             outputFile <<photons[i].GetPosX() << "," << photons[i].GetPosY() << "," << photons[i].GetNumScatters() << std::endl;
@@ -104,7 +104,7 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
       const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
         uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG,
-         float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv){
+         float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv, const std::string& csvFilename){
      
       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
       init_RDM_CUDA( sizeRNG, MWC_RNG_x,  MWC_RNG_a);
@@ -169,7 +169,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             cudaDeviceSynchronize();  
             if(writePhotonsCsv)
             {
-              photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCuda.csv",h_cudaphotons, uint32_t(numberPhotons/float(nbenchmarks+1)) );
+              photonsToFile(csvFilename,h_cudaphotons, uint32_t(numberPhotons/float(nbenchmarks+1)) );
             }
 
            free(h_cudastep);    

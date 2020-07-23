@@ -1832,9 +1832,10 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
 
   // CUDA PART
   int NSteps = steps->size();
-  int nbenchmarks = 0;
+  int nbenchmarks = 1;
   //write some properites of photons to csv file to compare results
   bool writePhotonsCsv = true;
+  std::string path("/home/hschwanekamp/nvidia/offline_production/build/");
 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -1844,7 +1845,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
                        &geoLayerToOMNumIndexPerStringSetInfo_[0],
                        geoLayerToOMNumIndexPerStringSetInfo_.size(),
                        &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_,
-                        totalCudaKernelTime, nbenchmarks, writePhotonsCsv);
+                        totalCudaKernelTime, nbenchmarks, writePhotonsCsv, path);
 
   finalizeCUDA();
   printf(" -------------  done CUDA ------------- \n");
@@ -2009,7 +2010,7 @@ try {
 
    if(writePhotonsCsv)
     {
-      photonsToFile("/home/rhohl/IceCube/offline_production/build/photonsCL.csv", &((*photons)[0]), uint32_t(numberOfGeneratedPhotons/float(nbenchmarks+1)) );
+      photonsToFile(path, &((*photons)[0]), uint32_t(numberOfGeneratedPhotons/float(nbenchmarks+1)) );
     }
 
 
