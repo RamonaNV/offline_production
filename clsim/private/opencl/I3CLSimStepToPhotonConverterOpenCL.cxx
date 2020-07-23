@@ -1832,7 +1832,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
 
   // CUDA PART
   int NSteps = steps->size();
-  int nbenchmarks = 0;
+  int nbenchmarks = 1;
   //write some properites of photons to csv file to compare results
   bool writePhotonsCsv = true;
 

@@ -213,13 +213,24 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
   #ifndef SAVE_ALL_PHOTONS
  
   __shared__    unsigned short   geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
+  __shared__  float _generateWavelength_0distYValuesShared[_generateWavelength_0NUM_DIST_ENTRIES];
+  __shared__  float _generateWavelength_0distYCumulativeValuesShared[_generateWavelength_0NUM_DIST_ENTRIES];
+  __shared__ float getWavelengthBias_dataShared[_generateWavelength_0NUM_DIST_ENTRIES];
+
 
 for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; ii+= blockDim.x){
       geoLayerToOMNumIndexPerStringSetLocal[ii] =geoLayerToOMNumIndexPerStringSet[ii]; 
+}    
+  #endif
+
+  for (int ii = threadIdx.x ; ii<_generateWavelength_0NUM_DIST_ENTRIES; ii+= blockDim.x){
+      _generateWavelength_0distYValuesShared[ii] =_generateWavelength_0distYValues[ii]; 
+      _generateWavelength_0distYCumulativeValuesShared[ii] =_generateWavelength_0distYCumulativeValues[ii];
+      getWavelengthBias_dataShared[ii] = getWavelengthBias_data[ii];
 }  
   __syncthreads();
-  
-  #endif
+
+ 
 
 
   #ifdef SAVE_PHOTON_HISTORY
@@ -292,7 +303,7 @@ const I3CLSimStepCuda step = inputSteps[i];
 
       // create a new photon
       createPhotonFromTrack(step, stepDir, RNG_ARGS_TO_CALL, photonPosAndTime,
-                        photonDirAndWlen);
+                        photonDirAndWlen, _generateWavelength_0distYValuesShared,   _generateWavelength_0distYCumulativeValuesShared);
       #ifdef TIMERS
             if( tid==0 )
             {
@@ -446,7 +457,7 @@ bool
      
 collided =  
 #endif // STOP_PHOTONS_ON_DETECTION
-          checkForCollision(photonPosAndTime, photonDirAndWlen, inv_groupvel,
+          checkForCollision(photonPosAndTime, photonDirAndWlen, getWavelengthBias_dataShared, inv_groupvel,
                             photonTotalPathLength, photonNumScatters,
                             abs_lens_initial - abs_lens_left,
                             photonStartPosAndTime, photonStartDirAndWlen, step,
@@ -500,7 +511,7 @@ collided =
 #if defined(SAVE_ALL_PHOTONS) && !defined(TABULATE)
       // save every. single. photon.
      // if (RNG_CALL_UNIFORM_CO < SAVE_ALL_PHOTONS_PRESCALE) {
-        saveHit(photonPosAndTime, photonDirAndWlen,
+        saveHit(photonPosAndTime, photonDirAndWlen,getWavelengthBias_dataShared,
                 0., // photon has already been propagated to the next position
                 inv_groupvel, photonTotalPathLength, photonNumScatters,
                 abs_lens_initial, photonStartPosAndTime, photonStartDirAndWlen,
