@@ -25,8 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <I3CLSimPhoton.h>
 #include <I3CLSimStep.h>
-
-__host__ __device__ __attribute__((packed)) struct I3CLSimStepCuda {
+struct I3CLSimStepCuda {
     float4 posAndTime;           // x,y,z,time                      // 4x  4byte float
     float4 dirAndLengthAndBeta;  // theta,phi,length,beta    // 4x 4byte float
     uint32_t numPhotons;         //    4byte unsigned
@@ -56,17 +55,7 @@ __host__ __device__ __attribute__((packed)) struct I3CLSimStepCuda {
     }
 };
 
-/*
-
-  __host__ I3CLSimStepCuda(const I3CLSimStep &i3step)
-      : posAndTime{i3step.GetPosX(), i3step.GetPosY(), i3step.GetPosZ(),
-                   i3step.GetTime()},
-        dirAndLengthAndBeta{i3step.GetDirTheta(), i3step.GetDirPhi(),
-                            i3step.GetLength(), i3step.GetBeta()},
-        numPhotons(i3step.numPhotons), weight(i3step.weight),
-        identifier(i3step.GetID()), sourceType(i3step.sourceType) {}*/
-
-__host__ __device__ struct __attribute__((packed)) I3CLSimPhotonCuda {
+struct I3CLSimPhotonCuda {
     float4 posAndTime;       // x,y,z,time                      // 4x 32bit float
     float2 dir;              // theta,phi                                // 2x 32bit float
     float wavelength;        // photon wavelength                  //    32bit float
@@ -102,29 +91,5 @@ __host__ __device__ struct __attribute__((packed)) I3CLSimPhotonCuda {
     {
     }
 };
-
-/*
-
-__host__ __device__ struct __attribute__ ((packed)) I3CLSimTableEntryCuda
-{
-    uint32_t index;
-    float weight;
-};
-
-__host__ __device__ struct __attribute__ ((packed)) I3CLSimReferenceParticleCuda
-{
-    float4 posAndTime;   // x,y,z,time
-    float4 dir;          // dx,dy,dz,0
-    float4 perpDir;
-
-    __host__  I3CLSimReferenceParticleCuda(const I3CLSimReferenceParticle&
-i3part) :  posAndTime{i3part.GetPosX(), i3part.GetPosY(),i3part.GetPosZ(),
-i3part.GetTime() }, dirAndLengthAndBeta{i3step.GetDirTheta(),
-i3step.GetDirPhi(),i3step.GetLength(), i3step.GetBeta()},
-    numPhotons(i3step.numPhotons), weight(i3step.weight),
-identifier(i3step.GetID() ), sourceType(i3step.sourceType)
-    {}
-
-};*/
 
 #endif  // DATASTRUCCUDA_CUH

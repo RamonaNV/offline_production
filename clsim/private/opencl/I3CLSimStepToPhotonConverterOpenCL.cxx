@@ -1930,7 +1930,7 @@ try {
  float  totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(
                     endTimeCL - startTimeCL).count();
 
-    printf("\n   %d runs with num threads per block CUDA =  %d,  CL = %d \n", nbenchmarks, NTHREADS_PER_BLOCK, workgroupSize_);
+    printf("\n   %u runs with num threads per block CUDA =  %d,  CL = %d \n", nbenchmarks, NTHREADS_PER_BLOCK, workgroupSize_);
     printf("total runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );
     printf("total runtime CL   kernel    %f [ms] \n", totalCLKernelTime  );
     printf("avrg runtime CUDA  kernel      %f [ms] \n", totalCudaKernelTime/float(nbenchmarks) );

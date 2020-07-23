@@ -212,7 +212,7 @@ private:
     friend class icecube::serialization::access;
     template <class Archive> void load(Archive & ar, unsigned version);
     template <class Archive> void save(Archive & ar, unsigned version) const;
-    I3_SERIALIZATION_SPLIT_MEMBER();
+    I3_SERIALIZATION_SPLIT_MEMBER()
 } __attribute__ ((packed)) ;
 
 template<> void I3CLSimPhoton::save(icecube::archive::portable_binary_oarchive &ar, unsigned version) const;
