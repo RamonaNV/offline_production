@@ -43,6 +43,7 @@
 #include <propagationKernelSource.cuh>
 #include <chrono>
 #include <ctime>
+#include <random>
 
 
 // debugging: show GPUtime/photon
@@ -1836,6 +1837,24 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
   //write some properites of photons to csv file to compare results
   bool writePhotonsCsv = true;
   std::string path("/home/hschwanekamp/nvidia/offline_production/build/");
+  bool useReproducableNumbers = true;
+
+  // generate some random numbers to have compareable results
+  constexpr int numRNGSets = 16384;
+  constexpr int numbersPerSet = 512;
+  constexpr int numbersTotal = numbersPerSet * numRNGSets;
+  constexpr int seed = 23072020;
+  std::vector<float> regressionTestRNGNumbers;
+  if(useReproducableNumbers)
+  {
+      std::default_random_engine rng(seed);
+      std::uniform_real_distribution<float> dist(0,1);
+      regressionTestRNGNumbers.resize(numbersTotal);
+      for(int i=0; i<numbersTotal;++i)
+      {
+          regressionTestRNGNumbers[i] = dist(rng);
+      }
+  }
 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -1845,7 +1864,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
                        &geoLayerToOMNumIndexPerStringSetInfo_[0],
                        geoLayerToOMNumIndexPerStringSetInfo_.size(),
                        &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_,
-                        totalCudaKernelTime, nbenchmarks, writePhotonsCsv, path);
+                        totalCudaKernelTime, nbenchmarks, writePhotonsCsv, path, regressionTestRNGNumbers);
 
   finalizeCUDA();
   printf(" -------------  done CUDA ------------- \n");

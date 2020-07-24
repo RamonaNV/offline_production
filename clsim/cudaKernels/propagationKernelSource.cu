@@ -91,7 +91,7 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
    
 	CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_a, MWC_RNG_a,  maxNumWorkitems*sizeof(uint32_t),cudaMemcpyHostToDevice));
     CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_x, MWC_RNG_x, maxNumWorkitems* sizeof(uint64_t),cudaMemcpyHostToDevice));
-      
+    
     cudaDeviceSynchronize();
     printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
 }
@@ -100,7 +100,8 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
       const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
         uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG,
-         float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv, const std::string& csvFilename){
+         float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv, const std::string& csvFilename,
+         const std::vector<float>& predictableRNGValues){
      
       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
       uint64_t* d_MWC_RNG_x;
