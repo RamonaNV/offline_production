@@ -23,6 +23,31 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef mwcrngKernelSource_CUH
 #define mwcrngKernelSource_CUH
 
+#include "../private/opencl/regressionTesting.h"
+
+#ifdef REPRODUCEABLE_RNG
+
+__device__ __forceinline__ float reproduceableRNG_co(uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums)
+{
+    *rngSet = *rngSet % REP_RNG_SETS;
+    float value = repRngNums[*rngSet * REP_RNG_NUMS_PER_SET + *numInRngSet];
+    *numInRngSet = (*numInRngSet+1) % REP_RNG_NUMS_PER_SET;
+    return value;
+}
+
+__device__ __forceinline__ float reproduceableRNG_oc(uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums)
+{
+    return 1.0f - reproduceableRNG_co(rngSet, numInRngSet, repRngNums);
+}
+
+#define RNG_ARGS uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums
+#define RNG_ARGS_TO_CALL rngSet, numInRngSet, repRngNums
+#define RNG_CALL_UNIFORM_CO reproduceableRNG_co(rngSet, numInRngSet, repRngNums)
+#define RNG_CALL_UNIFORM_OC reproduceableRNG_oc(rngSet, numInRngSet, repRngNums)
+
+
+#else // REPRODUCEABLE_RNG
+
 // Multiply-with-carry random number generator for OpenCL using an
 // implementation along the lines of the CUDAMCML code described here:
 // http://www.atomic.physics.lu.se/fileadmin/atomfysik/Biophotonics/Software/CUDAMCML.pdf
@@ -48,5 +73,7 @@ __device__ __forceinline__ float rand_MWC_oc(uint64_t *x, uint32_t *a) { return 
 #define RNG_ARGS_TO_CALL rnd_x, rnd_a
 #define RNG_CALL_UNIFORM_CO rand_MWC_co(rnd_x, rnd_a)
 #define RNG_CALL_UNIFORM_OC rand_MWC_oc(rnd_x, rnd_a)
+
+#endif // REPRODUCEABLE_RNG
 
 #endif

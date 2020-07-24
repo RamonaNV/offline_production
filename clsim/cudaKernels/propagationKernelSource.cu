@@ -23,7 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // !! order matters:
 #include <propagationKernelSource.cuh>
 #include <propagationKernelFunctions.cuh>
-
+#include "../private/opencl/regressionTesting.h"
+#include "mwcrngKernelSource.cuh"
 #include <fstream>
 
 cudaError_t gl_err;
@@ -57,7 +58,7 @@ const  unsigned short* __restrict__  geoLayerToOMNumIndexPerStringSet,
 #ifdef SAVE_PHOTON_HISTORY
            float4 *photonHistory,
 #endif
-           uint64_t* __restrict__  MWC_RNG_x, uint32_t* __restrict__  MWC_RNG_a);
+           uint64_t* __restrict__  MWC_RNG_x, uint32_t* __restrict__  MWC_RNG_a, float* __restrict__ repRngNums);
 
 
 void photonsToFile(const std::string& filename, I3CLSimPhotonCuda *photons, unsigned int nphotons){
@@ -86,10 +87,10 @@ void photonsToFile(const std::string& filename, I3CLSimPhoton *photons, unsigned
 // maxNumbWOrkItems from  CL rndm arrays
 void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG_a, uint64_t** d_MWC_RNG_x, uint32_t** d_MWC_RNG_a)  
 {
-	CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a , maxNumWorkitems* sizeof(uint32_t)));
-	CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_x , maxNumWorkitems * sizeof(uint64_t)));
+    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a , maxNumWorkitems* sizeof(uint32_t)));
+    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_x , maxNumWorkitems * sizeof(uint64_t)));
    
-	CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_a, MWC_RNG_a,  maxNumWorkitems*sizeof(uint32_t),cudaMemcpyHostToDevice));
+    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_a, MWC_RNG_a,  maxNumWorkitems*sizeof(uint32_t),cudaMemcpyHostToDevice));
     CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_x, MWC_RNG_x, maxNumWorkitems* sizeof(uint64_t),cudaMemcpyHostToDevice));
     
     cudaDeviceSynchronize();
@@ -100,8 +101,7 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
       const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
         uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG,
-         float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv, const std::string& csvFilename,
-         const std::vector<float>& predictableRNGValues){
+         float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv, const std::string& csvFilename){
      
       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
       uint64_t* d_MWC_RNG_x;
@@ -114,6 +114,13 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
 	  CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
       CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer*sizeof(unsigned short),cudaMemcpyHostToDevice));
       
+      float* d_reprng=nullptr;
+#ifdef REPRODUCEABLE_RNG 
+        std::vector<float> rngVals = genReproduceableRandomNumbers();
+        CUDA_ERR_CHECK(cudaMalloc(&d_reprng , rngVals.size()* sizeof(float)));
+        CUDA_ERR_CHECK(cudaMemcpy(d_reprng, rngVals.data(),  rngVals.size()*sizeof(float), cudaMemcpyHostToDevice));
+#endif
+
       //these multiple launches correspond to numBuffers..   
       for (int ilaunch= 0 ; ilaunch<1; ++ilaunch )
       {
@@ -141,18 +148,18 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             int numBlocks =  (launchnsteps+NTHREADS_PER_BLOCK-1)/NTHREADS_PER_BLOCK;
             printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, launchnsteps);
 
-            propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+            propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a, d_reprng);
             cudaDeviceSynchronize(); 
 
             std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
             for (int b = 0 ; b< nbenchmarks; ++b){    
-                  propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+                  propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a, d_reprng);
             }
-              cudaDeviceSynchronize(); 
-              std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
-              totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+            cudaDeviceSynchronize(); 
+            std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
+            totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
                     
-             CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
+            CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
             uint32_t  numberPhotons = h_hitIndex[0];
             h_totalHitIndex += h_hitIndex[0];
             
@@ -179,6 +186,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
 
     cudaFree(d_MWC_RNG_a);
     cudaFree(d_MWC_RNG_x);
+    cudaFree(d_reprng);
     printf( "photon hits = %f from %d steps \n", h_totalHitIndex/float(nbenchmarks+1), nsteps);
    
     //check phtoton hits out:
@@ -202,7 +210,7 @@ const   unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
 #ifdef SAVE_PHOTON_HISTORY
            float4 *photonHistory,
 #endif
-           uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a)
+           uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a, float* __restrict__ repRngNums)
            {
 
   unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -236,12 +244,19 @@ for (int ii = threadIdx.x ; ii<GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE;
       float4 currentPhotonHistory[NUM_PHOTONS_IN_HISTORY];
   #endif
 
+#ifdef REPRODUCEABLE_RNG
+    uint32_t real_rngset = i;
+    uint32_t real_rngNuMInSet = 0;  
+    uint32_t *rngSet = &real_rngset;
+    uint32_t *numInRngSet = &real_rngNuMInSet;
+#else
   // download MWC RNG state
   uint64_t real_rnd_x = MWC_RNG_x[i];
   uint32_t real_rnd_a = MWC_RNG_a[i];
   uint64_t *rnd_x = &real_rnd_x;
   uint32_t *rnd_a = &real_rnd_a;
- 
+ #endif
+
 #ifdef TIMERS
 uint64_t start, end;
       int tid = threadIdx.x;
@@ -299,6 +314,11 @@ const I3CLSimStepCuda step = inputSteps[i];
       #ifdef TIMERS
             if( tid==0  ) start = clock64();
       #endif
+
+#ifdef REPRODUCEABLE_RNG
+    ++(*rngSet);
+    *numInRngSet = 0;
+#endif
 
       // create a new photon
       createPhotonFromTrack(step, stepDir, RNG_ARGS_TO_CALL, photonPosAndTime,
@@ -590,8 +610,10 @@ __syncthreads();
   }
 #endif
  
+#ifndef REPRODUCEABLE_RNG
   // upload MWC RNG state
   MWC_RNG_x[i] = real_rnd_x;
   MWC_RNG_a[i] = real_rnd_a;
+#endif
  
 }
