@@ -432,7 +432,11 @@ __kernel void propKernel(
 #endif
 
     __global ulong* MWC_RNG_x,
-    __global uint* MWC_RNG_a)
+    __global uint* MWC_RNG_a
+    #ifdef REPRODUCEABLE_RNG
+    ,  __global float* repRngNums
+     #endif
+    )
 {
     unsigned int i = get_global_id(0);
 
@@ -459,11 +463,23 @@ __kernel void propKernel(
     float4 currentPhotonHistory[NUM_PHOTONS_IN_HISTORY];
 #endif
 
+
+
+
+#ifdef REPRODUCEABLE_RNG
+    uint real_rngset = i;
+    uint real_rngNuMInSet = 0;  
+    uint *rngSet = &real_rngset;
+    uint *numInRngSet = &real_rngNuMInSet;
+#else
     //download MWC RNG state
     ulong real_rnd_x = MWC_RNG_x[i];
     uint real_rnd_a = MWC_RNG_a[i];
     ulong *rnd_x = &real_rnd_x;
     uint *rnd_a = &real_rnd_a;
+
+ #endif
+
 
     // download the step
     struct I3CLSimStep step;

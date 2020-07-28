@@ -530,6 +530,7 @@ private:
     std::vector<uint32_t> MWC_RNG_a;
     boost::shared_ptr<cl::Buffer> deviceBuffer_MWC_RNG_x;
     boost::shared_ptr<cl::Buffer> deviceBuffer_MWC_RNG_a;
+    boost::shared_ptr<cl::Buffer> deviceBuffer_d_reprng;
     
     // Memory buffers on the device
     std::vector<boost::shared_ptr<cl::Buffer> > deviceBuffer_InputSteps;

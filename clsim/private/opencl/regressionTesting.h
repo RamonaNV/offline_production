@@ -22,11 +22,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifndef regressionTesting_H
 #define regressionTesting_H
+#include "repRNGDefines.h"
 
 #include <vector>
 #include <random>
 
-#define REPRODUCEABLE_RNG // komment that in / out to enable the same random number to be used for every step
+//#define REPRODUCEABLE_RNG // komment that in / out to enable the same random number to be used for every step
 
 // instructions:
 // if REPRODUCEABLE_RNG is defined, code should:
@@ -37,8 +38,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // get the random number from the array returned by genReproduceableRandomNumbers() at position (set * REP_RNG_NUMS_PER_SET + numInSet)
 // that should result in compareable results across multiple runs of all variations of the code
 
-#define REP_RNG_SETS 16384
-#define REP_RNG_NUMS_PER_SET 512
+//#define REP_RNG_SETS 16384
+//#define REP_RNG_NUMS_PER_SET 512
+inline std::vector<float> genReproduceableRandomNumbers();
 
 // generate some random numbers, will generate the same number every time the function is called 
 inline std::vector<float> genReproduceableRandomNumbers()
