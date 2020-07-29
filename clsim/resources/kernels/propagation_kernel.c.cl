@@ -434,7 +434,7 @@ __kernel void propKernel(
     __global ulong* MWC_RNG_x,
     __global uint* MWC_RNG_a
     #ifdef REPRODUCEABLE_RNG
-    ,  __global float* repRngNums
+    ,   __global    float* repRngNumsGlobal
      #endif
     )
 {
@@ -471,12 +471,14 @@ __kernel void propKernel(
     uint real_rngNuMInSet = 0;  
     uint *rngSet = &real_rngset;
     uint *numInRngSet = &real_rngNuMInSet;
+   global float *repRngNums = &repRngNumsGlobal[0];
 #else
     //download MWC RNG state
     ulong real_rnd_x = MWC_RNG_x[i];
     uint real_rnd_a = MWC_RNG_a[i];
     ulong *rnd_x = &real_rnd_x;
     uint *rnd_a = &real_rnd_a;
+    
 
  #endif
 
@@ -928,7 +930,9 @@ __kernel void propKernel(
     inputSteps[i].numPhotons = 0;
 #endif
 
+    #ifndef REPRODUCEABLE_RNG
     //upload MWC RNG state
     MWC_RNG_x[i] = real_rnd_x;
     MWC_RNG_a[i] = real_rnd_a;
+    #endif
 }

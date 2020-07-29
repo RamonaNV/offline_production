@@ -110,12 +110,7 @@ maxNumWorkitems_(10240)
     const std::string kernelBaseDir = I3_BUILD+"/clsim/resources/kernels";
     
     try {
-        mwcrngKernelSource_ = "";
-        #ifdef REPRODUCEABLE_RNG
-        const std::string pathheader = I3_BUILD+"/clsim/private/opencl/repRNGDefines.h";
-         mwcrngKernelSource_ += I3CLSimHelper::LoadProgramSource(pathheader);
-         #endif
-        mwcrngKernelSource_ += I3CLSimHelper::LoadProgramSource(kernelBaseDir+"/mwcrng_kernel.cl");
+           mwcrngKernelSource_ = I3CLSimHelper::LoadProgramSource(kernelBaseDir+"/mwcrng_kernel.cl");
 
     } catch (std::runtime_error &e) {
         throw I3CLSimStepToPhotonConverter_exception((std::string("Could not load kernel: ") + e.what()).c_str());
@@ -326,7 +321,7 @@ void I3CLSimStepToPhotonConverterOpenCL::Initialize()
          deviceBuffer_d_reprng.reset();
     // set up device buffers from existing host buffers
         deviceBuffer_d_reprng = boost::shared_ptr<cl::Buffer>
-        (new cl::Buffer(*context_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, rngVals.size()* sizeof(float), rngVals.data()));
+        (new cl::Buffer(*context_, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, rngVals.size()* sizeof(float), rngVals.data()));
     #endif 
    
     
@@ -475,6 +470,17 @@ std::string I3CLSimStepToPhotonConverterOpenCL::GetPreambleSource()
         }
     }
     
+
+    #ifdef REPRODUCEABLE_RNG
+ 
+        preamble += "#define REPRODUCEABLE_RNG \n";
+        preamble += "#define REP_RNG_SETS " +  boost::lexical_cast<std::string>(REP_RNG_SETS) + "\n";
+        preamble += "#define REP_RNG_NUMS_PER_SET " +  boost::lexical_cast<std::string>(REP_RNG_NUMS_PER_SET) + "\n";
+
+    #endif
+
+ 
+
     return preamble;
 }
 

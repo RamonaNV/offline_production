@@ -3,29 +3,28 @@
 // http://www.atomic.physics.lu.se/fileadmin/atomfysik/Biophotonics/Software/CUDAMCML.pdf
 
  
-//#include "../../private/opencl/regressionTesting.h"
- 
+
 #ifdef REPRODUCEABLE_RNG
 // prototypes to make some compilers happy
-inline float reproduceableRNG_co(uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums);
-inline float reproduceableRNG_oc(uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums);
+inline float reproduceableRNG_co(uint *rngSet1, uint *numInRngSet1, global  float* repRngNums1);
+inline float reproduceableRNG_oc(uint *rngSet1, uint *numInRngSet1,  global   float* repRngNums1);
+ 
 
 
-
-inline   float reproduceableRNG_co(uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums)
+inline   float reproduceableRNG_co(uint *rngSet1, uint *numInRngSet1,   global float* repRngNums1)
 {
-    *rngSet = *rngSet % REP_RNG_SETS;
-    float value = repRngNums[*rngSet * REP_RNG_NUMS_PER_SET + *numInRngSet];
-    *numInRngSet = (*numInRngSet+1) % REP_RNG_NUMS_PER_SET;
+    *rngSet1 = *rngSet1 % REP_RNG_SETS;
+    float value = numInRngSet1[*rngSet1 * REP_RNG_NUMS_PER_SET + *numInRngSet1];
+    *numInRngSet1 = (*numInRngSet1+1) % REP_RNG_NUMS_PER_SET;
     return value;
 }
 
-inline   float reproduceableRNG_oc(uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums)
+inline   float reproduceableRNG_oc(uint *rngSet1, uint *numInRngSet1,  global  float* repRngNums1)
 {
-    return 1.0f - reproduceableRNG_co(rngSet, numInRngSet, repRngNums);
+    return 1.0f - reproduceableRNG_co(rngSet1, numInRngSet1, repRngNums1);
 }
 
-#define RNG_ARGS uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums
+#define RNG_ARGS uint *rngSet, uint *numInRngSet, global float* repRngNums
 #define RNG_ARGS_TO_CALL rngSet, numInRngSet, repRngNums
 #define RNG_CALL_UNIFORM_CO reproduceableRNG_co(rngSet, numInRngSet, repRngNums)
 #define RNG_CALL_UNIFORM_OC reproduceableRNG_oc(rngSet, numInRngSet, repRngNums)
