@@ -321,7 +321,7 @@ void I3CLSimStepToPhotonConverterOpenCL::Initialize()
          deviceBuffer_d_reprng.reset();
     // set up device buffers from existing host buffers
         deviceBuffer_d_reprng = boost::shared_ptr<cl::Buffer>
-        (new cl::Buffer(*context_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, rngVals.size()* sizeof(float), rngVals.data()));
+        (new cl::Buffer(*context_, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, rngVals.size()* sizeof(float), rngVals.data()));
     #endif 
    
     
@@ -1868,7 +1868,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
 
   // CUDA PART
   int NSteps = steps->size();
-  int nbenchmarks = 1;
+  int nbenchmarks = 0;
   //write some properites of photons to csv file to compare results
   bool writePhotonsCsv = true;
   std::string path("/home/hschwanekamp/nvidia/offline_production/build/");

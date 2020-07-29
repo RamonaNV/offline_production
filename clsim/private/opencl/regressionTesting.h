@@ -50,7 +50,7 @@ inline std::vector<float> genReproduceableRandomNumbers();
 inline std::vector<float> genReproduceableRandomNumbers()
 {
     const int numbersTotal = REP_RNG_SETS * REP_RNG_NUMS_PER_SET;
-    const int seed = 23072020;
+    const int seed = 1;
     std::vector<float> reproduceableRandomNumbers(numbersTotal);
     std::default_random_engine rng(seed);
     std::uniform_real_distribution<float> dist(0,1);

@@ -27,17 +27,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifdef REPRODUCEABLE_RNG
 
-__device__ __forceinline__ float reproduceableRNG_co(uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums)
+__device__ __forceinline__ float reproduceableRNG_co(uint32_t *rngSet1, uint32_t *numInRngSet1, float* repRngNums1)
 {
-    *rngSet = *rngSet % REP_RNG_SETS;
-    float value = repRngNums[*rngSet * REP_RNG_NUMS_PER_SET + *numInRngSet];
-    *numInRngSet = (*numInRngSet+1) % REP_RNG_NUMS_PER_SET;
+    *rngSet1 = *rngSet1 % REP_RNG_SETS;
+    float value = repRngNums1[*rngSet1 * REP_RNG_NUMS_PER_SET + *numInRngSet1];
+    *numInRngSet1 = (*numInRngSet1+1) % REP_RNG_NUMS_PER_SET;
     return value;
 }
 
-__device__ __forceinline__ float reproduceableRNG_oc(uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums)
+__device__ __forceinline__ float reproduceableRNG_oc(uint32_t *rngSet1, uint32_t *numInRngSet1, float* repRngNums1)
 {
-    return 1.0f - reproduceableRNG_co(rngSet, numInRngSet, repRngNums);
+    return 1.0f - reproduceableRNG_co(rngSet1, numInRngSet1, repRngNums1);
 }
 
 #define RNG_ARGS uint32_t *rngSet, uint32_t *numInRngSet, float* repRngNums
