@@ -22,7 +22,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifndef regressionTesting_H
 #define regressionTesting_H
-#include "repRNGDefines.h"
+
+#define REPRODUCEABLE_RNG // komment that in / out to enable the same random number to be used for every step
+
+#define REP_RNG_SETS 16384
+#define REP_RNG_NUMS_PER_SET 512
 
 #include <vector>
 #include <random>

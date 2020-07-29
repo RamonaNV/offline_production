@@ -317,11 +317,11 @@ void I3CLSimStepToPhotonConverterOpenCL::Initialize()
     #ifdef REPRODUCEABLE_RNG
         std::vector<float> rngVals = genReproduceableRandomNumbers();
         log_debug("Using genReproduceableRandomNumbers");
-        printf("Using genReproduceableRandomNumbers");
+        printf("Using genReproduceableRandomNumbers \n");
          deviceBuffer_d_reprng.reset();
     // set up device buffers from existing host buffers
         deviceBuffer_d_reprng = boost::shared_ptr<cl::Buffer>
-        (new cl::Buffer(*context_, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, rngVals.size()* sizeof(float), rngVals.data()));
+        (new cl::Buffer(*context_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, rngVals.size()* sizeof(float), rngVals.data()));
     #endif 
    
     
@@ -1306,7 +1306,9 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl(boost::this_thread::d
     }
     if (!deviceBuffer_MWC_RNG_x) log_fatal("Internal error: deviceBuffer_MWC_RNG_x is (null)");
     if (!deviceBuffer_MWC_RNG_a) log_fatal("Internal error: deviceBuffer_MWC_RNG_a is (null)");
-    
+      #ifdef REPRODUCEABLE_RNG 
+    if (!deviceBuffer_d_reprng) log_fatal("Internal error: deviceBuffer_d_reprng is (null)");
+         #endif
     // notify the main thread that everything is set up
     {
         boost::unique_lock<boost::mutex> guard(openCLStarted_mutex_);

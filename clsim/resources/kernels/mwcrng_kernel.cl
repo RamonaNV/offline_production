@@ -6,20 +6,20 @@
 
 #ifdef REPRODUCEABLE_RNG
 // prototypes to make some compilers happy
-inline float reproduceableRNG_co(uint *rngSet1, uint *numInRngSet1, global  float* repRngNums1);
-inline float reproduceableRNG_oc(uint *rngSet1, uint *numInRngSet1,  global   float* repRngNums1);
+inline float reproduceableRNG_co(uint *rngSet1, uint *numInRngSet1, __global  float* repRngNums1);
+inline float reproduceableRNG_oc(uint *rngSet1, uint *numInRngSet1,__global float* repRngNums1);
  
 
 
-inline   float reproduceableRNG_co(uint *rngSet1, uint *numInRngSet1,   global float* repRngNums1)
+inline   float reproduceableRNG_co(uint *rngSet1, uint *numInRngSet1,  __global  float* repRngNums1)
 {
     *rngSet1 = *rngSet1 % REP_RNG_SETS;
-    float value = numInRngSet1[*rngSet1 * REP_RNG_NUMS_PER_SET + *numInRngSet1];
+      float value = repRngNums1[*rngSet1 * REP_RNG_NUMS_PER_SET + *numInRngSet1];
     *numInRngSet1 = (*numInRngSet1+1) % REP_RNG_NUMS_PER_SET;
     return value;
 }
 
-inline   float reproduceableRNG_oc(uint *rngSet1, uint *numInRngSet1,  global  float* repRngNums1)
+inline   float reproduceableRNG_oc(uint *rngSet1, uint *numInRngSet1,  __global  float* repRngNums1)
 {
     return 1.0f - reproduceableRNG_co(rngSet1, numInRngSet1, repRngNums1);
 }
