@@ -35,7 +35,7 @@ icetray.logging.set_level_for_unit('ppc', 'WARN')
 rng = phys_services.I3GSLRandomService(0)
 
 ppcer = MakeCLSimPropagator(DetectorParams, UseGPUs=args.use_gpus,
-                            UseCPUs=not args.use_gpus, CopyConfig=True)
+                            UseCPUs=not args.use_gpus) #, CopyConfig=True)
 
 clsimer = clsim.traysegments.common.setupPropagators(rng, DetectorParams,
                                                      UseCPUs=not

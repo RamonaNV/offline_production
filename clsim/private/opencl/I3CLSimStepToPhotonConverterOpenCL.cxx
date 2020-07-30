@@ -813,8 +813,8 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread()
     boost::this_thread::disable_interruption di;
     
     try {
-    //   OpenCLThread_impl(di);
-       CLCUDAThread(di);
+      OpenCLThread_impl(di);
+    //    CLCUDAThread(di);
         PRINTLC
     } catch(...) { // any exceptions?
         std::cerr << "OpenCL worker thread died unexpectedly.." << std::endl;
