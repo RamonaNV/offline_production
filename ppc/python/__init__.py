@@ -15,13 +15,16 @@ def tau_dnde_builder(it):
         tmp.append(dataclasses.make_pair(i[0],i[1]))
     return dataclasses.I3VectorDoubleDouble(tmp)
 
-def MakeCLSimPropagator(DetectorParams, UseCPUs=False, UseGPUs=True):
+def MakeCLSimPropagator(DetectorParams, UseCPUs=False, UseGPUs=True,
+                        CopyConfig=False):
     """
     Configure ppc to for use with clsim. 
     
     :param DetectorParams: configuration dict returned by clsim.traysegments.common.setupDetector()
     :param UseCPUs: use CPUs
     :param UseGPUs: use GPUs
+    :param CopyConfig: copy the cfg.txt file and update first 2 rows instead of
+    generating it from scratch
     """
     from icecube.icetray import I3Units
     from icecube import clsim
@@ -36,18 +39,32 @@ def MakeCLSimPropagator(DetectorParams, UseCPUs=False, UseGPUs=True):
 
     tmpdir = tempfile.mkdtemp()
 
-    # create config file
-    with open(join(tmpdir, 'cfg.txt'), 'w') as f:
-        write = lambda v: f.write('{}\n'.format(v))
-        write(DetectorParams['DOMOversizeFactor'])
-        write(DetectorParams['UnshadowedFraction']*DetectorParams['MediumProperties'].efficiency)
+    if CopyConfig:
+        shutil.copy(join(DetectorParams['IceModelLocation'], 'cfg.txt'), tmpdir)
+        with open(join(tmpdir, 'cfg.txt'), 'r') as f:
+            cfg = f.readlines()
+        if cfg[0][0] == '#':
+            first = 1
+        else:
+            first = 0
+        cfg[first] = str(DetectorParams['DOMOversizeFactor']) + '\n'
+        cfg[first + 1] = str(DetectorParams['UnshadowedFraction']*DetectorParams['MediumProperties'].efficiency) + '\n'
+        with open(join(tmpdir, 'cfg.txt'), 'w') as f:
+            f.writelines(cfg)
+    else:
+        # create config file from scratch
+        with open(join(tmpdir, 'cfg.txt'), 'w') as f:
+            write = lambda v: f.write('{}\n'.format(v))
+            write(DetectorParams['DOMOversizeFactor'])
+            write(DetectorParams['UnshadowedFraction']*DetectorParams['MediumProperties'].efficiency)
 
-        # FIXME: extract scattering parameters from ice model
-        icemodel = DetectorParams['MediumProperties']
-        icemodel.GetScatteringCosAngleDistribution()
-        write(0.45) # 0=HG; 1=SAM
-        write(0.9) # g=<cos(theta)>
+            # FIXME: extract scattering parameters from ice model
+            icemodel = DetectorParams['MediumProperties']
+            icemodel.GetScatteringCosAngleDistribution()
+            write(0.35) # 0=HG; 1=SAM
+            write(0.9) # g=<cos(theta)>
     
+
     shutil.copy(expandvars('$I3_BUILD/ppc/resources/ice/rnd.txt'), tmpdir)
     
     # configure unit angular acceptance, disabling angular downsampling in PPC
