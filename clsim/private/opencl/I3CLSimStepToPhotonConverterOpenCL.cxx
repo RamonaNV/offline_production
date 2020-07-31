@@ -1829,7 +1829,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
             waitForOpenCLEventYield(copyComplete);
         }
 
-        printf("photon hits = %f from %d steps \n", numberOfGeneratedPhotons, steps->size());
+        printf("photon hits = %i from %d steps \n", numberOfGeneratedPhotons, steps->size());
 
         if (numberOfGeneratedPhotons > maxNumOutputPhotons_) {
             printf("Maximum number of photons exceeded, only receiving %" PRIu32 " of %" PRIu32 " photons \n",
