@@ -1,4 +1,4 @@
- /**
+/**
  * Copyright (c) 2011, 2012
  * Claudio Kopper <claudio.kopper@icecube.wisc.edu>
  * and the IceCube Collaboration <http://www.icecube.wisc.edu>
@@ -24,49 +24,39 @@
  * @author Claudio Kopper
  */
 
-
-
-
-
-
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
-#include <inttypes.h>
-#include <cmath>
-
-#include <boost/date_time/posix_time/posix_time.hpp>
 #include "clsim/I3CLSimStepToPhotonConverterOpenCL.h"
 
+#include <inttypes.h>
 
-#define PRINTLC     printf("thread 0 - in line %d \n", __LINE__);  
-#include <propagationKernelSource.cuh>
+#include <boost/date_time/posix_time/posix_time.hpp>
+#include <cmath>
+
+#define PRINTLC printf("thread 0 - in line %d \n", __LINE__);
 #include <chrono>
 #include <ctime>
-
+#include <propagationKernelSource.cuh>
 
 // debugging: show GPUtime/photon
 #define DUMP_STATISTICS
 
-
-#include <string>
-#include <sstream>
-#include <algorithm>
-#include <limits>
-
+#include <icetray/I3Units.h>
 #include <stdlib.h>
+
+#include <algorithm>
 #include <boost/foreach.hpp>
 #include <boost/lexical_cast.hpp>
-
-#include <icetray/I3Units.h>
+#include <limits>
+#include <sstream>
+#include <string>
 
 #include "clsim/I3CLSimHelperToFloatString.h"
-#include "opencl/I3CLSimHelperMath.h"
-
-#include "opencl/I3CLSimHelperLoadProgramSource.h"
-#include "opencl/I3CLSimHelperGenerateMediumPropertiesSource.h"
 #include "opencl/I3CLSimHelperGenerateGeometrySource.h"
-
+#include "opencl/I3CLSimHelperGenerateMediumPropertiesSource.h"
+#include "opencl/I3CLSimHelperLoadProgramSource.h"
+#include "opencl/I3CLSimHelperMath.h"
 #include "opencl/mwcrng_init.h"
 
 #define __CL_ENABLE_EXCEPTIONS
@@ -74,97 +64,89 @@
 
 using namespace I3CLSimHelper;
 
-const bool I3CLSimStepToPhotonConverterOpenCL::default_useNativeMath=true;
-
+const bool I3CLSimStepToPhotonConverterOpenCL::default_useNativeMath = true;
 
 I3CLSimStepToPhotonConverterOpenCL::I3CLSimStepToPhotonConverterOpenCL(I3RandomServicePtr randomService,
                                                                        bool useNativeMath)
-:
-openCLStarted_(false),
-queueToOpenCL_(new I3CLSimQueue<ToOpenCLPair_t>(2)),
-queueFromOpenCL_(new I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t>(2)),
-randomService_(randomService),
-initialized_(false),
-compiled_(false),
-useNativeMath_(useNativeMath),
-deviceIsSelected_(false),
-disableDoubleBuffering_(true),
-doublePrecision_(false),
-stopDetectedPhotons_(false),
-saveAllPhotons_(false),
-saveAllPhotonsPrescale_(0.001), // only save .1% of all photons when in "AllPhotons" mode
-fixedNumberOfAbsorptionLengths_(NAN),
-pancakeFactor_(1.),
-photonHistoryEntries_(0),
-maxWorkgroupSize_(0),
-workgroupSize_(0),
-maxNumWorkitems_(10240)
+    : openCLStarted_(false),
+      queueToOpenCL_(new I3CLSimQueue<ToOpenCLPair_t>(2)),
+      queueFromOpenCL_(new I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t>(2)),
+      randomService_(randomService),
+      initialized_(false),
+      compiled_(false),
+      useNativeMath_(useNativeMath),
+      deviceIsSelected_(false),
+      disableDoubleBuffering_(true),
+      doublePrecision_(false),
+      stopDetectedPhotons_(false),
+      saveAllPhotons_(false),
+      saveAllPhotonsPrescale_(0.001),  // only save .1% of all photons when in "AllPhotons" mode
+      fixedNumberOfAbsorptionLengths_(NAN),
+      pancakeFactor_(1.),
+      photonHistoryEntries_(0),
+      maxWorkgroupSize_(0),
+      workgroupSize_(0),
+      maxNumWorkitems_(10240)
 {
-
     std::cout << " !!! this code has been adapted to run the porpagation kernel "
-                "sperately in CL and CUDA." << std::endl;
-    
+                 "sperately in CL and CUDA."
+              << std::endl;
 
     if (!randomService_) log_fatal("You need to supply a I3RandomService.");
-    
+
     // load program source from files
     const std::string I3_BUILD(getenv("I3_BUILD"));
-    const std::string kernelBaseDir = I3_BUILD+"/clsim/resources/kernels";
-    
+    const std::string kernelBaseDir = I3_BUILD + "/clsim/resources/kernels";
+
     try {
-        mwcrngKernelSource_ = I3CLSimHelper::LoadProgramSource(kernelBaseDir+"/mwcrng_kernel.cl");
+        mwcrngKernelSource_ = I3CLSimHelper::LoadProgramSource(kernelBaseDir + "/mwcrng_kernel.cl");
     } catch (std::runtime_error &e) {
         throw I3CLSimStepToPhotonConverter_exception((std::string("Could not load kernel: ") + e.what()).c_str());
     }
-    
 }
 
 I3CLSimStepToPhotonConverterOpenCL::~I3CLSimStepToPhotonConverterOpenCL()
 {
- 
-    if (openCLThreadObj_)
-    {
-        if (openCLThreadObj_->joinable())
-        {
+    if (openCLThreadObj_) {
+        if (openCLThreadObj_->joinable()) {
             log_debug("Stopping the OpenCL worker thread..");
-            
+
             openCLThreadObj_->interrupt();
-            
-            openCLThreadObj_->join(); // wait for it indefinitely
-            
+
+            openCLThreadObj_->join();  // wait for it indefinitely
+
             log_debug("OpenCL worker thread stopped.");
         }
-        
+
         openCLThreadObj_.reset();
     }
-    
+
     // reset buffers
     deviceBuffer_MWC_RNG_x.reset();
     deviceBuffer_MWC_RNG_a.reset();
-    
+
     deviceBuffer_InputSteps.clear();
     deviceBuffer_OutputPhotons.clear();
     deviceBuffer_CurrentNumOutputPhotons.clear();
     deviceBuffer_PhotonHistory.clear();
 
     deviceBuffer_GeoLayerToOMNumIndexPerStringSet.reset();
-    
+
     // reset pointers
-    compiled_=false;
+    compiled_ = false;
     context_.reset();
     kernel_.clear();
     queue_.clear();
-    
 }
 
 uint64_t I3CLSimStepToPhotonConverterOpenCL::GetMaxWorkgroupSize() const
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
+
     if (!compiled_)
         throw I3CLSimStepToPhotonConverter_exception("You need to compile the kernel first. Call Compile().");
-    
+
     return maxWorkgroupSize_;
 }
 
@@ -172,136 +154,133 @@ void I3CLSimStepToPhotonConverterOpenCL::SetDevice(const I3CLSimOpenCLDevice &de
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    if (device_)
-    {
-        if (!(*device_ == device))
-        {
-            compiled_=false;
+
+    if (device_) {
+        if (!(*device_ == device)) {
+            compiled_ = false;
             kernel_.clear();
             queue_.clear();
             device_.reset();
         }
     }
-    
-    device_ = I3CLSimOpenCLDevicePtr(new I3CLSimOpenCLDevice(device)); // make a copy of the device
-    
-    deviceIsSelected_=true;
+
+    device_ = I3CLSimOpenCLDevicePtr(new I3CLSimOpenCLDevice(device));  // make a copy of the device
+
+    deviceIsSelected_ = true;
 }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetWorkgroupSize(std::size_t val)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    workgroupSize_=val;
+
+    workgroupSize_ = val;
 }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetMaxNumWorkitems(std::size_t val)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    if (val <= 0)
-        throw I3CLSimStepToPhotonConverter_exception("Invalid maximum number of work items!");
-    
-    maxNumWorkitems_=val;
+
+    if (val <= 0) throw I3CLSimStepToPhotonConverter_exception("Invalid maximum number of work items!");
+
+    maxNumWorkitems_ = val;
 }
 
 std::size_t I3CLSimStepToPhotonConverterOpenCL::GetWorkgroupSize() const
 {
-    if (workgroupSize_==0)
-    {
+    if (workgroupSize_ == 0) {
         if (!compiled_)
-            throw I3CLSimStepToPhotonConverter_exception("Automatic workgroup size cannot be returned before Compile() has been called!");
-        
+            throw I3CLSimStepToPhotonConverter_exception(
+                "Automatic workgroup size cannot be returned before Compile() has been called!");
+
         return maxWorkgroupSize_;
     }
-    
+
     return workgroupSize_;
 }
 
-std::size_t I3CLSimStepToPhotonConverterOpenCL::GetMaxNumWorkitems() const
-{
-    return maxNumWorkitems_;
-}
-
+std::size_t I3CLSimStepToPhotonConverterOpenCL::GetMaxNumWorkitems() const { return maxNumWorkitems_; }
 
 void I3CLSimStepToPhotonConverterOpenCL::Initialize()
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
+
     log_debug("Setting up OpenCL..");
-    
+
     Compile();
-    
+
     // use the maximum workgroup size (==granularity) if none has been configured
-    if (workgroupSize_==0) workgroupSize_=maxWorkgroupSize_;
-    
-    if (workgroupSize_>maxWorkgroupSize_)
-        throw I3CLSimStepToPhotonConverter_exception("Workgroup size too large!");
-    
-    const unsigned int numBuffers = disableDoubleBuffering_?1:2;
-    
+    if (workgroupSize_ == 0) workgroupSize_ = maxWorkgroupSize_;
+
+    if (workgroupSize_ > maxWorkgroupSize_) throw I3CLSimStepToPhotonConverter_exception("Workgroup size too large!");
+
+    const unsigned int numBuffers = disableDoubleBuffering_ ? 1 : 2;
+
     // For GPUs, choose the largest number of work items such that they still
     // fit in device memory
     if (device_->IsGPU()) {
-      size_t sizePerWorkitem = numBuffers*(
-        sizeof(I3CLSimStep)  // the input step
-        + 2*sizeof(uint64_t) // MWC multipliers
-        + std::max(10u,
-          unsigned(10000.*(saveAllPhotons_ ? saveAllPhotonsPrescale_ : 0)))
-          *sizeof(I3CLSimPhoton) // the output buffer
-        )
-        + kernel_[0]->getWorkGroupInfo<CL_KERNEL_LOCAL_MEM_SIZE>(
-          *device_->GetDeviceHandle()) // the kernel itself
-        ;
-      maxNumWorkitems_ = (device_->GetGlobalMemSize()
-        - geoLayerToOMNumIndexPerStringSetInfo_.size()*sizeof(unsigned short)
-        - numBuffers*sizeof(uint32_t))/sizePerWorkitem;
-      size_t numMultipliers = 6139850;
-      if (maxNumWorkitems_ > numMultipliers) {
-        log_info_stream("Limiting number of work items to "<<numMultipliers<<" (maximum number of prime multipliers)");
-        maxNumWorkitems_ = numMultipliers;
-      }
-      // Choose a bunch size that is a multiple of both the number of cores
-      // and the workgroup size
-      size_t granularity = device_->GetMaxComputeUnits()*workgroupSize_;
-      maxNumWorkitems_ = (maxNumWorkitems_/granularity)*granularity;
+        size_t sizePerWorkitem =
+            numBuffers * (sizeof(I3CLSimStep)     // the input step
+                          + 2 * sizeof(uint64_t)  // MWC multipliers
+                          + std::max(10u,
+                                     unsigned(10000. * (saveAllPhotons_ ? saveAllPhotonsPrescale_ : 0))) *
+                                sizeof(I3CLSimPhoton)  // the output buffer
+                          ) +
+            kernel_[0]->getWorkGroupInfo<CL_KERNEL_LOCAL_MEM_SIZE>(*device_->GetDeviceHandle())  // the kernel itself
+            ;
+        maxNumWorkitems_ =
+            (device_->GetGlobalMemSize() - geoLayerToOMNumIndexPerStringSetInfo_.size() * sizeof(unsigned short) -
+             numBuffers * sizeof(uint32_t)) /
+            sizePerWorkitem;
+        size_t numMultipliers = 6139850;
+        if (maxNumWorkitems_ > numMultipliers) {
+            log_info_stream("Limiting number of work items to " << numMultipliers
+                                                                << " (maximum number of prime multipliers)");
+            maxNumWorkitems_ = numMultipliers;
+        }
+        // Choose a bunch size that is a multiple of both the number of cores
+        // and the workgroup size
+        size_t granularity = device_->GetMaxComputeUnits() * workgroupSize_;
+        maxNumWorkitems_ = (maxNumWorkitems_ / granularity) * granularity;
     }
-    
-    if (maxNumWorkitems_%workgroupSize_ != 0)
-        throw I3CLSimStepToPhotonConverter_exception("The maximum number of work items (" + boost::lexical_cast<std::string>(maxNumWorkitems_) + ") must be a multiple of the workgroup size (" + boost::lexical_cast<std::string>(workgroupSize_) + ").");
-    
+
+    if (maxNumWorkitems_ % workgroupSize_ != 0)
+        throw I3CLSimStepToPhotonConverter_exception(
+            "The maximum number of work items (" + boost::lexical_cast<std::string>(maxNumWorkitems_) +
+            ") must be a multiple of the workgroup size (" + boost::lexical_cast<std::string>(workgroupSize_) + ").");
+
     log_debug("basic OpenCL setup done.");
-    
+
     if (!saveAllPhotons_) {
         // start with a maximum number of output photons of the same size as the number of
         // input steps. Should be plenty..
-        maxNumOutputPhotons_ = static_cast<uint32_t>(std::min(maxNumWorkitems_*10, static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())));
-        if (maxNumOutputPhotons_ < 1000) maxNumOutputPhotons_=1000; // use a sane minimum output buffer size
+        maxNumOutputPhotons_ = static_cast<uint32_t>(
+            std::min(maxNumWorkitems_ * 10, static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())));
+        if (maxNumOutputPhotons_ < 1000) maxNumOutputPhotons_ = 1000;  // use a sane minimum output buffer size
     } else {
         // we need a lot more space for photon storage in case all photons are to be saved
-        std::size_t sizeIncreaseFactor = 10000.*saveAllPhotonsPrescale_;
-        if (sizeIncreaseFactor < 1) sizeIncreaseFactor=1;
-        
-        maxNumOutputPhotons_ = static_cast<uint32_t>(std::min(maxNumWorkitems_*sizeIncreaseFactor, static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())));
+        std::size_t sizeIncreaseFactor = 10000. * saveAllPhotonsPrescale_;
+        if (sizeIncreaseFactor < 1) sizeIncreaseFactor = 1;
+
+        maxNumOutputPhotons_ = static_cast<uint32_t>(std::min(
+            maxNumWorkitems_ * sizeIncreaseFactor, static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())));
     }
-    
+
     // set up rng
     log_debug("Setting up RNG for %zu workitems.", maxNumWorkitems_);
-    
+
     MWC_RNG_x.resize(maxNumWorkitems_);
     MWC_RNG_a.resize(maxNumWorkitems_);
-    
-    if (init_MWC_RNG(&(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, randomService_)!=0) 
+
+    if (init_MWC_RNG(&(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, randomService_) != 0)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
+
     log_debug("RNG is set up..");
-    
+
     log_debug("Setting up device buffers..");
-    
+
     // reset all buffers first
     deviceBuffer_MWC_RNG_x.reset();
     deviceBuffer_MWC_RNG_a.reset();
@@ -310,94 +289,92 @@ void I3CLSimStepToPhotonConverterOpenCL::Initialize()
     deviceBuffer_PhotonHistory.clear();
     deviceBuffer_CurrentNumOutputPhotons.clear();
     deviceBuffer_GeoLayerToOMNumIndexPerStringSet.reset();
-    
-    
+
     // set up device buffers from existing host buffers
-    deviceBuffer_MWC_RNG_x = boost::shared_ptr<cl::Buffer>
-    (new cl::Buffer(*context_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, MWC_RNG_x.size() * sizeof(uint64_t), &(MWC_RNG_x[0])));
-    
-    deviceBuffer_MWC_RNG_a = boost::shared_ptr<cl::Buffer>
-    (new cl::Buffer(*context_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, MWC_RNG_a.size() * sizeof(uint32_t), &(MWC_RNG_a[0])));
-    
+    deviceBuffer_MWC_RNG_x = boost::shared_ptr<cl::Buffer>(new cl::Buffer(
+        *context_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, MWC_RNG_x.size() * sizeof(uint64_t), &(MWC_RNG_x[0])));
+
+    deviceBuffer_MWC_RNG_a = boost::shared_ptr<cl::Buffer>(new cl::Buffer(
+        *context_, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, MWC_RNG_a.size() * sizeof(uint32_t), &(MWC_RNG_a[0])));
+
     if (!saveAllPhotons_) {
         // no need for a geometry buffer if all photons are saved and no
         // geometry is necessary.
-        deviceBuffer_GeoLayerToOMNumIndexPerStringSet = boost::shared_ptr<cl::Buffer>
-        (new cl::Buffer(*context_, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, geoLayerToOMNumIndexPerStringSetInfo_.size() * sizeof(unsigned short), &(geoLayerToOMNumIndexPerStringSetInfo_[0])));
+        deviceBuffer_GeoLayerToOMNumIndexPerStringSet = boost::shared_ptr<cl::Buffer>(
+            new cl::Buffer(*context_, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                           geoLayerToOMNumIndexPerStringSetInfo_.size() * sizeof(unsigned short),
+                           &(geoLayerToOMNumIndexPerStringSetInfo_[0])));
     }
-    
+
     // allocate empty buffers on the device
-    for (unsigned int i=0;i<numBuffers;++i)
-    {
-        deviceBuffer_InputSteps.push_back(boost::shared_ptr<cl::Buffer>
-        (new cl::Buffer(*context_, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, maxNumWorkitems_*sizeof(I3CLSimStep), NULL)));
-        
-        deviceBuffer_OutputPhotons.push_back(boost::shared_ptr<cl::Buffer>
-        (new cl::Buffer(*context_, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, maxNumOutputPhotons_*sizeof(I3CLSimPhoton), NULL)));
-        
-        deviceBuffer_CurrentNumOutputPhotons.push_back(boost::shared_ptr<cl::Buffer>
-        (new cl::Buffer(*context_, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, sizeof(uint32_t), NULL)));
+    for (unsigned int i = 0; i < numBuffers; ++i) {
+        deviceBuffer_InputSteps.push_back(boost::shared_ptr<cl::Buffer>(new cl::Buffer(
+            *context_, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, maxNumWorkitems_ * sizeof(I3CLSimStep), NULL)));
 
-        if (photonHistoryEntries_>0) {
-            deviceBuffer_PhotonHistory.push_back
-            (boost::shared_ptr<cl::Buffer>
-             (new cl::Buffer(*context_,
-                             CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR,
-                             static_cast<std::size_t>(maxNumOutputPhotons_)*static_cast<std::size_t>(photonHistoryEntries_)*sizeof(cl_float4),
-                             NULL
-                            )
-             )
-            );
+        deviceBuffer_OutputPhotons.push_back(boost::shared_ptr<cl::Buffer>(new cl::Buffer(
+            *context_, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, maxNumOutputPhotons_ * sizeof(I3CLSimPhoton), NULL)));
+
+        deviceBuffer_CurrentNumOutputPhotons.push_back(boost::shared_ptr<cl::Buffer>(
+            new cl::Buffer(*context_, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, sizeof(uint32_t), NULL)));
+
+        if (photonHistoryEntries_ > 0) {
+            deviceBuffer_PhotonHistory.push_back(boost::shared_ptr<cl::Buffer>(
+                new cl::Buffer(*context_, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR,
+                               static_cast<std::size_t>(maxNumOutputPhotons_) *
+                                   static_cast<std::size_t>(photonHistoryEntries_) * sizeof(cl_float4),
+                               NULL)));
         }
     }
-    
+
     log_debug("Device buffers are set up.");
-    
+
     log_debug("Configuring kernel.");
-    for (unsigned int i=0;i<numBuffers;++i)
-    {
-        unsigned argN=0;
-        
-        kernel_[i]->setArg(argN++, *(deviceBuffer_CurrentNumOutputPhotons[i]));     // hit counter
-        kernel_[i]->setArg(argN++, maxNumOutputPhotons_);                           // maximum number of possible hits
-        
+    for (unsigned int i = 0; i < numBuffers; ++i) {
+        unsigned argN = 0;
+
+        kernel_[i]->setArg(argN++, *(deviceBuffer_CurrentNumOutputPhotons[i]));  // hit counter
+        kernel_[i]->setArg(argN++, maxNumOutputPhotons_);                        // maximum number of possible hits
+
         if (!saveAllPhotons_) {
-            kernel_[i]->setArg(argN++, *deviceBuffer_GeoLayerToOMNumIndexPerStringSet); // additional geometry information (did not fit into constant memory)
-        }
-        
-        kernel_[i]->setArg(argN++, *(deviceBuffer_InputSteps[i]));                  // the input steps
-        kernel_[i]->setArg(argN++, *(deviceBuffer_OutputPhotons[i]));               // the output photons
-
-        if (photonHistoryEntries_>0) {
-            kernel_[i]->setArg(argN++, *(deviceBuffer_PhotonHistory[i]));           // the photon history (the last N points where the photon scattered)
+            kernel_[i]->setArg(argN++,
+                               *deviceBuffer_GeoLayerToOMNumIndexPerStringSet);  // additional geometry information (did
+                                                                                 // not fit into constant memory)
         }
 
-        kernel_[i]->setArg(argN++, *deviceBuffer_MWC_RNG_x);                    // rng state
-        kernel_[i]->setArg(argN++, *deviceBuffer_MWC_RNG_a);                    // rng state
+        kernel_[i]->setArg(argN++, *(deviceBuffer_InputSteps[i]));     // the input steps
+        kernel_[i]->setArg(argN++, *(deviceBuffer_OutputPhotons[i]));  // the output photons
 
+        if (photonHistoryEntries_ > 0) {
+            kernel_[i]->setArg(
+                argN++,
+                *(deviceBuffer_PhotonHistory[i]));  // the photon history (the last N points where the photon scattered)
+        }
+
+        kernel_[i]->setArg(argN++, *deviceBuffer_MWC_RNG_x);  // rng state
+        kernel_[i]->setArg(argN++, *deviceBuffer_MWC_RNG_a);  // rng state
     }
     log_debug("Kernel configured.");
-    
+
     log_debug("Starting the OpenCL worker thread..");
-    openCLStarted_=false;
-    
-    openCLThreadObj_ = boost::shared_ptr<boost::thread>(new boost::thread(boost::bind(&I3CLSimStepToPhotonConverterOpenCL::OpenCLThread, this)));
-    
+    openCLStarted_ = false;
+
+    openCLThreadObj_ = boost::shared_ptr<boost::thread>(
+        new boost::thread(boost::bind(&I3CLSimStepToPhotonConverterOpenCL::OpenCLThread, this)));
+
     // wait for startup
     {
         boost::unique_lock<boost::mutex> guard(openCLStarted_mutex_);
-        for (;;)
-        {
+        for (;;) {
             if (openCLStarted_) break;
             openCLStarted_cond_.wait(guard);
         }
-    }        
-    
+    }
+
     log_debug("OpenCL worker thread started.");
-    
+
     log_debug("OpenCL setup complete.");
-    
-    initialized_=true;
+
+    initialized_ = true;
 }
 
 std::string I3CLSimStepToPhotonConverterOpenCL::GetPreambleSource()
@@ -421,25 +398,26 @@ std::string I3CLSimStepToPhotonConverterOpenCL::GetPreambleSource()
         } else {
             preamble = preamble + "#define SAVE_ALL_PHOTONS_PRESCALE " + ToFloatString(saveAllPhotonsPrescale_) + "\n";
         }
-        
     }
-    
-    
+
     // should the photon history be saved?
-    if (photonHistoryEntries_>0) {
+    if (photonHistoryEntries_ > 0) {
         preamble = preamble + "#define SAVE_PHOTON_HISTORY\n";
-        preamble = preamble + "#define NUM_PHOTONS_IN_HISTORY " + boost::lexical_cast<std::string>(photonHistoryEntries_) + "\n";
+        preamble = preamble + "#define NUM_PHOTONS_IN_HISTORY " +
+                   boost::lexical_cast<std::string>(photonHistoryEntries_) + "\n";
     }
-    
+
     // Instead of sampling the number of absorption lengths from an
     // exponential distribution with mean 1, use a fixed defined number
     // of absorption lengths for table-making. Photonics uses a weight
     // of 1e-20 corresponding to about 46 absorption lengths.
     if (!std::isnan(fixedNumberOfAbsorptionLengths_)) {
         if (doublePrecision_) {
-            preamble = preamble + "#define PROPAGATE_FOR_FIXED_NUMBER_OF_ABSORPTION_LENGTHS " + ToDoubleString(fixedNumberOfAbsorptionLengths_) + "\n";
+            preamble = preamble + "#define PROPAGATE_FOR_FIXED_NUMBER_OF_ABSORPTION_LENGTHS " +
+                       ToDoubleString(fixedNumberOfAbsorptionLengths_) + "\n";
         } else {
-            preamble = preamble + "#define PROPAGATE_FOR_FIXED_NUMBER_OF_ABSORPTION_LENGTHS " + ToFloatString(fixedNumberOfAbsorptionLengths_) + "\n";
+            preamble = preamble + "#define PROPAGATE_FOR_FIXED_NUMBER_OF_ABSORPTION_LENGTHS " +
+                       ToFloatString(fixedNumberOfAbsorptionLengths_) + "\n";
         }
     }
 
@@ -450,7 +428,7 @@ std::string I3CLSimStepToPhotonConverterOpenCL::GetPreambleSource()
             preamble = preamble + "#define PANCAKE_FACTOR " + ToFloatString(pancakeFactor_) + "\n";
         }
     }
-    
+
     return preamble;
 }
 
@@ -461,7 +439,7 @@ std::string I3CLSimStepToPhotonConverterOpenCL::GetWlenGeneratorSource()
 
 std::string I3CLSimStepToPhotonConverterOpenCL::GetWlenBiasSource()
 {
-    return wlenBias_->GetOpenCLFunction("getWavelengthBias"); // name
+    return wlenBias_->GetOpenCLFunction("getWavelengthBias");  // name
 }
 
 std::string I3CLSimStepToPhotonConverterOpenCL::GetMediumPropertiesSource()
@@ -472,22 +450,20 @@ std::string I3CLSimStepToPhotonConverterOpenCL::GetMediumPropertiesSource()
 std::string I3CLSimStepToPhotonConverterOpenCL::GetGeometrySource()
 {
     if (!saveAllPhotons_) {
-        return I3CLSimHelper::GenerateGeometrySource(*geometry_,
-                                                      geoLayerToOMNumIndexPerStringSetInfo_,
-                                                      stringIndexToStringIDBuffer_,
-                                                      domIndexToDomIDBuffer_perStringIndex_);
+        return I3CLSimHelper::GenerateGeometrySource(*geometry_, geoLayerToOMNumIndexPerStringSetInfo_,
+                                                     stringIndexToStringIDBuffer_,
+                                                     domIndexToDomIDBuffer_perStringIndex_);
     } else {
         return std::string("");
     }
 }
 
-static std::string 
-loadKernel(const std::string& name, bool header)
+static std::string loadKernel(const std::string &name, bool header)
 {
     const std::string I3_BUILD(getenv("I3_BUILD"));
-    const std::string kernelBaseDir = I3_BUILD+"/clsim/resources/kernels/";
+    const std::string kernelBaseDir = I3_BUILD + "/clsim/resources/kernels/";
     const std::string ext = header ? ".h.cl" : ".c.cl";
-    return I3CLSimHelper::LoadProgramSource(kernelBaseDir+name+ext);
+    return I3CLSimHelper::LoadProgramSource(kernelBaseDir + name + ext);
 }
 
 std::string I3CLSimStepToPhotonConverterOpenCL::GetCollisionDetectionSource(bool header)
@@ -499,56 +475,51 @@ void I3CLSimStepToPhotonConverterOpenCL::Compile()
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    if (compiled_) return; // silently
-    
-    if (wlenGenerators_.empty())
-        throw I3CLSimStepToPhotonConverter_exception("WlenGenerators not set!");
-    
-    if (!wlenBias_)
-        throw I3CLSimStepToPhotonConverter_exception("WlenBias not set!");
-    
-    if (!mediumProperties_)
-        throw I3CLSimStepToPhotonConverter_exception("MediumProperties not set!");
-    
-    if (!geometry_)
-        throw I3CLSimStepToPhotonConverter_exception("Geometry not set!");
-    
-    if (!deviceIsSelected_)
-        throw I3CLSimStepToPhotonConverter_exception("Device not selected!");
-    
+
+    if (compiled_) return;  // silently
+
+    if (wlenGenerators_.empty()) throw I3CLSimStepToPhotonConverter_exception("WlenGenerators not set!");
+
+    if (!wlenBias_) throw I3CLSimStepToPhotonConverter_exception("WlenBias not set!");
+
+    if (!mediumProperties_) throw I3CLSimStepToPhotonConverter_exception("MediumProperties not set!");
+
+    if (!geometry_) throw I3CLSimStepToPhotonConverter_exception("Geometry not set!");
+
+    if (!deviceIsSelected_) throw I3CLSimStepToPhotonConverter_exception("Device not selected!");
+
     if ((saveAllPhotons_) && (stopDetectedPhotons_))
-        throw I3CLSimStepToPhotonConverter_exception("Internal error: both the saveAllPhotons and stopDetectedPhotons options are set at the same time.");
-    
+        throw I3CLSimStepToPhotonConverter_exception(
+            "Internal error: both the saveAllPhotons and stopDetectedPhotons options are set at the same time.");
+
     prependSource_ = this->GetPreambleSource();
     wlenGeneratorSource_ = this->GetWlenGeneratorSource();
     wlenBiasSource_ = this->GetWlenBiasSource();
-    
+
     mediumPropertiesSource_ = this->GetMediumPropertiesSource();
-    
+
     if (!saveAllPhotons_) {
         geometrySource_ = this->GetGeometrySource();
     } else {
         geometrySource_ = "";
     }
-    
-    propagationKernelSource_  = loadKernel("propagation_kernel", true);
+
+    propagationKernelSource_ = loadKernel("propagation_kernel", true);
     if (!saveAllPhotons_) {
         propagationKernelSource_ += this->GetCollisionDetectionSource(true);
         propagationKernelSource_ += this->GetCollisionDetectionSource(false);
     }
     propagationKernelSource_ += loadKernel("propagation_kernel", false);
-    
-    SetupQueueAndKernel(*(device_->GetPlatformHandle()),
-                        *(device_->GetDeviceHandle()));
-    
-    compiled_=true;
+
+    SetupQueueAndKernel(*(device_->GetPlatformHandle()), *(device_->GetDeviceHandle()));
+
+    compiled_ = true;
 }
 
 std::string I3CLSimStepToPhotonConverterOpenCL::GetFullSource()
 {
     std::ostringstream code;
-    
+
     code << prependSource_;
     code << mwcrngKernelSource_;
     code << wlenGeneratorSource_;
@@ -556,45 +527,44 @@ std::string I3CLSimStepToPhotonConverterOpenCL::GetFullSource()
     code << mediumPropertiesSource_;
     code << geometrySource_;
     code << propagationKernelSource_;
-    
+
     return code.str();
 }
 
-void I3CLSimStepToPhotonConverterOpenCL::SetupQueueAndKernel(const cl::Platform &platform,
-                                                             const cl::Device &device)
+void I3CLSimStepToPhotonConverterOpenCL::SetupQueueAndKernel(const cl::Platform &platform, const cl::Device &device)
 {
     VECTOR_CLASS<cl::Device> devices(1, device);
-    
+
     // prepare a device vector (containing a single device)
-    cl_context_properties properties[] = 
-    { CL_CONTEXT_PLATFORM, (cl_context_properties)(platform)(), 0};
-    
+    cl_context_properties properties[] = {CL_CONTEXT_PLATFORM, (cl_context_properties)(platform)(), 0};
+
     unsigned int createContextRetriesLeft = 20;
     unsigned long retryDelayMilliseconds = 500;
-    bool hadToRetry=false;
-    
-    context_.reset(); // make sure the pointer is NULL
-    
+    bool hadToRetry = false;
+
+    context_.reset();  // make sure the pointer is NULL
+
     // the newer NVIDIA drivers sometimes fail to create a context
     // with a "CL_OUT_OF_RESOURCES" error, but work just fine if you
     // try again after a short time.
-    for(;;)
-    {
+    for (;;) {
         try {
             // create a context
             context_ = boost::shared_ptr<cl::Context>(new cl::Context(devices, properties));
         } catch (cl::Error &err) {
-            if ((err.err() == CL_OUT_OF_RESOURCES) && (createContextRetriesLeft>0)) {
+            if ((err.err() == CL_OUT_OF_RESOURCES) && (createContextRetriesLeft > 0)) {
                 --createContextRetriesLeft;
-                
-                log_warn("Could not create OpenCL context: CL_OUT_OF_RESOURCES. Some drivers will work if we just try again. Waiting %fs.. (%u tries left)",
-                         static_cast<double>(retryDelayMilliseconds)/1000., createContextRetriesLeft);
-                
+
+                log_warn(
+                    "Could not create OpenCL context: CL_OUT_OF_RESOURCES. Some drivers will work if we just try "
+                    "again. Waiting %fs.. (%u tries left)",
+                    static_cast<double>(retryDelayMilliseconds) / 1000., createContextRetriesLeft);
+
                 boost::this_thread::sleep(boost::posix_time::milliseconds(retryDelayMilliseconds));
-                
+
                 log_warn("Re-trying to create OpenCL context..");
-                hadToRetry=true;
-                context_.reset(); // make sure the pointer is NULL
+                hadToRetry = true;
+                context_.reset();  // make sure the pointer is NULL
             } else {
                 // an OpenCL error here most probably means that there are no devices of the
                 // requested type. So just continue quietly.
@@ -602,55 +572,74 @@ void I3CLSimStepToPhotonConverterOpenCL::SetupQueueAndKernel(const cl::Platform 
                 throw I3CLSimStepToPhotonConverter_exception("OpenCL error: could not set up context!");
             }
         }
-        
+
         if (context_) break;
     }
-    
-    if (hadToRetry)
-        log_warn("OpenCL context created successfully!");
-    
+
+    if (hadToRetry) log_warn("OpenCL context created successfully!");
+
     {
         std::string deviceName = device.getInfo<CL_DEVICE_NAME>();
         log_info("Running on \"%s\"", deviceName.c_str());
-        log_debug("      ->                      CL_DEVICE_TYPE: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_TYPE>()).c_str());
-        log_debug("      ->         CL_DEVICE_MAX_COMPUTE_UNITS: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_MAX_COMPUTE_UNITS>()).c_str());
-        log_debug("      ->    CL_DEVICE_MAX_WORK_ITEM_SIZES[0]: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[0]).c_str());
-        log_debug("      ->       CL_DEVICE_MAX_WORK_GROUP_SIZE: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>()).c_str());
-        log_debug("      ->       CL_DEVICE_MAX_CLOCK_FREQUENCY: %sMHz", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_MAX_CLOCK_FREQUENCY>()).c_str());
-        log_debug("      ->           CL_DEVICE_GLOBAL_MEM_SIZE: %sMiB", boost::lexical_cast<std::string>(static_cast<double>(device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>())/1024./1024.).c_str());
-        log_debug("      ->  CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE: %sKiB", boost::lexical_cast<std::string>(static_cast<double>(device.getInfo<CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE>())/1024.).c_str());
-        log_debug("      ->            CL_DEVICE_LOCAL_MEM_TYPE: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_LOCAL_MEM_TYPE>()).c_str());
-        log_debug("      ->            CL_DEVICE_LOCAL_MEM_SIZE: %sKiB", boost::lexical_cast<std::string>(static_cast<double>(device.getInfo<CL_DEVICE_LOCAL_MEM_SIZE>())/1024.).c_str());
-        log_debug("      ->  CL_DEVICE_ERROR_CORRECTION_SUPPORT: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_ERROR_CORRECTION_SUPPORT>()).c_str());
-        log_debug("      ->             CL_DEVICE_ENDIAN_LITTLE: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_ENDIAN_LITTLE>()).c_str());
-        log_debug("      ->                 CL_DEVICE_AVAILABLE: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_AVAILABLE>()).c_str());
-        log_debug("      ->                    CL_DEVICE_VENDOR: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_VENDOR>()).c_str());
-        log_debug("      ->                   CL_DEVICE_VERSION: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_VERSION>()).c_str());
-        log_debug("      ->                CL_DEVICE_EXTENSIONS: %s", boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_EXTENSIONS>()).c_str());
-    }    
-    
+        log_debug("      ->                      CL_DEVICE_TYPE: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_TYPE>()).c_str());
+        log_debug("      ->         CL_DEVICE_MAX_COMPUTE_UNITS: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_MAX_COMPUTE_UNITS>()).c_str());
+        log_debug("      ->    CL_DEVICE_MAX_WORK_ITEM_SIZES[0]: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[0]).c_str());
+        log_debug("      ->       CL_DEVICE_MAX_WORK_GROUP_SIZE: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>()).c_str());
+        log_debug("      ->       CL_DEVICE_MAX_CLOCK_FREQUENCY: %sMHz",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_MAX_CLOCK_FREQUENCY>()).c_str());
+        log_debug("      ->           CL_DEVICE_GLOBAL_MEM_SIZE: %sMiB",
+                  boost::lexical_cast<std::string>(static_cast<double>(device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>()) /
+                                                   1024. / 1024.)
+                      .c_str());
+        log_debug("      ->  CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE: %sKiB",
+                  boost::lexical_cast<std::string>(
+                      static_cast<double>(device.getInfo<CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE>()) / 1024.)
+                      .c_str());
+        log_debug("      ->            CL_DEVICE_LOCAL_MEM_TYPE: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_LOCAL_MEM_TYPE>()).c_str());
+        log_debug(
+            "      ->            CL_DEVICE_LOCAL_MEM_SIZE: %sKiB",
+            boost::lexical_cast<std::string>(static_cast<double>(device.getInfo<CL_DEVICE_LOCAL_MEM_SIZE>()) / 1024.)
+                .c_str());
+        log_debug("      ->  CL_DEVICE_ERROR_CORRECTION_SUPPORT: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_ERROR_CORRECTION_SUPPORT>()).c_str());
+        log_debug("      ->             CL_DEVICE_ENDIAN_LITTLE: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_ENDIAN_LITTLE>()).c_str());
+        log_debug("      ->                 CL_DEVICE_AVAILABLE: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_AVAILABLE>()).c_str());
+        log_debug("      ->                    CL_DEVICE_VENDOR: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_VENDOR>()).c_str());
+        log_debug("      ->                   CL_DEVICE_VERSION: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_VERSION>()).c_str());
+        log_debug("      ->                CL_DEVICE_EXTENSIONS: %s",
+                  boost::lexical_cast<std::string>(device.getInfo<CL_DEVICE_EXTENSIONS>()).c_str());
+    }
+
     log_debug("Compiling..");
     // accumulate the build options
     std::string BuildOptions;
-    
-    //BuildOptions += "-w "; // no warnings
-    //BuildOptions += "-Werror "; // warnings will become errors
-    //BuildOptions += "-cl-opt-disable ";
-    //BuildOptions += "-cl-no-signed-zeros ";
-    //BuildOptions += "-cl-unsafe-math-optimizations ";
+
+    // BuildOptions += "-w "; // no warnings
+    // BuildOptions += "-Werror "; // warnings will become errors
+    // BuildOptions += "-cl-opt-disable ";
+    // BuildOptions += "-cl-no-signed-zeros ";
+    // BuildOptions += "-cl-unsafe-math-optimizations ";
     BuildOptions += "-cl-mad-enable ";
 
-    const bool nvidiaVerboseCompile=false;
-    if (nvidiaVerboseCompile)
-    {
+    const bool nvidiaVerboseCompile = false;
+    if (nvidiaVerboseCompile) {
         // only valid if extension "cl_nv_compiler_options" is present
-        BuildOptions += "-cl-nv-verbose ";          // Passed on to ptxas as --verbose
+        BuildOptions += "-cl-nv-verbose ";  // Passed on to ptxas as --verbose
     }
-    
+
     // only valid if extension "cl_nv_compiler_options" is present
-    //BuildOptions += "-cl-nv-maxrregcount=60 ";  // Passed on to ptxas as --maxrregcount <N>
-    //BuildOptions += "-cl-nv-opt-level=3 ";     // Passed on to ptxas as --opt-level <N>
-    
+    // BuildOptions += "-cl-nv-maxrregcount=60 ";  // Passed on to ptxas as --maxrregcount <N>
+    // BuildOptions += "-cl-nv-opt-level=3 ";     // Passed on to ptxas as --opt-level <N>
+
     if (useNativeMath_) {
         BuildOptions += "-cl-fast-relaxed-math ";
         BuildOptions += "-DUSE_NATIVE_MATH ";
@@ -679,219 +668,213 @@ void I3CLSimStepToPhotonConverterOpenCL::SetupQueueAndKernel(const cl::Platform 
             combined_source += geometrySource_ + "\n";
         }
         combined_source += propagationKernelSource_ + "\n";
-      
-// used to get  cuda headers
-    /*
-            std::ofstream prependSourceHeader("prependSource.cuh");
-        prependSourceHeader << prependSource_;
-        prependSourceHeader.close();
 
-            std::ofstream mwcrngKernelSourceHeader("mwcrngKernelSource.cuh");
-        mwcrngKernelSourceHeader << mwcrngKernelSource_;
-        mwcrngKernelSourceHeader.close();
+        // used to get  cuda headers
+        /*
+                std::ofstream prependSourceHeader("prependSource.cuh");
+            prependSourceHeader << prependSource_;
+            prependSourceHeader.close();
 
-            std::ofstream wlenGeneratorSourceHeader("wlenGeneratorSource.cuh");
-        wlenGeneratorSourceHeader << wlenGeneratorSource_;
-        wlenGeneratorSourceHeader.close();
+                std::ofstream mwcrngKernelSourceHeader("mwcrngKernelSource.cuh");
+            mwcrngKernelSourceHeader << mwcrngKernelSource_;
+            mwcrngKernelSourceHeader.close();
 
-            std::ofstream wlenBiasSourceHeader("wlenBiasSource.cuh");
-        wlenBiasSourceHeader << wlenBiasSource_;
-        wlenBiasSourceHeader.close();
+                std::ofstream wlenGeneratorSourceHeader("wlenGeneratorSource.cuh");
+            wlenGeneratorSourceHeader << wlenGeneratorSource_;
+            wlenGeneratorSourceHeader.close();
 
-            std::ofstream
-       mediumPropertiesSourceHeader("mediumPropertiesSource.cuh");
-        mediumPropertiesSourceHeader << mediumPropertiesSource_;
-        mediumPropertiesSourceHeader.close();
+                std::ofstream wlenBiasSourceHeader("wlenBiasSource.cuh");
+            wlenBiasSourceHeader << wlenBiasSource_;
+            wlenBiasSourceHeader.close();
 
-            std::ofstream geometrySourceHeader("geometrySource.cuh");
-        geometrySourceHeader << geometrySource_;
-        geometrySourceHeader.close();
+                std::ofstream
+           mediumPropertiesSourceHeader("mediumPropertiesSource.cuh");
+            mediumPropertiesSourceHeader << mediumPropertiesSource_;
+            mediumPropertiesSourceHeader.close();
 
-            std::ofstream
-       propagationKernelSourceHeader("propagationKernelSource.cu");
-        propagationKernelSourceHeader << propagationKernelSource_;
-        propagationKernelSourceHeader.close();
+                std::ofstream geometrySourceHeader("geometrySource.cuh");
+            geometrySourceHeader << geometrySource_;
+            geometrySourceHeader.close();
 
-    */        
+                std::ofstream
+           propagationKernelSourceHeader("propagationKernelSource.cu");
+            propagationKernelSourceHeader << propagationKernelSource_;
+            propagationKernelSourceHeader.close();
+
+        */
         cl::Program::Sources source;
-        source.push_back(std::make_pair(combined_source.c_str(),combined_source.size()));
-        
+        source.push_back(std::make_pair(combined_source.c_str(), combined_source.size()));
+
         program = cl::Program(*context_, source);
         log_debug("building...");
         program.build(devices, BuildOptions.c_str());
         log_debug("...building finished.");
-        
+
         if (nvidiaVerboseCompile) {
             std::string deviceName = device.getInfo<CL_DEVICE_NAME>();
 #ifdef I3_LOG4CPLUS_LOGGING
             // using LOG_IMPL will make this work even in Release build mode:
             LOG_IMPL(INFO, "  * build status on %s\"", deviceName.c_str());
             LOG_IMPL(INFO, "==============================");
-            LOG_IMPL(INFO, "Build Status: %s", boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(device)).c_str());
-            LOG_IMPL(INFO, "Build Options: %s", boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(device)).c_str());
-            LOG_IMPL(INFO, "Build Log: %s", boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device)).c_str());
+            LOG_IMPL(INFO, "Build Status: %s",
+                     boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(device)).c_str());
+            LOG_IMPL(INFO, "Build Options: %s",
+                     boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(device)).c_str());
+            LOG_IMPL(INFO, "Build Log: %s",
+                     boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device)).c_str());
             LOG_IMPL(INFO, "==============================");
 #else
             log_info("  * build status on %s\"", deviceName.c_str());
             log_info("==============================");
-            log_info("Build Status: %s", boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(device)).c_str());
-            log_info("Build Options: %s", boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(device)).c_str());
-            log_info("Build Log: %s", boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device)).c_str());
+            log_info("Build Status: %s",
+                     boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(device)).c_str());
+            log_info("Build Options: %s",
+                     boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(device)).c_str());
+            log_info("Build Log: %s",
+                     boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device)).c_str());
             log_info("==============================");
 #endif
         }
     } catch (cl::Error &err) {
         log_error("OpenCL ERROR (compile): %s (%i)", err.what(), err.err());
-        
+
         std::string deviceName = device.getInfo<CL_DEVICE_NAME>();
         log_error("  * build status on %s\"", deviceName.c_str());
         log_error("==============================");
-        log_error("Build Status: %s", boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(device)).c_str());
-        log_error("Build Options: %s", boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(device)).c_str());
-        log_error("Build Log: %s", boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device)).c_str());
+        log_error("Build Status: %s",
+                  boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(device)).c_str());
+        log_error("Build Options: %s",
+                  boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(device)).c_str());
+        log_error("Build Log: %s",
+                  boost::lexical_cast<std::string>(program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device)).c_str());
         log_error("==============================");
-        
-        throw I3CLSimStepToPhotonConverter_exception("OpenCL error: could build the OpenCL program!");;
+
+        throw I3CLSimStepToPhotonConverter_exception("OpenCL error: could build the OpenCL program!");
+        ;
     }
     log_debug("code compiled.");
-    
-    const unsigned int numBuffers = disableDoubleBuffering_?1:2;
+
+    const unsigned int numBuffers = disableDoubleBuffering_ ? 1 : 2;
 
     // instantiate the command queue
     log_debug("Initializing..");
     try {
-        for (unsigned int i=0;i<numBuffers;++i)
-        {
+        for (unsigned int i = 0; i < numBuffers; ++i) {
 #ifdef DUMP_STATISTICS
-            queue_.push_back(boost::shared_ptr<cl::CommandQueue>(new cl::CommandQueue(*context_, device, CL_QUEUE_PROFILING_ENABLE)));
+            queue_.push_back(boost::shared_ptr<cl::CommandQueue>(
+                new cl::CommandQueue(*context_, device, CL_QUEUE_PROFILING_ENABLE)));
 #else
             queue_.push_back(boost::shared_ptr<cl::CommandQueue>(new cl::CommandQueue(*context_, device, 0)));
 #endif
         }
     } catch (cl::Error &err) {
-        queue_.clear(); // throw away command queue.
+        queue_.clear();  // throw away command queue.
         log_error("OpenCL ERROR: %s (%i)", err.what(), err.err());
         throw I3CLSimStepToPhotonConverter_exception("OpenCL error: could not set up command queue!");
     }
     log_debug("initialized.");
-    
+
     // create the kernel
     log_debug("Creating kernel..");
     try {
         // instantiate the kernel object
-        for (unsigned int i=0;i<numBuffers;++i)
-        {
+        for (unsigned int i = 0; i < numBuffers; ++i) {
             kernel_.push_back(boost::shared_ptr<cl::Kernel>(new cl::Kernel(program, "propKernel")));
         }
 
         maxWorkgroupSize_ = kernel_[0]->getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device);
-        
+
         if (!disableDoubleBuffering_) {
             if (kernel_[1]->getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device) != maxWorkgroupSize_) {
                 log_fatal("created two identical kernels and got different maximum work group sizes.");
             }
         }
-        
+
         log_debug("Maximum workgroup sizes for the kernel is %" PRIu64, maxWorkgroupSize_);
     } catch (cl::Error &err) {
-        kernel_.clear(); // throw away command queue.
-        queue_.clear(); // throw away command queue.
+        kernel_.clear();  // throw away command queue.
+        queue_.clear();   // throw away command queue.
         log_error("OpenCL ERROR: %s (%i)", err.what(), err.err());
         throw I3CLSimStepToPhotonConverter_exception("OpenCL error: could not create kernel!");
     }
     log_debug("created.");
-    
-    
-    
-    
 }
-
 
 void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread()
 {
     // do not interrupt this thread by default
     boost::this_thread::disable_interruption di;
-    
+
     try {
-    //   OpenCLThread_impl(di);
-       CLCUDAThread(di);
+        //   OpenCLThread_impl(di);
+        CLCUDAThread(di);
         PRINTLC
-    } catch(...) { // any exceptions?
+    } catch (...) {  // any exceptions?
         std::cerr << "OpenCL worker thread died unexpectedly.." << std::endl;
-        exit(0); // get out as quickly as possible, we probably just had a FATAL error anyway..
-        throw; // will never be reached
+        exit(0);  // get out as quickly as possible, we probably just had a FATAL error anyway..
+        throw;    // will never be reached
     }
 }
 
-namespace {
+namespace
+{
 #define YIELD_TIME_MICROSECONDS 1000
-    
-    inline void waitForOpenCLEventsYield(std::vector<cl::Event> &events)
-    {
-        for (;;)
-        {
-            bool allDone=true;
-            BOOST_FOREACH(cl::Event &event, events)
-            {
-                if (event.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() != CL_COMPLETE)
-                {
-                    allDone=false;
-                    break;
-                }
-            }
 
-            if (allDone) break;
-            
-            // yield
-            boost::this_thread::sleep(boost::posix_time::microseconds(YIELD_TIME_MICROSECONDS));
-        }
-        
-        // to be sure, wait for all of them (-> this is a proper synchronization point)
-        cl::Event::waitForEvents(events);
-    }
-
-    inline void waitForOpenCLEventYield(cl::Event &event)
-    {
-        for (;;)
-        {
-            if (event.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() == CL_COMPLETE)
-            {
+inline void waitForOpenCLEventsYield(std::vector<cl::Event> &events)
+{
+    for (;;) {
+        bool allDone = true;
+        BOOST_FOREACH (cl::Event &event, events) {
+            if (event.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() != CL_COMPLETE) {
+                allDone = false;
                 break;
             }
-
-            // yield
-            boost::this_thread::sleep(boost::posix_time::microseconds(YIELD_TIME_MICROSECONDS));
         }
-        
-        // to be sure, wait for the event again (-> this is a proper synchronization point)
-        event.wait();
+
+        if (allDone) break;
+
+        // yield
+        boost::this_thread::sleep(boost::posix_time::microseconds(YIELD_TIME_MICROSECONDS));
     }
 
-#undef YIELD_TIME_MILLISECONDS
+    // to be sure, wait for all of them (-> this is a proper synchronization point)
+    cl::Event::waitForEvents(events);
 }
 
-bool I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_uploadSteps(boost::this_thread::disable_interruption &di,
-                                                                       const boost::posix_time::ptime &last_timestamp,
-                                                                       bool &shouldBreak,
-                                                                       unsigned int bufferIndex,
-                                                                       uint32_t &out_stepsIdentifier,
-                                                                       uint64_t &out_totalNumberOfPhotons,
-                                                                       std::size_t &out_numberOfInputSteps,
-                                                                       bool blocking
-                                                                       )
+inline void waitForOpenCLEventYield(cl::Event &event)
 {
-    shouldBreak=false;
-    
-    uint32_t stepsIdentifier=0;
+    for (;;) {
+        if (event.getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>() == CL_COMPLETE) {
+            break;
+        }
+
+        // yield
+        boost::this_thread::sleep(boost::posix_time::microseconds(YIELD_TIME_MICROSECONDS));
+    }
+
+    // to be sure, wait for the event again (-> this is a proper synchronization point)
+    event.wait();
+}
+
+#undef YIELD_TIME_MILLISECONDS
+}  // namespace
+
+bool I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_uploadSteps(
+    boost::this_thread::disable_interruption &di, const boost::posix_time::ptime &last_timestamp, bool &shouldBreak,
+    unsigned int bufferIndex, uint32_t &out_stepsIdentifier, uint64_t &out_totalNumberOfPhotons,
+    std::size_t &out_numberOfInputSteps, bool blocking)
+{
+    shouldBreak = false;
+
+    uint32_t stepsIdentifier = 0;
     I3CLSimStepSeriesConstPtr steps;
-    
-    const uint32_t zeroCounterBufferSource=0;
+
+    const uint32_t zeroCounterBufferSource = 0;
     VECTOR_CLASS<cl::Event> bufferWriteEvents(2);
 
-    while (!steps)
-    {
+    while (!steps) {
         // we need to fetch new steps
-        
+
         boost::this_thread::restore_interruption ri(di);
         typedef std::chrono::high_resolution_clock clock_t;
         try {
@@ -900,19 +883,22 @@ bool I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_uploadSteps(boost::th
                 log_trace("[%u] waiting for input queue..", bufferIndex);
                 auto t0 = clock_t::now();
                 ToOpenCLPair_t val = queueToOpenCL_->Get();
-                auto dt = clock_t::now()-t0;
+                auto dt = clock_t::now() - t0;
                 // count host time only if reference timestamp is set
                 if (!last_timestamp.is_not_a_date_time()) {
                     boost::unique_lock<boost::mutex> guard(statistics_.mutex);
                     auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count();
                     auto &stat = statistics_.input_wait;
-                    if (stat.count() >= 10 && std::pow(ns-stat.mean(),2) > 9*stat.variance()) {
-                        log_info_stream("Input wait "<<ns<<" ns (expected "<<stat.mean()<<" +- "<<std::sqrt(stat.variance())<<" ns)");
+                    if (stat.count() >= 10 && std::pow(ns - stat.mean(), 2) > 9 * stat.variance()) {
+                        log_info_stream("Input wait " << ns << " ns (expected " << stat.mean() << " +- "
+                                                      << std::sqrt(stat.variance()) << " ns)");
                     }
                     stat.update(ns);
                     statistics_.total_queue_duration += ns;
                 }
-                log_trace_stream("["<<bufferIndex<<"] waited "<<std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count() << " ns for bunch "<<val.first);
+                log_trace_stream("[" << bufferIndex << "] waited "
+                                     << std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count()
+                                     << " ns for bunch " << val.first);
                 stepsIdentifier = val.first;
                 steps = val.second;
             } else {
@@ -920,57 +906,60 @@ bool I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_uploadSteps(boost::th
                 // this will never block:
                 log_trace("[%u] waiting for queue.. (non-blocking)", bufferIndex);
                 const bool ret = queueToOpenCL_->GetNonBlocking(val);
-                
+
                 if (!ret) {
-                    log_trace("[%u] returned value from queue (empty), size==%zu/%zu!", bufferIndex, queueToOpenCL_->size(), queueToOpenCL_->max_size());
+                    log_trace("[%u] returned value from queue (empty), size==%zu/%zu!", bufferIndex,
+                              queueToOpenCL_->size(), queueToOpenCL_->max_size());
                     // queue is empty
                     return false;
                 }
 
-                log_trace("[%u] returned value from queue (non-empty), size==%zu/%zu!", bufferIndex, queueToOpenCL_->size(), queueToOpenCL_->max_size());
+                log_trace("[%u] returned value from queue (non-empty), size==%zu/%zu!", bufferIndex,
+                          queueToOpenCL_->size(), queueToOpenCL_->max_size());
 
                 stepsIdentifier = val.first;
                 steps = val.second;
             }
-        }
-        catch(boost::thread_interrupted &i)
-        {
+        } catch (boost::thread_interrupted &i) {
             log_trace("[%u] OpenCL worker thread was interrupted - closing.", bufferIndex);
-            shouldBreak=true;
+            shouldBreak = true;
             return true;
         }
     }
-    
+
     log_trace("[%u] OpenCL thread got steps with id %zu", bufferIndex, static_cast<std::size_t>(stepsIdentifier));
     out_stepsIdentifier = stepsIdentifier;
-    
+
 #ifdef DUMP_STATISTICS
-    uint64_t totalNumberOfPhotons=0;
-    BOOST_FOREACH(const I3CLSimStep &step, *steps)
-    {
-        totalNumberOfPhotons+=step.numPhotons;
+    uint64_t totalNumberOfPhotons = 0;
+    BOOST_FOREACH (const I3CLSimStep &step, *steps) {
+        totalNumberOfPhotons += step.numPhotons;
     }
     out_totalNumberOfPhotons = totalNumberOfPhotons;
 #else
     out_totalNumberOfPhotons = 0;
-#endif //DUMP_STATISTICS
-    
+#endif  // DUMP_STATISTICS
+
     log_trace("[%u] copy steps to device", bufferIndex);
     // copy steps to device
     try {
-        queue_[bufferIndex]->enqueueWriteBuffer(*deviceBuffer_CurrentNumOutputPhotons[bufferIndex], CL_FALSE, 0, sizeof(uint32_t), &zeroCounterBufferSource, NULL, &(bufferWriteEvents[0]));
-        queue_[bufferIndex]->enqueueWriteBuffer(*deviceBuffer_InputSteps[bufferIndex], CL_FALSE, 0, steps->size()*sizeof(I3CLSimStep), &((*steps)[0]), NULL, &(bufferWriteEvents[1]));
-        queue_[bufferIndex]->flush(); // make sure it starts executing on the device
-        
+        queue_[bufferIndex]->enqueueWriteBuffer(*deviceBuffer_CurrentNumOutputPhotons[bufferIndex], CL_FALSE, 0,
+                                                sizeof(uint32_t), &zeroCounterBufferSource, NULL,
+                                                &(bufferWriteEvents[0]));
+        queue_[bufferIndex]->enqueueWriteBuffer(*deviceBuffer_InputSteps[bufferIndex], CL_FALSE, 0,
+                                                steps->size() * sizeof(I3CLSimStep), &((*steps)[0]), NULL,
+                                                &(bufferWriteEvents[1]));
+        queue_[bufferIndex]->flush();  // make sure it starts executing on the device
+
         log_trace("[%u] waiting for copy to finish", bufferIndex);
         waitForOpenCLEventsYield(bufferWriteEvents);
     } catch (cl::Error &err) {
         log_fatal("[%u] OpenCL ERROR (memcpy to device): %s (%i)", bufferIndex, err.what(), err.err());
     }
     log_trace("[%u] copied steps to device", bufferIndex);
-    
+
     out_numberOfInputSteps = steps->size();
-    
+
     return true;
 }
 
@@ -980,17 +969,16 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_runKernel(unsigned in
 {
     // run the kernel
     log_trace("[%u] enqueuing kernel..", bufferIndex);
- 
- 
+
     try {
         // configure which input buffers to use
-        queue_[bufferIndex]->enqueueNDRangeKernel(*(kernel_[bufferIndex]), 
-                                                  cl::NullRange,    // current implementations force this to be NULL
+        queue_[bufferIndex]->enqueueNDRangeKernel(*(kernel_[bufferIndex]),
+                                                  cl::NullRange,  // current implementations force this to be NULL
                                                   cl::NDRange(numberOfInputSteps),  // number of work items
                                                   cl::NDRange(workgroupSize_),
-                                                  NULL, //&(bufferWriteEvents),  // wait for buffers to be filled
-                                                  &kernelFinishEvent); // signal when finished
-        queue_[bufferIndex]->flush(); // make sure it begins executing on the device
+                                                  NULL,  //&(bufferWriteEvents),  // wait for buffers to be filled
+                                                  &kernelFinishEvent);  // signal when finished
+        queue_[bufferIndex]->flush();                                   // make sure it begins executing on the device
     } catch (cl::Error &err) {
         log_fatal("OpenCL ERROR (running kernel): %s (%i)", err.what(), err.err());
     }
@@ -998,86 +986,86 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_runKernel(unsigned in
     log_trace("[%u] kernel in queue..", bufferIndex);
 }
 
-namespace {
-    // converts from the internal photon history fromat (flat array of float4)
-    // to a vector of I3CLSimPhotonHistory objects. The output stores photons
-    // in forward order (i.e. the most recent scatter listed last)
-    I3CLSimPhotonHistorySeriesPtr ConvertPhotonHistories(const std::vector<cl_float4> &rawData,
-                                                         const I3CLSimPhotonSeries &photons,
-                                                         std::size_t photonHistoryEntries)
-    {
-        if (rawData.size() % photonHistoryEntries != 0)
-            log_fatal("Internal logic error: rawData.size() (==%zu) is not a multiple of photonHistoryEntries (==%zu)",
-                     rawData.size(), photonHistoryEntries);
-        
-        if (rawData.size()/photonHistoryEntries != photons.size())
-            log_fatal("internal logic error: rawData.size()/photonHistoryEntries [==%zu/%zu] != photons.size() [==%zu]",
-                      rawData.size(),photonHistoryEntries,photons.size());
-        
-        I3CLSimPhotonHistorySeriesPtr output(new I3CLSimPhotonHistorySeries());
-        
-        for (std::size_t i=0;i<rawData.size()/photonHistoryEntries;++i)
-        {
-            // insert a new history for the current photon
-            output->push_back(I3CLSimPhotonHistory());
-            I3CLSimPhotonHistory &current_history = output->back();
-            
-            const I3CLSimPhoton &current_photon = photons[i];
-            
-            const uint32_t numScatters = current_photon.GetNumScatters();
-            if (numScatters==0) continue; // nothing to record for this photon
-            if (photonHistoryEntries==0) continue; // no entries => nothing to record
-            
-            const uint32_t numRecordedScatters = static_cast<uint32_t>(std::min(static_cast<std::size_t>(numScatters), photonHistoryEntries));
-            // start with the most recent index
-            uint32_t currentScatterIndex;
-            
-            if (numScatters<=photonHistoryEntries) {
-                currentScatterIndex=0; // start with index 0
-            } else {
-                currentScatterIndex=numScatters%photonHistoryEntries;
-            }
-            
-            for (uint32_t j=0;j<numRecordedScatters;++j)
-            {
-                // [0], [1] and [2] are x,y,z
-                // [3] is the distance the photon traveled in units of absorption lengths
-                const cl_float4 &rawDataEntry = rawData[i*photonHistoryEntries + currentScatterIndex];
-                current_history.push_back(((const cl_float *)&rawDataEntry)[0], ((const cl_float *)&rawDataEntry)[1], ((const cl_float *)&rawDataEntry)[2], ((const cl_float *)&rawDataEntry)[3]);
+namespace
+{
+// converts from the internal photon history fromat (flat array of float4)
+// to a vector of I3CLSimPhotonHistory objects. The output stores photons
+// in forward order (i.e. the most recent scatter listed last)
+I3CLSimPhotonHistorySeriesPtr ConvertPhotonHistories(const std::vector<cl_float4> &rawData,
+                                                     const I3CLSimPhotonSeries &photons,
+                                                     std::size_t photonHistoryEntries)
+{
+    if (rawData.size() % photonHistoryEntries != 0)
+        log_fatal("Internal logic error: rawData.size() (==%zu) is not a multiple of photonHistoryEntries (==%zu)",
+                  rawData.size(), photonHistoryEntries);
 
-                ++currentScatterIndex;
-                if (currentScatterIndex>=static_cast<uint32_t>(photonHistoryEntries)) currentScatterIndex=0;
-            }
+    if (rawData.size() / photonHistoryEntries != photons.size())
+        log_fatal("internal logic error: rawData.size()/photonHistoryEntries [==%zu/%zu] != photons.size() [==%zu]",
+                  rawData.size(), photonHistoryEntries, photons.size());
+
+    I3CLSimPhotonHistorySeriesPtr output(new I3CLSimPhotonHistorySeries());
+
+    for (std::size_t i = 0; i < rawData.size() / photonHistoryEntries; ++i) {
+        // insert a new history for the current photon
+        output->push_back(I3CLSimPhotonHistory());
+        I3CLSimPhotonHistory &current_history = output->back();
+
+        const I3CLSimPhoton &current_photon = photons[i];
+
+        const uint32_t numScatters = current_photon.GetNumScatters();
+        if (numScatters == 0) continue;           // nothing to record for this photon
+        if (photonHistoryEntries == 0) continue;  // no entries => nothing to record
+
+        const uint32_t numRecordedScatters =
+            static_cast<uint32_t>(std::min(static_cast<std::size_t>(numScatters), photonHistoryEntries));
+        // start with the most recent index
+        uint32_t currentScatterIndex;
+
+        if (numScatters <= photonHistoryEntries) {
+            currentScatterIndex = 0;  // start with index 0
+        } else {
+            currentScatterIndex = numScatters % photonHistoryEntries;
         }
 
-        return output;
+        for (uint32_t j = 0; j < numRecordedScatters; ++j) {
+            // [0], [1] and [2] are x,y,z
+            // [3] is the distance the photon traveled in units of absorption lengths
+            const cl_float4 &rawDataEntry = rawData[i * photonHistoryEntries + currentScatterIndex];
+            current_history.push_back(((const cl_float *)&rawDataEntry)[0], ((const cl_float *)&rawDataEntry)[1],
+                                      ((const cl_float *)&rawDataEntry)[2], ((const cl_float *)&rawDataEntry)[3]);
+
+            ++currentScatterIndex;
+            if (currentScatterIndex >= static_cast<uint32_t>(photonHistoryEntries)) currentScatterIndex = 0;
+        }
     }
-    
+
+    return output;
 }
 
+}  // namespace
 
 void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_downloadPhotons(boost::this_thread::disable_interruption &di,
-                                                                           bool &shouldBreak,
-                                                                           unsigned int bufferIndex,
+                                                                           bool &shouldBreak, unsigned int bufferIndex,
                                                                            uint32_t stepsIdentifier)
 {
-    shouldBreak=false;
-   
+    shouldBreak = false;
+
     I3CLSimPhotonSeriesPtr photons;
     I3CLSimPhotonHistorySeriesPtr photonHistories;
-    boost::shared_ptr<std::vector<cl_float4> > photonHistoriesRaw;
-    
+    boost::shared_ptr<std::vector<cl_float4>> photonHistoriesRaw;
+
     try {
         uint32_t numberOfGeneratedPhotons;
         {
             cl::Event copyComplete;
-            queue_[bufferIndex]->enqueueReadBuffer(*deviceBuffer_CurrentNumOutputPhotons[bufferIndex], CL_FALSE, 0, sizeof(uint32_t), &numberOfGeneratedPhotons, NULL, &copyComplete);
-            queue_[bufferIndex]->flush(); // make sure it starts executing on the device
+            queue_[bufferIndex]->enqueueReadBuffer(*deviceBuffer_CurrentNumOutputPhotons[bufferIndex], CL_FALSE, 0,
+                                                   sizeof(uint32_t), &numberOfGeneratedPhotons, NULL, &copyComplete);
+            queue_[bufferIndex]->flush();  // make sure it starts executing on the device
             waitForOpenCLEventYield(copyComplete);
         }
 
-        printf( "Num photons to copy (buffer %u): %" PRIu32, bufferIndex, numberOfGeneratedPhotons);
-        
+        printf("Num photons to copy (buffer %u): %" PRIu32, bufferIndex, numberOfGeneratedPhotons);
+
 #ifdef I3_LOG4CPLUS_LOGGING
         LOG_IMPL(INFO, "Num photons to copy (buffer %u): %" PRIu32, bufferIndex, numberOfGeneratedPhotons);
 #else
@@ -1090,53 +1078,55 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_downloadPhotons(boost
             statistics_.total_num_photons_atDOMs += numberOfGeneratedPhotons;
         }
 #endif
-        
-        if (numberOfGeneratedPhotons > maxNumOutputPhotons_)
-        {
+
+        if (numberOfGeneratedPhotons > maxNumOutputPhotons_) {
             log_error("Maximum number of photons exceeded, only receiving %" PRIu32 " of %" PRIu32 " photons",
                       maxNumOutputPhotons_, numberOfGeneratedPhotons);
             numberOfGeneratedPhotons = maxNumOutputPhotons_;
         }
-        
-        if (numberOfGeneratedPhotons>0)
-        {
-            VECTOR_CLASS<cl::Event> copyComplete((photonHistoryEntries_>0)?2:1);
-            
+
+        if (numberOfGeneratedPhotons > 0) {
+            VECTOR_CLASS<cl::Event> copyComplete((photonHistoryEntries_ > 0) ? 2 : 1);
+
             // allocate the result vector while waiting for the mapping operation to complete
             photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries(numberOfGeneratedPhotons));
-            if (photonHistoryEntries_>0) {
-                photonHistoriesRaw = boost::shared_ptr<std::vector<cl_float4> >(new std::vector<cl_float4>(numberOfGeneratedPhotons*static_cast<std::size_t>(photonHistoryEntries_)));
+            if (photonHistoryEntries_ > 0) {
+                photonHistoriesRaw = boost::shared_ptr<std::vector<cl_float4>>(new std::vector<cl_float4>(
+                    numberOfGeneratedPhotons * static_cast<std::size_t>(photonHistoryEntries_)));
             }
-            
-            queue_[bufferIndex]->enqueueReadBuffer(*deviceBuffer_OutputPhotons[bufferIndex], CL_FALSE, 0, numberOfGeneratedPhotons*sizeof(I3CLSimPhoton), &((*photons)[0]), NULL, &copyComplete[0]);
-            
-            if (photonHistoryEntries_>0) {
-                queue_[bufferIndex]->enqueueReadBuffer(*deviceBuffer_PhotonHistory[bufferIndex], CL_FALSE, 0, numberOfGeneratedPhotons*static_cast<std::size_t>(photonHistoryEntries_)*sizeof(cl_float4), &((*photonHistoriesRaw)[0]), NULL, &copyComplete[1]);
+
+            queue_[bufferIndex]->enqueueReadBuffer(*deviceBuffer_OutputPhotons[bufferIndex], CL_FALSE, 0,
+                                                   numberOfGeneratedPhotons * sizeof(I3CLSimPhoton), &((*photons)[0]),
+                                                   NULL, &copyComplete[0]);
+
+            if (photonHistoryEntries_ > 0) {
+                queue_[bufferIndex]->enqueueReadBuffer(
+                    *deviceBuffer_PhotonHistory[bufferIndex], CL_FALSE, 0,
+                    numberOfGeneratedPhotons * static_cast<std::size_t>(photonHistoryEntries_) * sizeof(cl_float4),
+                    &((*photonHistoriesRaw)[0]), NULL, &copyComplete[1]);
             }
-            
-            queue_[bufferIndex]->flush(); // make sure it starts executing on the device
-            waitForOpenCLEventsYield(copyComplete); // wait for the buffer(s) to be copied
+
+            queue_[bufferIndex]->flush();            // make sure it starts executing on the device
+            waitForOpenCLEventsYield(copyComplete);  // wait for the buffer(s) to be copied
 
             // convert the histories to the external representation
             if (photonHistoriesRaw) {
                 photonHistories = ConvertPhotonHistories(*photonHistoriesRaw, *photons, photonHistoryEntries_);
             }
-        }
-        else
-        {
+        } else {
             // empty vector(s)
             photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries());
-            if (photonHistoryEntries_>0) {
+            if (photonHistoryEntries_ > 0) {
                 photonHistories = I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
             }
         }
-        
+
     } catch (cl::Error &err) {
         log_fatal("OpenCL ERROR (memcpy from device): %s (%i)", err.what(), err.err());
     }
-    
+
     // we finished simulating.
-    // signal the caller by putting it's id on the 
+    // signal the caller by putting it's id on the
     // output queue.
     {
         boost::this_thread::restore_interruption ri(di);
@@ -1144,55 +1134,49 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl_downloadPhotons(boost
             typedef std::chrono::high_resolution_clock clock_t;
             auto t0 = clock_t::now();
             queueFromOpenCL_->Put(ConversionResult_t(stepsIdentifier, photons, photonHistories));
-            auto dt = clock_t::now()-t0;
+            auto dt = clock_t::now() - t0;
             {
                 boost::unique_lock<boost::mutex> guard(statistics_.mutex);
                 auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count();
                 auto &stat = statistics_.output_wait;
                 // warn if queue wait time is off by more than 3 standard deviations
-                if (stat.count() >= 10 && std::pow(ns-stat.mean(),2) > 9*stat.variance()) {
-                    log_info_stream("Output wait "<<ns<<" ns (expected "<<stat.mean()<<" +- "<<std::sqrt(stat.variance())<<" ns)");
+                if (stat.count() >= 10 && std::pow(ns - stat.mean(), 2) > 9 * stat.variance()) {
+                    log_info_stream("Output wait " << ns << " ns (expected " << stat.mean() << " +- "
+                                                   << std::sqrt(stat.variance()) << " ns)");
                 } else {
-                    log_trace_stream("waited "<<ns<< " ns to drain");
+                    log_trace_stream("waited " << ns << " ns to drain");
                 }
                 statistics_.total_queue_duration += ns;
                 stat.update(ns);
             }
-        } catch(boost::thread_interrupted &i) {
+        } catch (boost::thread_interrupted &i) {
             log_debug("OpenCL thread was interrupted. closing.");
-            shouldBreak=true;
+            shouldBreak = true;
             return;
         }
     }
-    
-    
 }
 
-boost::posix_time::ptime 
-I3CLSimStepToPhotonConverterOpenCL::DumpStatistics(const cl::Event &kernelFinishEvent,
-                                                   const boost::posix_time::ptime &last_timestamp,
-                                                   uint64_t totalNumberOfPhotons,
-                                                   bool starving,
-                                                   const std::string &platformName,
-                                                   const std::string &deviceName,
-                                                   uint64_t deviceProfilingResolution)
+boost::posix_time::ptime I3CLSimStepToPhotonConverterOpenCL::DumpStatistics(
+    const cl::Event &kernelFinishEvent, const boost::posix_time::ptime &last_timestamp, uint64_t totalNumberOfPhotons,
+    bool starving, const std::string &platformName, const std::string &deviceName, uint64_t deviceProfilingResolution)
 {
     // calculate time since last kernel execution
     boost::posix_time::ptime this_timestamp(boost::posix_time::microsec_clock::universal_time());
     // return immediately if no reference timestamp is set (e.g. on first call)
-    if (last_timestamp.is_not_a_date_time())
-        return this_timestamp;
+    if (last_timestamp.is_not_a_date_time()) return this_timestamp;
 
 #ifdef DUMP_STATISTICS
     boost::posix_time::time_duration posix_duration = this_timestamp - last_timestamp;
     const uint64_t host_duration_in_nanoseconds = posix_duration.total_nanoseconds();
-    
+
     uint64_t timeStart, timeEnd;
     kernelFinishEvent.getProfilingInfo(CL_PROFILING_COMMAND_START, &timeStart);
     kernelFinishEvent.getProfilingInfo(CL_PROFILING_COMMAND_END, &timeEnd);
-    
-    const uint64_t kernel_duration_in_nanoseconds = (timeStart==timeEnd)?deviceProfilingResolution:(timeEnd-timeStart);
-    
+
+    const uint64_t kernel_duration_in_nanoseconds =
+        (timeStart == timeEnd) ? deviceProfilingResolution : (timeEnd - timeStart);
+
     {
         boost::unique_lock<boost::mutex> guard(statistics_.mutex);
 
@@ -1203,27 +1187,24 @@ I3CLSimStepToPhotonConverterOpenCL::DumpStatistics(const cl::Event &kernelFinish
         statistics_.total_kernel_calls++;
         statistics_.total_num_photons_generated += totalNumberOfPhotons;
     }
-    
-    const double utilization = static_cast<double>(kernel_duration_in_nanoseconds)/static_cast<double>(host_duration_in_nanoseconds);
-    
+
+    const double utilization =
+        static_cast<double>(kernel_duration_in_nanoseconds) / static_cast<double>(host_duration_in_nanoseconds);
+
 #ifdef I3_LOG4CPLUS_LOGGING
     // use LOG_IMPL here to make it log this even when in Release build mode.
     LOG_IMPL(INFO, "kernel statistics: %s%g nanoseconds/photon (util: %.0f%%) (%s %s) %s",
-             (timeStart==timeEnd)?"<=":"",
-             static_cast<double>(kernel_duration_in_nanoseconds)/static_cast<double>(totalNumberOfPhotons),
-             utilization*100.,
-             platformName.c_str(), deviceName.c_str(),
-             (starving?"[starving]":""));
+             (timeStart == timeEnd) ? "<=" : "",
+             static_cast<double>(kernel_duration_in_nanoseconds) / static_cast<double>(totalNumberOfPhotons),
+             utilization * 100., platformName.c_str(), deviceName.c_str(), (starving ? "[starving]" : ""));
 #else
     log_debug("kernel statistics: %s%g nanoseconds/photon (util: %.0f%%) (%s %s) %s",
-             (timeStart==timeEnd)?"<=":"",
-             static_cast<double>(kernel_duration_in_nanoseconds)/static_cast<double>(totalNumberOfPhotons),
-             utilization*100.,
-             platformName.c_str(), deviceName.c_str(),
-             (starving?"[starving]":""));
+              (timeStart == timeEnd) ? "<=" : "",
+              static_cast<double>(kernel_duration_in_nanoseconds) / static_cast<double>(totalNumberOfPhotons),
+              utilization * 100., platformName.c_str(), deviceName.c_str(), (starving ? "[starving]" : ""));
 #endif
 #endif
-    
+
     return this_timestamp;
 }
 
@@ -1232,124 +1213,127 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl(boost::this_thread::d
     // set things up here
     if (!context_) log_fatal("Internal error: context is (null)");
 
-    const std::size_t numBuffers = disableDoubleBuffering_?1:2;
-    
+    const std::size_t numBuffers = disableDoubleBuffering_ ? 1 : 2;
+
     if (queue_.size() != numBuffers) log_fatal("Internal error: queue_.size() != 2!");
     if (kernel_.size() != numBuffers) log_fatal("Internal error: kernel_.size() != 2!");
 
-    BOOST_FOREACH(boost::shared_ptr<cl::CommandQueue> &ptr, queue_) {
+    BOOST_FOREACH (boost::shared_ptr<cl::CommandQueue> &ptr, queue_) {
         if (!ptr) log_fatal("Internal error: queue_[] is (null)");
     }
-    BOOST_FOREACH(boost::shared_ptr<cl::Kernel> &ptr, kernel_) {
+    BOOST_FOREACH (boost::shared_ptr<cl::Kernel> &ptr, kernel_) {
         if (!ptr) log_fatal("Internal error: kernel_[] is (null)");
     }
 
     if (deviceBuffer_InputSteps.size() != numBuffers) log_fatal("Internal error: deviceBuffer_InputSteps.size() != 2!");
-    if (deviceBuffer_OutputPhotons.size() != numBuffers) log_fatal("Internal error: deviceBuffer_OutputPhotons.size() != 2!");
-    if (deviceBuffer_CurrentNumOutputPhotons.size() != numBuffers) log_fatal("Internal error: deviceBuffer_CurrentNumOutputPhotons.size() != 2!");
+    if (deviceBuffer_OutputPhotons.size() != numBuffers)
+        log_fatal("Internal error: deviceBuffer_OutputPhotons.size() != 2!");
+    if (deviceBuffer_CurrentNumOutputPhotons.size() != numBuffers)
+        log_fatal("Internal error: deviceBuffer_CurrentNumOutputPhotons.size() != 2!");
     if (photonHistoryEntries_ > 0) {
-        if (deviceBuffer_PhotonHistory.size() != numBuffers) log_fatal("Internal error: deviceBuffer_PhotonHistory.size() != 2!");
+        if (deviceBuffer_PhotonHistory.size() != numBuffers)
+            log_fatal("Internal error: deviceBuffer_PhotonHistory.size() != 2!");
     }
-    
-    BOOST_FOREACH(boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_InputSteps) {
+
+    BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_InputSteps) {
         if (!ptr) log_fatal("Internal error: deviceBuffer_InputSteps[] is (null)");
     }
-    BOOST_FOREACH(boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_OutputPhotons) {
+    BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_OutputPhotons) {
         if (!ptr) log_fatal("Internal error: deviceBuffer_OutputPhotons[] is (null)");
     }
-    BOOST_FOREACH(boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_CurrentNumOutputPhotons) {
+    BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_CurrentNumOutputPhotons) {
         if (!ptr) log_fatal("Internal error: deviceBuffer_CurrentNumOutputPhotons[] is (null)");
     }
 
     if (photonHistoryEntries_ > 0) {
-        BOOST_FOREACH(boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_PhotonHistory) {
+        BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_PhotonHistory) {
             if (!ptr) log_fatal("Internal error: deviceBuffer_PhotonHistory[] is (null)");
         }
     }
 
     if (!saveAllPhotons_) {
-        if (!deviceBuffer_GeoLayerToOMNumIndexPerStringSet) log_fatal("Internal error: deviceBuffer_GeoLayerToOMNumIndexPerStringSet is (null)");
+        if (!deviceBuffer_GeoLayerToOMNumIndexPerStringSet)
+            log_fatal("Internal error: deviceBuffer_GeoLayerToOMNumIndexPerStringSet is (null)");
     }
     if (!deviceBuffer_MWC_RNG_x) log_fatal("Internal error: deviceBuffer_MWC_RNG_x is (null)");
     if (!deviceBuffer_MWC_RNG_a) log_fatal("Internal error: deviceBuffer_MWC_RNG_a is (null)");
-    
+
     // notify the main thread that everything is set up
     {
         boost::unique_lock<boost::mutex> guard(openCLStarted_mutex_);
-        openCLStarted_=true;
+        openCLStarted_ = true;
     }
     openCLStarted_cond_.notify_all();
-    
+
     std::vector<uint32_t> stepsIdentifier(numBuffers, 0);
     std::vector<uint64_t> totalNumberOfPhotons(numBuffers, 0);
     std::vector<std::size_t> numberOfSteps(numBuffers, 0);
-    
+
 #ifdef DUMP_STATISTICS
     boost::posix_time::ptime last_timestamp;
 #endif
-    
-    unsigned int thisBuffer=0;
-    unsigned int otherBuffer=1;
-    bool otherBufferHasBeenCopied=false;
-    
+
+    unsigned int thisBuffer = 0;
+    unsigned int otherBuffer = 1;
+    bool otherBufferHasBeenCopied = false;
+
     if (!disableDoubleBuffering_) {
         // swap buffers once to swap them back just a few lines later
         std::swap(thisBuffer, otherBuffer);
     }
-    
+
     // start the main loop
-    for (;;)
-    {
+    for (;;) {
         if (!disableDoubleBuffering_) {
             // swap buffers
             std::swap(thisBuffer, otherBuffer);
         }
-        
+
         log_trace("buffers indices now: this==%u, other==%u", thisBuffer, otherBuffer);
-        
-        bool starving=false;
+
+        bool starving = false;
         if ((!otherBufferHasBeenCopied) || (disableDoubleBuffering_)) {
-            if (!disableDoubleBuffering_) starving=true;
+            if (!disableDoubleBuffering_) starving = true;
             log_trace("[%u] starting \"this\" buffer copy (need to block)..", thisBuffer);
             {
-                bool shouldBreak=false; // shouldBreak is true if this thread has been signalled to terminate
-                OpenCLThread_impl_uploadSteps(di, last_timestamp, shouldBreak, thisBuffer, stepsIdentifier[thisBuffer], totalNumberOfPhotons[thisBuffer], numberOfSteps[thisBuffer]);
-                if (shouldBreak) break; // is thread termination being requested?
+                bool shouldBreak = false;  // shouldBreak is true if this thread has been signalled to terminate
+                OpenCLThread_impl_uploadSteps(di, last_timestamp, shouldBreak, thisBuffer, stepsIdentifier[thisBuffer],
+                                              totalNumberOfPhotons[thisBuffer], numberOfSteps[thisBuffer]);
+                if (shouldBreak) break;  // is thread termination being requested?
             }
             log_trace("[%u] this buffer has been copied..", thisBuffer);
         } else {
             // else: this buffer is already there!
             log_trace("[%u] buffer is already there!", thisBuffer);
         }
-        
+
         // reset the "has-been-copied" flag
-        otherBufferHasBeenCopied=false;
-        
-        
+        otherBufferHasBeenCopied = false;
+
         // start the kernel
         cl::Event kernelFinishEvent;
         OpenCLThread_impl_runKernel(thisBuffer, kernelFinishEvent, numberOfSteps[thisBuffer]);
 
-        if (!disableDoubleBuffering_)
-        {
+        if (!disableDoubleBuffering_) {
             // if there already is a new buffer available, copy it now, while the kernel is running
             log_trace("[%u] Starting copy (other buffer)..", otherBuffer);
 
-            bool shouldBreak=false; // shouldBreak is true if this thread has been signalled to terminate
-            bool gotSomething = OpenCLThread_impl_uploadSteps(di, last_timestamp, shouldBreak, otherBuffer, stepsIdentifier[otherBuffer], totalNumberOfPhotons[otherBuffer], numberOfSteps[otherBuffer], false);
+            bool shouldBreak = false;  // shouldBreak is true if this thread has been signalled to terminate
+            bool gotSomething = OpenCLThread_impl_uploadSteps(
+                di, last_timestamp, shouldBreak, otherBuffer, stepsIdentifier[otherBuffer],
+                totalNumberOfPhotons[otherBuffer], numberOfSteps[otherBuffer], false);
             if (shouldBreak) break;
-            
+
             if (!gotSomething) {
                 log_trace("[%u] copy (other buffer): queue empty!", otherBuffer);
                 // nothing on the queue
-                otherBufferHasBeenCopied=false;
+                otherBufferHasBeenCopied = false;
             } else {
                 log_trace("[%u] copy (other buffer):  done!", otherBuffer);
-                otherBufferHasBeenCopied=true;
+                otherBufferHasBeenCopied = true;
             }
         }
-        
-        
+
         log_trace("[%u] waiting for kernel..", thisBuffer);
 
         try {
@@ -1364,13 +1348,9 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl(boost::this_thread::d
 #ifdef DUMP_STATISTICS
         log_trace("[%u] dumping statistics..", thisBuffer);
 
-        last_timestamp = DumpStatistics(kernelFinishEvent,
-                                        last_timestamp,
-                                        totalNumberOfPhotons[thisBuffer],
-                                        starving,
-                                        device_->GetPlatformName(),
-                                        device_->GetDeviceName(),
-                                        (device_->GetDeviceHandle())->getInfo<CL_DEVICE_PROFILING_TIMER_RESOLUTION>() );
+        last_timestamp = DumpStatistics(kernelFinishEvent, last_timestamp, totalNumberOfPhotons[thisBuffer], starving,
+                                        device_->GetPlatformName(), device_->GetDeviceName(),
+                                        (device_->GetDeviceHandle())->getInfo<CL_DEVICE_PROFILING_TIMER_RESOLUTION>());
 #endif
 
         log_trace("[%u] waiting for queue..", thisBuffer);
@@ -1381,160 +1361,130 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread_impl(boost::this_thread::d
         } catch (cl::Error &err) {
             log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", thisBuffer, err.what(), err.err());
         }
-        
+
         log_trace("[%u] queue finished!", thisBuffer);
-        
+
         // receive results
         log_trace("[%u] receiving results..!", thisBuffer);
         {
             bool shouldBreak;
             OpenCLThread_impl_downloadPhotons(di, shouldBreak, thisBuffer, stepsIdentifier[thisBuffer]);
-            if (shouldBreak) break; // is thread termination being requested?
+            if (shouldBreak) break;  // is thread termination being requested?
         }
         log_trace("[%u] results received.", thisBuffer);
-
     }
-    
+
     log_debug("OpenCL thread terminating...");
-    
+
     // shut down
-    
+
     log_debug("OpenCL thread terminated.");
 }
 
-bool I3CLSimStepToPhotonConverterOpenCL::IsInitialized() const
-{
-    return initialized_;
-}
+bool I3CLSimStepToPhotonConverterOpenCL::IsInitialized() const { return initialized_; }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetEnableDoubleBuffering(bool value)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
 
-    compiled_=false;
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    disableDoubleBuffering_=(!value);
+
+    disableDoubleBuffering_ = (!value);
 }
 
-bool I3CLSimStepToPhotonConverterOpenCL::GetEnableDoubleBuffering() const
-{
-    return (!disableDoubleBuffering_);
-}
-
-
+bool I3CLSimStepToPhotonConverterOpenCL::GetEnableDoubleBuffering() const { return (!disableDoubleBuffering_); }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetDoublePrecision(bool value)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    compiled_=false;
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    doublePrecision_=value;
+
+    doublePrecision_ = value;
 }
 
-bool I3CLSimStepToPhotonConverterOpenCL::GetDoublePrecision() const
-{
-    return doublePrecision_;
-}
-
+bool I3CLSimStepToPhotonConverterOpenCL::GetDoublePrecision() const { return doublePrecision_; }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetStopDetectedPhotons(bool value)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    if ((value) && (saveAllPhotons_))
-        throw I3CLSimStepToPhotonConverter_exception("You cannot set stopDetectedPhotons, because saveAllPhotons is set. The options are mutually exclusive.");
 
-    compiled_=false;
+    if ((value) && (saveAllPhotons_))
+        throw I3CLSimStepToPhotonConverter_exception(
+            "You cannot set stopDetectedPhotons, because saveAllPhotons is set. The options are mutually exclusive.");
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    stopDetectedPhotons_=value;
+
+    stopDetectedPhotons_ = value;
 }
 
-bool I3CLSimStepToPhotonConverterOpenCL::GetStopDetectedPhotons() const
-{
-    return stopDetectedPhotons_;
-}
-
-
+bool I3CLSimStepToPhotonConverterOpenCL::GetStopDetectedPhotons() const { return stopDetectedPhotons_; }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetSaveAllPhotons(bool value)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
+
     if ((value) && (stopDetectedPhotons_))
-        throw I3CLSimStepToPhotonConverter_exception("You cannot set saveAllPhotons, because stopDetectedPhotons is set. The options are mutually exclusive.");
-    
-    compiled_=false;
+        throw I3CLSimStepToPhotonConverter_exception(
+            "You cannot set saveAllPhotons, because stopDetectedPhotons is set. The options are mutually exclusive.");
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    saveAllPhotons_=value;
+
+    saveAllPhotons_ = value;
 }
 
-bool I3CLSimStepToPhotonConverterOpenCL::GetSaveAllPhotons() const
-{
-    return saveAllPhotons_;
-}
-
-
+bool I3CLSimStepToPhotonConverterOpenCL::GetSaveAllPhotons() const { return saveAllPhotons_; }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetSaveAllPhotonsPrescale(double value)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    compiled_=false;
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    saveAllPhotonsPrescale_=value;
+
+    saveAllPhotonsPrescale_ = value;
 }
 
-double I3CLSimStepToPhotonConverterOpenCL::GetSaveAllPhotonsPrescale() const
-{
-    return saveAllPhotonsPrescale_;
-}
-
-
+double I3CLSimStepToPhotonConverterOpenCL::GetSaveAllPhotonsPrescale() const { return saveAllPhotonsPrescale_; }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetPhotonHistoryEntries(uint32_t value)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    compiled_=false;
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    photonHistoryEntries_=value;
+
+    photonHistoryEntries_ = value;
 }
 
-uint32_t I3CLSimStepToPhotonConverterOpenCL::GetPhotonHistoryEntries() const
-{
-    return photonHistoryEntries_;
-}
-
+uint32_t I3CLSimStepToPhotonConverterOpenCL::GetPhotonHistoryEntries() const { return photonHistoryEntries_; }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetFixedNumberOfAbsorptionLengths(double value)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    compiled_=false;
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    fixedNumberOfAbsorptionLengths_=value;
+
+    fixedNumberOfAbsorptionLengths_ = value;
 }
 
 double I3CLSimStepToPhotonConverterOpenCL::GetFixedNumberOfAbsorptionLengths() const
@@ -1542,92 +1492,84 @@ double I3CLSimStepToPhotonConverterOpenCL::GetFixedNumberOfAbsorptionLengths() c
     return fixedNumberOfAbsorptionLengths_;
 }
 
-
 void I3CLSimStepToPhotonConverterOpenCL::SetDOMPancakeFactor(double value)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    compiled_=false;
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    pancakeFactor_=value;
+
+    pancakeFactor_ = value;
 }
 
-double I3CLSimStepToPhotonConverterOpenCL::GetDOMPancakeFactor() const
-{
-    return pancakeFactor_;
-}
+double I3CLSimStepToPhotonConverterOpenCL::GetDOMPancakeFactor() const { return pancakeFactor_; }
 
-
-
-void I3CLSimStepToPhotonConverterOpenCL::SetWlenGenerators(const std::vector<I3CLSimRandomValueConstPtr> &wlenGenerators)
+void I3CLSimStepToPhotonConverterOpenCL::SetWlenGenerators(
+    const std::vector<I3CLSimRandomValueConstPtr> &wlenGenerators)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    compiled_=false;
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    wlenGenerators_=wlenGenerators;
+
+    wlenGenerators_ = wlenGenerators;
 }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetWlenBias(I3CLSimFunctionConstPtr wlenBias)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    compiled_=false;
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    wlenBias_=wlenBias;
+
+    wlenBias_ = wlenBias;
 }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetMediumProperties(I3CLSimMediumPropertiesConstPtr mediumProperties)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    compiled_=false;
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    mediumProperties_=mediumProperties;
+
+    mediumProperties_ = mediumProperties;
 }
 
 void I3CLSimStepToPhotonConverterOpenCL::SetGeometry(I3CLSimSimpleGeometryConstPtr geometry)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL already initialized!");
-    
-    compiled_=false;
+
+    compiled_ = false;
     kernel_.clear();
     queue_.clear();
-    
-    geometry_=geometry;
+
+    geometry_ = geometry;
 }
 
 void I3CLSimStepToPhotonConverterOpenCL::EnqueueSteps(I3CLSimStepSeriesConstPtr steps, uint32_t identifier)
 {
     if (!initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL is not initialized!");
-    
-    if (!steps)
-        throw I3CLSimStepToPhotonConverter_exception("Steps pointer is (null)!");
-    
-    if (steps->empty())
-        throw I3CLSimStepToPhotonConverter_exception("Steps are empty!");
-    
+
+    if (!steps) throw I3CLSimStepToPhotonConverter_exception("Steps pointer is (null)!");
+
+    if (steps->empty()) throw I3CLSimStepToPhotonConverter_exception("Steps are empty!");
+
     if (steps->size() > maxNumWorkitems_)
         throw I3CLSimStepToPhotonConverter_exception("Number of steps is greater than maximum number of work items!");
-    
+
     if (steps->size() % workgroupSize_ != 0)
         throw I3CLSimStepToPhotonConverter_exception("The number of steps is not a multiple of the workgroup size!");
-    
-    
+
     queueToOpenCL_->Put(make_pair(identifier, steps));
 }
 
@@ -1635,74 +1577,67 @@ std::size_t I3CLSimStepToPhotonConverterOpenCL::QueueSize() const
 {
     if (!initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL is not initialized!");
-    
+
     return queueToOpenCL_->size();
 }
-
 
 bool I3CLSimStepToPhotonConverterOpenCL::MorePhotonsAvailable() const
 {
     if (!initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL is not initialized!");
-    
+
     return (!queueFromOpenCL_->empty());
 }
 
 // helper
-namespace {
-    inline void ReplaceStringDOMIndexWithStringDOMIDs(I3CLSimPhotonSeries &photons,
-                                                      const std::vector<int> &stringIndexToStringIDBuffer,
-                                                      const std::vector<std::vector<unsigned int> > &domIndexToDomIDBuffer_perStringIndex)
-    {
-        BOOST_FOREACH(I3CLSimPhoton &photon, photons)
-        {
-            const int16_t stringIndex = photon.stringID;
-            const uint16_t DOMIndex = photon.omID;
-            
-            const int stringID = stringIndexToStringIDBuffer.at(stringIndex);
-            const unsigned int domID = domIndexToDomIDBuffer_perStringIndex.at(stringIndex).at(DOMIndex);
-            
-            if ((stringID < std::numeric_limits<int16_t>::min()) ||
-                (stringID > std::numeric_limits<int16_t>::max()))
-                log_fatal("Your detector I3Geometry uses a string ID \"%i\". Large IDs like that are currently not supported by clsim.",
-                          stringID);
-            
-            if (domID > std::numeric_limits<uint16_t>::max())
-                log_fatal("Your detector I3Geometry uses a OM ID \"%u\". Large IDs like that are currently not supported by clsim.",
-                          domID);
-            
-            photon.stringID = static_cast<int16_t>(stringID);
-            photon.omID = static_cast<uint16_t>(domID);
-            
-            log_trace("Replaced ID (%" PRIi16 "/%" PRIu16 ") with ID (%" PRIi16 "/%" PRIu16 ") (photon @ pos=(%g,%g,%g))",
-                      stringIndex,
-                      DOMIndex,
-                      photon.stringID,
-                      photon.omID,
-                      photon.GetPosX(),
-                      photon.GetPosY(),
-                      photon.GetPosZ()
-                      );
-            
-        }
+namespace
+{
+inline void ReplaceStringDOMIndexWithStringDOMIDs(
+    I3CLSimPhotonSeries &photons, const std::vector<int> &stringIndexToStringIDBuffer,
+    const std::vector<std::vector<unsigned int>> &domIndexToDomIDBuffer_perStringIndex)
+{
+    BOOST_FOREACH (I3CLSimPhoton &photon, photons) {
+        const int16_t stringIndex = photon.stringID;
+        const uint16_t DOMIndex = photon.omID;
+
+        const int stringID = stringIndexToStringIDBuffer.at(stringIndex);
+        const unsigned int domID = domIndexToDomIDBuffer_perStringIndex.at(stringIndex).at(DOMIndex);
+
+        if ((stringID < std::numeric_limits<int16_t>::min()) || (stringID > std::numeric_limits<int16_t>::max()))
+            log_fatal(
+                "Your detector I3Geometry uses a string ID \"%i\". Large IDs like that are currently not supported by "
+                "clsim.",
+                stringID);
+
+        if (domID > std::numeric_limits<uint16_t>::max())
+            log_fatal(
+                "Your detector I3Geometry uses a OM ID \"%u\". Large IDs like that are currently not supported by "
+                "clsim.",
+                domID);
+
+        photon.stringID = static_cast<int16_t>(stringID);
+        photon.omID = static_cast<uint16_t>(domID);
+
+        log_trace("Replaced ID (%" PRIi16 "/%" PRIu16 ") with ID (%" PRIi16 "/%" PRIu16 ") (photon @ pos=(%g,%g,%g))",
+                  stringIndex, DOMIndex, photon.stringID, photon.omID, photon.GetPosX(), photon.GetPosY(),
+                  photon.GetPosZ());
     }
-    
 }
+
+}  // namespace
 
 I3CLSimStepToPhotonConverter::ConversionResult_t I3CLSimStepToPhotonConverterOpenCL::GetConversionResult()
 {
     if (!initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterOpenCL is not initialized!");
-    
+
     ConversionResult_t result = queueFromOpenCL_->Get();
-    
+
     if ((result.photons) && (!saveAllPhotons_)) {
-        ReplaceStringDOMIndexWithStringDOMIDs(*result.photons,
-                                              stringIndexToStringIDBuffer_,
+        ReplaceStringDOMIndexWithStringDOMIDs(*result.photons, stringIndexToStringIDBuffer_,
                                               domIndexToDomIDBuffer_perStringIndex_);
-        
     }
-    
+
     return result;
 }
 
@@ -1710,281 +1645,251 @@ std::map<std::string, double> I3CLSimStepToPhotonConverterOpenCL::GetStatistics(
 {
     std::map<std::string, double> summary;
     boost::unique_lock<boost::mutex> guard(statistics_.mutex);
-    
+
     const double totalNumPhotonsGenerated = statistics_.total_num_photons_generated;
-    const double totalDeviceTime = static_cast<double>(statistics_.total_device_duration)*I3Units::ns;
-    const double totalHostTime = static_cast<double>(statistics_.total_host_duration)*I3Units::ns;
+    const double totalDeviceTime = static_cast<double>(statistics_.total_device_duration) * I3Units::ns;
+    const double totalHostTime = static_cast<double>(statistics_.total_host_duration) * I3Units::ns;
 
-    summary["TotalDeviceTime"]            = totalDeviceTime;
-    summary["TotalHostTime"]              = totalHostTime;
-    summary["TotalQueueTime"]             = statistics_.total_queue_duration;
+    summary["TotalDeviceTime"] = totalDeviceTime;
+    summary["TotalHostTime"] = totalHostTime;
+    summary["TotalQueueTime"] = statistics_.total_queue_duration;
 
-    summary["DeviceTimePerKernelMean"]    = statistics_.device_duration.mean();
-    summary["DeviceTimePerKernelStd"]     = std::sqrt(statistics_.device_duration.variance());
-    summary["HostTimePerKernelMean"]      = statistics_.host_duration.mean();
-    summary["HostTimePerKernelStd"]       = std::sqrt(statistics_.host_duration.variance());
-    summary["InputTimePerKernelMean"]     = statistics_.input_wait.mean();
-    summary["InputTimePerKernelStd"]      = std::sqrt(statistics_.input_wait.variance());
-    summary["OutputTimePerKernelMean"]    = statistics_.output_wait.mean();
-    summary["OutputTimePerKernelStd"]     = std::sqrt(statistics_.output_wait.variance());
+    summary["DeviceTimePerKernelMean"] = statistics_.device_duration.mean();
+    summary["DeviceTimePerKernelStd"] = std::sqrt(statistics_.device_duration.variance());
+    summary["HostTimePerKernelMean"] = statistics_.host_duration.mean();
+    summary["HostTimePerKernelStd"] = std::sqrt(statistics_.host_duration.variance());
+    summary["InputTimePerKernelMean"] = statistics_.input_wait.mean();
+    summary["InputTimePerKernelStd"] = std::sqrt(statistics_.input_wait.variance());
+    summary["OutputTimePerKernelMean"] = statistics_.output_wait.mean();
+    summary["OutputTimePerKernelStd"] = std::sqrt(statistics_.output_wait.variance());
 
-    summary["NumKernelCalls"]             = statistics_.total_kernel_calls;
-    summary["TotalNumPhotonsGenerated"]   = totalNumPhotonsGenerated;
-    summary["TotalNumPhotonsAtDOMs"]      = statistics_.total_num_photons_atDOMs;
-    
-    summary["AverageDeviceTimePerPhoton"] = totalDeviceTime/totalNumPhotonsGenerated;
-    summary["AverageHostTimePerPhoton"]   = totalHostTime/totalNumPhotonsGenerated;
-    summary["DeviceUtilization"]          = totalDeviceTime/totalHostTime;
-    
+    summary["NumKernelCalls"] = statistics_.total_kernel_calls;
+    summary["TotalNumPhotonsGenerated"] = totalNumPhotonsGenerated;
+    summary["TotalNumPhotonsAtDOMs"] = statistics_.total_num_photons_atDOMs;
+
+    summary["AverageDeviceTimePerPhoton"] = totalDeviceTime / totalNumPhotonsGenerated;
+    summary["AverageHostTimePerPhoton"] = totalHostTime / totalNumPhotonsGenerated;
+    summary["DeviceUtilization"] = totalDeviceTime / totalHostTime;
+
     return summary;
 }
 
-void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
-    boost::this_thread::disable_interruption &di,
-    const boost::posix_time::ptime &last_timestamp, bool &shouldBreak,
-    unsigned int bufferIndex, uint32_t &out_stepsIdentifier,
-    uint64_t &out_totalNumberOfPhotons, std::size_t &out_numberOfInputSteps,
-    bool blocking) 
+void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_interruption &di,
+                                                   const boost::posix_time::ptime &last_timestamp, bool &shouldBreak,
+                                                   unsigned int bufferIndex, uint32_t &out_stepsIdentifier,
+                                                   uint64_t &out_totalNumberOfPhotons,
+                                                   std::size_t &out_numberOfInputSteps, bool blocking)
 {
+    uint32_t stepsIdentifier = 0;
+    I3CLSimStepSeriesConstPtr steps;
 
-  uint32_t stepsIdentifier = 0;
-  I3CLSimStepSeriesConstPtr steps;
+    const uint32_t zeroCounterBufferSource = 0;
+    VECTOR_CLASS<cl::Event> bufferWriteEvents(2);
 
-  const uint32_t zeroCounterBufferSource = 0;
-  VECTOR_CLASS<cl::Event> bufferWriteEvents(2);
+    while (!steps) {
+        // we need to fetch new steps
 
-  while (!steps) {
-    // we need to fetch new steps
+        boost::this_thread::restore_interruption ri(di);
+        typedef std::chrono::high_resolution_clock clock_t;
+        try {
+            if (blocking) {
+                // this can block until there is something on the queue:
+                log_trace("[%u] waiting for input queue..", bufferIndex);
+                auto t0 = clock_t::now();
+                ToOpenCLPair_t val = queueToOpenCL_->Get();
+                auto dt = clock_t::now() - t0;
+                // count host time only if reference timestamp is set
+                if (!last_timestamp.is_not_a_date_time()) {
+                    boost::unique_lock<boost::mutex> guard(statistics_.mutex);
+                    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count();
+                    auto &stat = statistics_.input_wait;
+                    if (stat.count() >= 10 && std::pow(ns - stat.mean(), 2) > 9 * stat.variance()) {
+                        log_info_stream("Input wait " << ns << " ns (expected " << stat.mean() << " +- "
+                                                      << std::sqrt(stat.variance()) << " ns)");
+                    }
+                    stat.update(ns);
+                    statistics_.total_queue_duration += ns;
+                }
+                log_trace_stream("[" << bufferIndex << "] waited "
+                                     << std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count()
+                                     << " ns for bunch " << val.first);
+                stepsIdentifier = val.first;
+                steps = val.second;
+            } else {
+                ToOpenCLPair_t val;
+                // this will never block:
+                printf("[%u] waiting for queue.. (non-blocking)", bufferIndex);
+                const bool ret = queueToOpenCL_->GetNonBlocking(val);
 
-    boost::this_thread::restore_interruption ri(di);
-    typedef std::chrono::high_resolution_clock clock_t;
-    try {
-      if (blocking) {
-        // this can block until there is something on the queue:
-        log_trace("[%u] waiting for input queue..", bufferIndex);
-        auto t0 = clock_t::now();
-        ToOpenCLPair_t val = queueToOpenCL_->Get();
-        auto dt = clock_t::now() - t0;
-        // count host time only if reference timestamp is set
-        if (!last_timestamp.is_not_a_date_time()) {
-          boost::unique_lock<boost::mutex> guard(statistics_.mutex);
-          auto ns =
-              std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count();
-          auto &stat = statistics_.input_wait;
-          if (stat.count() >= 10 &&
-              std::pow(ns - stat.mean(), 2) > 9 * stat.variance()) {
-            log_info_stream("Input wait "
-                            << ns << " ns (expected " << stat.mean() << " +- "
-                            << std::sqrt(stat.variance()) << " ns)");
-          }
-          stat.update(ns);
-          statistics_.total_queue_duration += ns;
+                if (!ret) {
+                    printf("[%u] returned value from queue (empty), size==%zu/%zu!", bufferIndex,
+                           queueToOpenCL_->size(), queueToOpenCL_->max_size());
+                    // queue is empty
+                    return;
+                }
+
+                log_trace("[%u] returned value from queue (non-empty), size==%zu/%zu!", bufferIndex,
+                          queueToOpenCL_->size(), queueToOpenCL_->max_size());
+
+                stepsIdentifier = val.first;
+                steps = val.second;
+            }
+        } catch (boost::thread_interrupted &i) {
+            printf("[%u] OpenCL worker thread was interrupted -  closing.", bufferIndex);
+            shouldBreak = true;
+            return;
         }
-        log_trace_stream(
-            "["
-            << bufferIndex << "] waited "
-            << std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count()
-            << " ns for bunch " << val.first);
-        stepsIdentifier = val.first;
-        steps = val.second;
-      } else {
-        ToOpenCLPair_t val;
-        // this will never block:
-        printf("[%u] waiting for queue.. (non-blocking)", bufferIndex);
-        const bool ret = queueToOpenCL_->GetNonBlocking(val);
-
-        if (!ret) {
-          printf("[%u] returned value from queue (empty), size==%zu/%zu!",
-                 bufferIndex, queueToOpenCL_->size(),
-                 queueToOpenCL_->max_size());
-          // queue is empty
-          return;
-        }
-
-        log_trace("[%u] returned value from queue (non-empty), size==%zu/%zu!",
-                  bufferIndex, queueToOpenCL_->size(),
-                  queueToOpenCL_->max_size());
-
-        stepsIdentifier = val.first;
-        steps = val.second;
-      }
-    } catch (boost::thread_interrupted &i) {
-      printf("[%u] OpenCL worker thread was interrupted -  closing.",
-             bufferIndex);
-      shouldBreak = true;
-      return;
     }
-  }
 
-  log_trace("[%u] OpenCL thread got steps with id %zu", bufferIndex,
-            static_cast<std::size_t>(stepsIdentifier));
-  out_stepsIdentifier = stepsIdentifier;
+    log_trace("[%u] OpenCL thread got steps with id %zu", bufferIndex, static_cast<std::size_t>(stepsIdentifier));
+    out_stepsIdentifier = stepsIdentifier;
 
 #ifdef DUMP_STATISTICS
-  uint64_t totalNumberOfPhotons = 0;
-  BOOST_FOREACH (const I3CLSimStep &step, *steps) {
-    totalNumberOfPhotons += step.numPhotons;
-  }
-  out_totalNumberOfPhotons = totalNumberOfPhotons;
+    uint64_t totalNumberOfPhotons = 0;
+    BOOST_FOREACH (const I3CLSimStep &step, *steps) {
+        totalNumberOfPhotons += step.numPhotons;
+    }
+    out_totalNumberOfPhotons = totalNumberOfPhotons;
 #else
-  out_totalNumberOfPhotons = 0;
-#endif // DUMP_STATISTICS
+    out_totalNumberOfPhotons = 0;
+#endif  // DUMP_STATISTICS
 
+    // ----------------------- CUDA PART -------------------------
+    bool returnPhotonsCUDA = true;  // return CUDA phtoons instead of CL phtotons
+    I3CLSimPhotonSeriesPtr photons(new I3CLSimPhotonSeries);
 
-// ----------------------- CUDA PART -------------------------
-bool returnPhotonsCUDA = true;  //return CUDA phtoons instead of CL phtotons
-I3CLSimPhotonSeriesPtr photons(new I3CLSimPhotonSeries);
+    printf(" -------------  CUDA ------------- \n");
+    float totalCudaKernelTime = 0;
 
-printf(" -------------  CUDA ------------- \n");
-float totalCudaKernelTime = 0;
+    launch_CudaPropogate(steps->data(), steps->size(), maxNumOutputPhotons_, &geoLayerToOMNumIndexPerStringSetInfo_[0],
+                         geoLayerToOMNumIndexPerStringSetInfo_.size(), *photons, &(MWC_RNG_x[0]), &(MWC_RNG_a[0]),
+                         maxNumWorkitems_, totalCudaKernelTime);
 
-  launch_CudaPropogate( steps->data(), steps->size(),  
-                       maxNumOutputPhotons_,
-                       &geoLayerToOMNumIndexPerStringSetInfo_[0],
-                       geoLayerToOMNumIndexPerStringSetInfo_.size(),
-                       *photons,
-                       &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_,
-                        totalCudaKernelTime);
+    printf(" -------------  done CUDA ------------- \n");
 
-  printf(" -------------  done CUDA ------------- \n");
+    printf(" -------------  CL ------------- \n");
+    try {
+        queue_[0]->enqueueWriteBuffer(*deviceBuffer_CurrentNumOutputPhotons[0], CL_FALSE, 0, sizeof(uint32_t),
+                                      &zeroCounterBufferSource, NULL, &(bufferWriteEvents[0]));
+        queue_[0]->enqueueWriteBuffer(*deviceBuffer_InputSteps[0], CL_FALSE, 0, steps->size() * sizeof(I3CLSimStep),
+                                      &((*steps)[0]), NULL, &(bufferWriteEvents[1]));
+        queue_[0]->flush();  // make sure it starts executing on the device
 
-
-  printf(" -------------  CL ------------- \n");
-  try {
-    queue_[0]->enqueueWriteBuffer(
-        *deviceBuffer_CurrentNumOutputPhotons[0], CL_FALSE, 0, sizeof(uint32_t),
-        &zeroCounterBufferSource, NULL, &(bufferWriteEvents[0]));
-    queue_[0]->enqueueWriteBuffer(
-        *deviceBuffer_InputSteps[0], CL_FALSE, 0, steps->size() * sizeof(I3CLSimStep),
-        &((*steps)[0]), NULL, &(bufferWriteEvents[1]));
-    queue_[0]->flush(); // make sure it starts executing on the device
-
-    log_trace("[%u] waiting for copy to finish", 0);
-    waitForOpenCLEventsYield(bufferWriteEvents);
-  } catch (cl::Error &err) {
-    log_fatal("[%u] OpenCL ERROR (memcpy to device): %s (%i)", 0, err.what(),
-              err.err());
-  }
-
- // make sure nothing is running so timing is accurate
-try {
-    // wait for the queue to really finish (just to make sure)
-    queue_[0]->finish();
-  } catch (cl::Error &err) {
-    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
-              err.err());
-  }
-
-// now run cl and measure time
-std::chrono::time_point<std::chrono::system_clock> startTimeCL = std::chrono::system_clock::now();
- cl::Event kernelFinishEvent;
-  queue_[0]->enqueueNDRangeKernel(
-      *(kernel_[0]),
-      cl::NullRange,       // current implementations force this to be NULL
-      cl::NDRange(steps->size()), // number of work items
-      cl::NDRange(workgroupSize_),
-      &(bufferWriteEvents),  // wait for buffers to be filled
-      &kernelFinishEvent);
-  queue_[0]->flush();
-
- try {
-    // wait for the kernel to finish
-    waitForOpenCLEventYield(kernelFinishEvent);
-  } catch (cl::Error &err) {
-    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
-              err.err());
-  }
-try {
-    // wait for the queue to really finish (just to make sure)
-    queue_[0]->finish();
-  } catch (cl::Error &err) {
-    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
-              err.err());
-  }
-  std::chrono::time_point<std::chrono::system_clock> endTimeCL =
-      std::chrono::system_clock::now();
-
- float  totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    endTimeCL - startTimeCL).count();
-
-  I3CLSimPhotonHistorySeriesPtr photonHistories;
-  boost::shared_ptr<std::vector<cl_float4>> photonHistoriesRaw;
- 
-  try {
-    uint32_t numberOfGeneratedPhotons;
-    {
-      cl::Event copyComplete;
-      queue_[bufferIndex]->enqueueReadBuffer(
-          *deviceBuffer_CurrentNumOutputPhotons[0], CL_FALSE, 0,
-          sizeof(uint32_t), &numberOfGeneratedPhotons, NULL, &copyComplete);
-      queue_[bufferIndex]
-          ->flush(); // make sure it starts executing on the device
-      waitForOpenCLEventYield(copyComplete);
+        log_trace("[%u] waiting for copy to finish", 0);
+        waitForOpenCLEventsYield(bufferWriteEvents);
+    } catch (cl::Error &err) {
+        log_fatal("[%u] OpenCL ERROR (memcpy to device): %s (%i)", 0, err.what(), err.err());
     }
 
-    printf("photon hits = %f from %d steps \n", numberOfGeneratedPhotons, steps->size());
-
-    if (numberOfGeneratedPhotons > maxNumOutputPhotons_) {
-      printf("Maximum number of photons exceeded, only receiving %" PRIu32
-             " of %" PRIu32 " photons \n",
-             maxNumOutputPhotons_, numberOfGeneratedPhotons);
-      numberOfGeneratedPhotons = maxNumOutputPhotons_;
+    // make sure nothing is running so timing is accurate
+    try {
+        // wait for the queue to really finish (just to make sure)
+        queue_[0]->finish();
+    } catch (cl::Error &err) {
+        log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(), err.err());
     }
 
-    printf(" -------------  done CL ------------- \n");
-    printf(" 1 run with num threads per block CUDA =  %d,  CL = %d \n", NTHREADS_PER_BLOCK, workgroupSize_);
-    printf("runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );
-    printf("runtime CL   kernel    %f [ms] \n", totalCLKernelTime  );
-    printf(" ------------- ------------- \n");
+    // now run cl and measure time
+    std::chrono::time_point<std::chrono::system_clock> startTimeCL = std::chrono::system_clock::now();
+    cl::Event kernelFinishEvent;
+    queue_[0]->enqueueNDRangeKernel(*(kernel_[0]),
+                                    cl::NullRange,               // current implementations force this to be NULL
+                                    cl::NDRange(steps->size()),  // number of work items
+                                    cl::NDRange(workgroupSize_),
+                                    &(bufferWriteEvents),  // wait for buffers to be filled
+                                    &kernelFinishEvent);
+    queue_[0]->flush();
 
-    if (returnPhotonsCUDA) {
-        // we do not care about photon history in cuda
-        photonHistories = I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
-        // also photon array was directly written from cuda, so no need to do it here
-    } else {
-        if (numberOfGeneratedPhotons > 0) {
-            VECTOR_CLASS<cl::Event> copyComplete((photonHistoryEntries_ > 0) ? 2 : 1);
+    try {
+        // wait for the kernel to finish
+        waitForOpenCLEventYield(kernelFinishEvent);
+    } catch (cl::Error &err) {
+        log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(), err.err());
+    }
+    try {
+        // wait for the queue to really finish (just to make sure)
+        queue_[0]->finish();
+    } catch (cl::Error &err) {
+        log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(), err.err());
+    }
+    std::chrono::time_point<std::chrono::system_clock> endTimeCL = std::chrono::system_clock::now();
 
-            // allocate the result vector while waiting for the mapping operation to
-            // complete
-            photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries(numberOfGeneratedPhotons));
-            if (photonHistoryEntries_ > 0) {
-                photonHistoriesRaw = boost::shared_ptr<std::vector<cl_float4>>(new std::vector<cl_float4>(
-                    numberOfGeneratedPhotons * static_cast<std::size_t>(photonHistoryEntries_)));
-            }
+    float totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTimeCL - startTimeCL).count();
 
-            queue_[0]->enqueueReadBuffer(*deviceBuffer_OutputPhotons[0], CL_FALSE, 0,
-                                         numberOfGeneratedPhotons * sizeof(I3CLSimPhoton), &((*photons)[0]), NULL,
-                                         &copyComplete[0]);
+    I3CLSimPhotonHistorySeriesPtr photonHistories;
+    boost::shared_ptr<std::vector<cl_float4>> photonHistoriesRaw;
 
-            if (photonHistoryEntries_ > 0) {
-                queue_[0]->enqueueReadBuffer(
-                    *deviceBuffer_PhotonHistory[0], CL_FALSE, 0,
-                    numberOfGeneratedPhotons * static_cast<std::size_t>(photonHistoryEntries_) * sizeof(cl_float4),
-                    &((*photonHistoriesRaw)[0]), NULL, &copyComplete[1]);
-            }
-            queue_[bufferIndex]->flush();
-            waitForOpenCLEventsYield(copyComplete);  // wait for the buffer(s) to be copied
-            // convert the histories to the external representation
-            if (photonHistoriesRaw) {
-                photonHistories = ConvertPhotonHistories(*photonHistoriesRaw, *photons, photonHistoryEntries_);
-            }
+    try {
+        uint32_t numberOfGeneratedPhotons;
+        {
+            cl::Event copyComplete;
+            queue_[bufferIndex]->enqueueReadBuffer(*deviceBuffer_CurrentNumOutputPhotons[0], CL_FALSE, 0,
+                                                   sizeof(uint32_t), &numberOfGeneratedPhotons, NULL, &copyComplete);
+            queue_[bufferIndex]->flush();  // make sure it starts executing on the device
+            waitForOpenCLEventYield(copyComplete);
+        }
+
+        printf("photon hits = %f from %d steps \n", numberOfGeneratedPhotons, steps->size());
+
+        if (numberOfGeneratedPhotons > maxNumOutputPhotons_) {
+            printf("Maximum number of photons exceeded, only receiving %" PRIu32 " of %" PRIu32 " photons \n",
+                   maxNumOutputPhotons_, numberOfGeneratedPhotons);
+            numberOfGeneratedPhotons = maxNumOutputPhotons_;
+        }
+
+        printf(" -------------  done CL ------------- \n");
+        printf(" 1 run with num threads per block CUDA =  %d,  CL = %d \n", NTHREADS_PER_BLOCK, workgroupSize_);
+        printf("runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime);
+        printf("runtime CL   kernel    %f [ms] \n", totalCLKernelTime);
+        printf(" ------------- ------------- \n");
+
+        if (returnPhotonsCUDA) {
+            // we do not care about photon history in cuda
+            photonHistories = I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
+            // also photon array was directly written from cuda, so no need to do it here
         } else {
-            // empty vector(s)
-            photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries());
-            if (photonHistoryEntries_ > 0) {
-                photonHistories = I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
+            if (numberOfGeneratedPhotons > 0) {
+                VECTOR_CLASS<cl::Event> copyComplete((photonHistoryEntries_ > 0) ? 2 : 1);
+
+                // allocate the result vector while waiting for the mapping operation to
+                // complete
+                photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries(numberOfGeneratedPhotons));
+                if (photonHistoryEntries_ > 0) {
+                    photonHistoriesRaw = boost::shared_ptr<std::vector<cl_float4>>(new std::vector<cl_float4>(
+                        numberOfGeneratedPhotons * static_cast<std::size_t>(photonHistoryEntries_)));
+                }
+
+                queue_[0]->enqueueReadBuffer(*deviceBuffer_OutputPhotons[0], CL_FALSE, 0,
+                                             numberOfGeneratedPhotons * sizeof(I3CLSimPhoton), &((*photons)[0]), NULL,
+                                             &copyComplete[0]);
+
+                if (photonHistoryEntries_ > 0) {
+                    queue_[0]->enqueueReadBuffer(
+                        *deviceBuffer_PhotonHistory[0], CL_FALSE, 0,
+                        numberOfGeneratedPhotons * static_cast<std::size_t>(photonHistoryEntries_) * sizeof(cl_float4),
+                        &((*photonHistoriesRaw)[0]), NULL, &copyComplete[1]);
+                }
+                queue_[bufferIndex]->flush();
+                waitForOpenCLEventsYield(copyComplete);  // wait for the buffer(s) to be copied
+                // convert the histories to the external representation
+                if (photonHistoriesRaw) {
+                    photonHistories = ConvertPhotonHistories(*photonHistoriesRaw, *photons, photonHistoryEntries_);
+                }
+            } else {
+                // empty vector(s)
+                photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries());
+                if (photonHistoryEntries_ > 0) {
+                    photonHistories = I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
+                }
             }
         }
+
+    } catch (cl::Error &err) {
+        log_fatal("OpenCL ERROR (memcpy from device): %s (%i)", err.what(), err.err());
     }
 
-  } catch (cl::Error &err) {
-    log_fatal("OpenCL ERROR (memcpy from device): %s (%i)", err.what(),
-              err.err());
-  }
- 
     // we finished simulating.
-    // signal the caller by putting it's id on the 
+    // signal the caller by putting it's id on the
     // output queue.
     {
         boost::this_thread::restore_interruption ri(di);
@@ -1992,134 +1897,113 @@ try {
             typedef std::chrono::high_resolution_clock clock_t;
             auto t0 = clock_t::now();
             queueFromOpenCL_->Put(ConversionResult_t(stepsIdentifier, photons, photonHistories));
-            auto dt = clock_t::now()-t0;
+            auto dt = clock_t::now() - t0;
             {
                 boost::unique_lock<boost::mutex> guard(statistics_.mutex);
                 auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count();
                 auto &stat = statistics_.output_wait;
                 // warn if queue wait time is off by more than 3 standard deviations
-                if (stat.count() >= 10 && std::pow(ns-stat.mean(),2) > 9*stat.variance()) {
-                    log_info_stream("Output wait "<<ns<<" ns (expected "<<stat.mean()<<" +- "<<std::sqrt(stat.variance())<<" ns)");
+                if (stat.count() >= 10 && std::pow(ns - stat.mean(), 2) > 9 * stat.variance()) {
+                    log_info_stream("Output wait " << ns << " ns (expected " << stat.mean() << " +- "
+                                                   << std::sqrt(stat.variance()) << " ns)");
                 } else {
-                    log_trace_stream("waited "<<ns<< " ns to drain");
+                    log_trace_stream("waited " << ns << " ns to drain");
                 }
                 statistics_.total_queue_duration += ns;
                 stat.update(ns);
             }
-        } catch(boost::thread_interrupted &i) {
+        } catch (boost::thread_interrupted &i) {
             printf("OpenCL thread was interrupted. closing.");
-            shouldBreak=true;
+            shouldBreak = true;
             return;
         }
     }
-
-  
-
 }
 
-void I3CLSimStepToPhotonConverterOpenCL::CLCUDAThread(
-    boost::this_thread::disable_interruption &di) {
-  // set things up here
-  if (!context_)
-    printf("Internal error: context is (null)");
+void I3CLSimStepToPhotonConverterOpenCL::CLCUDAThread(boost::this_thread::disable_interruption &di)
+{
+    // set things up here
+    if (!context_) printf("Internal error: context is (null)");
 
-  const std::size_t numBuffers = 1;
-  checksizes(numBuffers);
+    const std::size_t numBuffers = 1;
+    checksizes(numBuffers);
 
     // notify the main thread that everything is set up
-  {
-    boost::unique_lock<boost::mutex> guard(openCLStarted_mutex_);
-    openCLStarted_ = true;
-  }
+    {
+        boost::unique_lock<boost::mutex> guard(openCLStarted_mutex_);
+        openCLStarted_ = true;
+    }
 
-  openCLStarted_cond_.notify_all();
+    openCLStarted_cond_.notify_all();
 
-  std::vector<uint32_t> stepsIdentifier(numBuffers, 0);
-  std::vector<uint64_t> totalNumberOfPhotons(numBuffers, 0);
-  std::vector<std::size_t> numberOfSteps(numBuffers, 0);
+    std::vector<uint32_t> stepsIdentifier(numBuffers, 0);
+    std::vector<uint64_t> totalNumberOfPhotons(numBuffers, 0);
+    std::vector<std::size_t> numberOfSteps(numBuffers, 0);
 
 #ifdef DUMP_STATISTICS
-  boost::posix_time::ptime last_timestamp;
+    boost::posix_time::ptime last_timestamp;
 #endif
 
-  unsigned int thisBuffer = 0;
-  unsigned int otherBuffer = 1;
-  bool otherBufferHasBeenCopied = false;
+    unsigned int thisBuffer = 0;
+    unsigned int otherBuffer = 1;
+    bool otherBufferHasBeenCopied = false;
 
-    // start the main loop  -   
-    for (;;)
-    {
+    // start the main loop  -
+    for (;;) {
         bool starving = false;
         bool shouldBreak = false;
-        runCLCUDA(di, last_timestamp, shouldBreak, 0, stepsIdentifier[0],
-                    totalNumberOfPhotons[0], numberOfSteps[0]);
+        runCLCUDA(di, last_timestamp, shouldBreak, 0, stepsIdentifier[0], totalNumberOfPhotons[0], numberOfSteps[0]);
 
         if (shouldBreak) break;
-  }
-
-  printf("OpenCLCUDA thread terminating...");
-}
-
-void I3CLSimStepToPhotonConverterOpenCL::checksizes(const int numBuffers) {
-
-  if (queue_.size() != numBuffers)
-    printf("Internal error: queue_.size() != 2!");
-  if (kernel_.size() != numBuffers)
-    printf("Internal error: kernel_.size() != 2!");
-
-  BOOST_FOREACH (boost::shared_ptr<cl::CommandQueue> &ptr, queue_) {
-    if (!ptr)
-      log_fatal("Internal error: queue_[] is (null)");
-  }
-  BOOST_FOREACH (boost::shared_ptr<cl::Kernel> &ptr, kernel_) {
-    if (!ptr)
-      log_fatal("Internal error: kernel_[] is (null)");
-  }
-
-  if (deviceBuffer_InputSteps.size() != numBuffers)
-    printf("Internal error: deviceBuffer_InputSteps.size() != 2!");
-  if (deviceBuffer_OutputPhotons.size() != numBuffers)
-    printf("Internal error: deviceBuffer_OutputPhotons.size() != 2!");
-  if (deviceBuffer_CurrentNumOutputPhotons.size() != numBuffers)
-    printf("Internal error: deviceBuffer_CurrentNumOutputPhotons.size() != 2!");
-  if (photonHistoryEntries_ > 0) {
-    if (deviceBuffer_PhotonHistory.size() != numBuffers)
-      printf("Internal error: deviceBuffer_PhotonHistory.size() != 2!");
-  }
-
-  BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_InputSteps) {
-    if (!ptr)
-      log_fatal("Internal error: deviceBuffer_InputSteps[] is (null)");
-  }
-  BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr,
-                 deviceBuffer_OutputPhotons) {
-    if (!ptr)
-      log_fatal("Internal error: deviceBuffer_OutputPhotons[] is (null)");
-  }
-  BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr,
-                 deviceBuffer_CurrentNumOutputPhotons) {
-    if (!ptr)
-      log_fatal(
-          "Internal error: deviceBuffer_CurrentNumOutputPhotons[] is (null)");
-  }
-
-  if (photonHistoryEntries_ > 0) {
-    BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr,
-                   deviceBuffer_PhotonHistory) {
-      if (!ptr)
-        log_fatal("Internal error: deviceBuffer_PhotonHistory[] is (null)");
     }
-  }
 
-  if (!saveAllPhotons_) {
-    if (!deviceBuffer_GeoLayerToOMNumIndexPerStringSet)
-      log_fatal("Internal error: deviceBuffer_GeoLayerToOMNumIndexPerStringSet "
-                "is (null)");
-  }
-  if (!deviceBuffer_MWC_RNG_x)
-    log_fatal("Internal error: deviceBuffer_MWC_RNG_x is (null)");
-  if (!deviceBuffer_MWC_RNG_a)
-    log_fatal("Internal error: deviceBuffer_MWC_RNG_a is (null)");
+    printf("OpenCLCUDA thread terminating...");
 }
 
+void I3CLSimStepToPhotonConverterOpenCL::checksizes(const int numBuffers)
+{
+    if (queue_.size() != numBuffers) printf("Internal error: queue_.size() != 2!");
+    if (kernel_.size() != numBuffers) printf("Internal error: kernel_.size() != 2!");
 
+    BOOST_FOREACH (boost::shared_ptr<cl::CommandQueue> &ptr, queue_) {
+        if (!ptr) log_fatal("Internal error: queue_[] is (null)");
+    }
+    BOOST_FOREACH (boost::shared_ptr<cl::Kernel> &ptr, kernel_) {
+        if (!ptr) log_fatal("Internal error: kernel_[] is (null)");
+    }
+
+    if (deviceBuffer_InputSteps.size() != numBuffers) printf("Internal error: deviceBuffer_InputSteps.size() != 2!");
+    if (deviceBuffer_OutputPhotons.size() != numBuffers)
+        printf("Internal error: deviceBuffer_OutputPhotons.size() != 2!");
+    if (deviceBuffer_CurrentNumOutputPhotons.size() != numBuffers)
+        printf("Internal error: deviceBuffer_CurrentNumOutputPhotons.size() != 2!");
+    if (photonHistoryEntries_ > 0) {
+        if (deviceBuffer_PhotonHistory.size() != numBuffers)
+            printf("Internal error: deviceBuffer_PhotonHistory.size() != 2!");
+    }
+
+    BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_InputSteps) {
+        if (!ptr) log_fatal("Internal error: deviceBuffer_InputSteps[] is (null)");
+    }
+    BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_OutputPhotons) {
+        if (!ptr) log_fatal("Internal error: deviceBuffer_OutputPhotons[] is (null)");
+    }
+    BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_CurrentNumOutputPhotons) {
+        if (!ptr) log_fatal("Internal error: deviceBuffer_CurrentNumOutputPhotons[] is (null)");
+    }
+
+    if (photonHistoryEntries_ > 0) {
+        BOOST_FOREACH (boost::shared_ptr<cl::Buffer> &ptr, deviceBuffer_PhotonHistory) {
+            if (!ptr) log_fatal("Internal error: deviceBuffer_PhotonHistory[] is (null)");
+        }
+    }
+
+    if (!saveAllPhotons_) {
+        if (!deviceBuffer_GeoLayerToOMNumIndexPerStringSet)
+            log_fatal(
+                "Internal error: deviceBuffer_GeoLayerToOMNumIndexPerStringSet "
+                "is (null)");
+    }
+    if (!deviceBuffer_MWC_RNG_x) log_fatal("Internal error: deviceBuffer_MWC_RNG_x is (null)");
+    if (!deviceBuffer_MWC_RNG_a) log_fatal("Internal error: deviceBuffer_MWC_RNG_a is (null)");
+}

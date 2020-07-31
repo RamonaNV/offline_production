@@ -36,9 +36,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #define NTHREADS_PER_BLOCK 512
 
-void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
-    uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer, I3CLSimPhotonSeries& outphotons,
-    uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a,  int sizeRNG,
-     float& totalCudaKernelTime);
+void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, uint32_t maxHitIndex,
+                          unsigned short* geoLayerToOMNumIndexPerStringSet, int ngeolayer,
+                          I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
+                          uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime);
 
 #endif  // PROPAGATIONKERNELSOURCE_CUH

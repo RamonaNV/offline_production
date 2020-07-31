@@ -91,9 +91,8 @@ struct I3CLSimPhotonCuda {
     {
     }
 
-
-    __host__ I3CLSimPhoton getI3CLSimPhoton(){
-
+    __host__ I3CLSimPhoton getI3CLSimPhoton()
+    {
         I3CLSimPhoton i3photon;
         i3photon.SetPosX(posAndTime.x);
         i3photon.SetPosY(posAndTime.y);
@@ -110,7 +109,6 @@ struct I3CLSimPhotonCuda {
         i3photon.SetStartDirTheta(startDir.x);
         i3photon.SetStartDirPhi(startDir.y);
 
-
         i3photon.SetWavelength(wavelength);
         i3photon.SetCherenkovDist(cherenkovDist);
         i3photon.SetNumScatters(numScatters);
@@ -119,13 +117,10 @@ struct I3CLSimPhotonCuda {
         i3photon.SetStringID(stringID);
         i3photon.SetOMID(omID);
         i3photon.SetGroupVelocity(groupVelocity);
-        i3photon.SetDistInAbsLens(distInAbsLens); 
+        i3photon.SetDistInAbsLens(distInAbsLens);
 
         return i3photon;
-
-
     }
-
 };
 
 #endif  // DATASTRUCCUDA_CUH
