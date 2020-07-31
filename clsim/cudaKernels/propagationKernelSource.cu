@@ -59,30 +59,6 @@ const  unsigned short* __restrict__  geoLayerToOMNumIndexPerStringSet,
 #endif
            uint64_t* __restrict__  MWC_RNG_x, uint32_t* __restrict__  MWC_RNG_a);
 
-
-void photonsToFile(const std::string& filename, I3CLSimPhotonCuda *photons, unsigned int nphotons){
-      std::cout<< " writing "<< nphotons << " to file "<< filename<<std::endl;
-      std::ofstream outputFile; outputFile.open (filename + "photonsCuda.csv");
-      for (unsigned int i = 0; i <  nphotons; i++)
-      {  
-              outputFile <<photons[i].posAndTime.x << "," << photons[i].posAndTime.y << "," << photons[i].numScatters << std::endl;
-      }
-      outputFile.close();
-}
-
-
-void photonsToFile(const std::string& filename, I3CLSimPhoton *photons, unsigned int nphotons){
-      std::cout<< " writing "<< nphotons << " to file "<< filename<<std::endl;
-      std::ofstream  outputFile;  outputFile.open (filename + "photonsCL.csv");
-      for (unsigned int i = 0; i <  nphotons; i++)
-      {  
-            outputFile <<photons[i].GetPosX() << "," << photons[i].GetPosY() << "," << photons[i].GetNumScatters() << std::endl;
-      }
-      outputFile.close();
-}
-
-
-
 // maxNumbWOrkItems from  CL rndm arrays
 void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG_a, uint64_t** d_MWC_RNG_x, uint32_t** d_MWC_RNG_a)  
 {
@@ -98,10 +74,9 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
-      const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-      bool returnPhotons, I3CLSimPhoton* outphotons, uint32_t& numberOutPhotonsCUDA,
+      const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer, I3CLSimPhotonSeries& outphotons,
         uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG,
-         float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv, const std::string& csvFilename){
+         float& totalCudaKernelTime){
      
       //set up congruental random number generator, reusing host arrays and randomService from I3CLSimStepToPhotonConverterOpenCL setup.
       uint64_t* d_MWC_RNG_x;
@@ -109,98 +84,65 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
       init_RDM_CUDA( sizeRNG, MWC_RNG_x,  MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
       
       printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, 1, nsteps);
-      uint32_t h_totalHitIndex =0;
       unsigned short *d_geolayer;
-	  CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
+      CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer , ngeolayer*sizeof(unsigned short)));
       CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer*sizeof(unsigned short),cudaMemcpyHostToDevice));
       
-      //these multiple launches correspond to numBuffers..   
-      for (int ilaunch= 0 ; ilaunch<1; ++ilaunch )
-      {     
-            int launchnsteps = ( (1+ilaunch)*nsteps<= nsteps) ?  nsteps : nsteps-ilaunch*nsteps;   
-           
-            struct I3CLSimStepCuda* h_cudastep = (struct I3CLSimStepCuda*) malloc(launchnsteps*sizeof(struct I3CLSimStepCuda));
+      
+      struct I3CLSimStepCuda* h_cudastep = (struct I3CLSimStepCuda*) malloc(nsteps*sizeof(struct I3CLSimStepCuda));
+      
+      for (int i =0; i<nsteps; i++){
+            h_cudastep[i] = I3CLSimStep(in_steps[i]);                  
+      } 
             
-            for (int i =0; i<launchnsteps; i++){
-                  h_cudastep[i] = I3CLSimStep(in_steps[i+ilaunch*nsteps]);                  
-            } 
-                 
-            I3CLSimStepCuda * d_cudastep;
-            CUDA_ERR_CHECK(cudaMalloc( (void**)&d_cudastep , launchnsteps*sizeof(I3CLSimStepCuda)));
-            CUDA_ERR_CHECK(cudaMemcpy(d_cudastep, h_cudastep, launchnsteps*sizeof(I3CLSimStepCuda),cudaMemcpyHostToDevice));
-            
-            uint32_t *d_hitIndex;
-            uint32_t h_hitIndex[1]; h_hitIndex[0]= 0;
-            CUDA_ERR_CHECK(cudaMalloc((void**)&d_hitIndex , 1 * sizeof(uint32_t)));
-            CUDA_ERR_CHECK(cudaMemcpy(d_hitIndex, h_hitIndex,  1*sizeof(uint32_t),cudaMemcpyHostToDevice));
+      I3CLSimStepCuda * d_cudastep;
+      CUDA_ERR_CHECK(cudaMalloc( (void**)&d_cudastep , nsteps*sizeof(I3CLSimStepCuda)));
+      CUDA_ERR_CHECK(cudaMemcpy(d_cudastep, h_cudastep, nsteps*sizeof(I3CLSimStepCuda),cudaMemcpyHostToDevice));
+      
+      uint32_t *d_hitIndex;
+      uint32_t h_hitIndex[1]; h_hitIndex[0]= 0;
+      CUDA_ERR_CHECK(cudaMalloc((void**)&d_hitIndex , 1 * sizeof(uint32_t)));
+      CUDA_ERR_CHECK(cudaMemcpy(d_hitIndex, h_hitIndex,  1*sizeof(uint32_t),cudaMemcpyHostToDevice));
 
-            I3CLSimPhotonCuda * d_cudaphotons;
-            CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons , maxHitIndex*sizeof(I3CLSimPhotonCuda)));
+      I3CLSimPhotonCuda * d_cudaphotons;
+      CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons , maxHitIndex*sizeof(I3CLSimPhotonCuda)));
 
-            int numBlocks =  (launchnsteps+NTHREADS_PER_BLOCK-1)/NTHREADS_PER_BLOCK;
-            printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, launchnsteps);
+      int numBlocks =  (nsteps+NTHREADS_PER_BLOCK-1)/NTHREADS_PER_BLOCK;
+      printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
 
-            propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
-            cudaDeviceSynchronize();
-
-            CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
-            numberOutPhotonsCUDA = h_hitIndex[0];
-
-
-
-            std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-            for (int b = 0 ; b< nbenchmarks; ++b){    
-                  propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
-            }
-              cudaDeviceSynchronize(); 
-              std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
-              totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
-                    
-            CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
-            uint32_t  numberPhotons = h_hitIndex[0];
-            h_totalHitIndex += h_hitIndex[0];
-            
-            if( numberPhotons> maxHitIndex){
-                  printf("Maximum number of photons exceeded, only receiving %" PRIu32
-                  " of %" PRIu32 " photons", maxHitIndex, numberPhotons);
-                  numberPhotons = maxHitIndex;
-            }
-           
-           // copy (max fo maxHitIndex) photons to host.
-            struct I3CLSimPhotonCuda* h_cudaphotons = (struct I3CLSimPhotonCuda*) malloc(numberPhotons*sizeof(struct I3CLSimPhotonCuda));
-            CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
-            cudaDeviceSynchronize();  
-
-            if(writePhotonsCsv)  //of first run
-            {
-              photonsToFile(csvFilename,h_cudaphotons, numberOutPhotonsCUDA );
-            }
-
-            if(returnPhotons) 
-            {
-                  for (int i =0; i<numberOutPhotonsCUDA && i< maxHitIndex; i++){
-                        outphotons[i] = h_cudaphotons[i].getI3CLSimPhoton();               
-                  } 
-              
-            }
-
-           free(h_cudastep);    
-           cudaFree(d_cudaphotons); 
-           cudaFree(d_cudastep); 
-           cudaFree(d_geolayer); 
+      std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
+      propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+      
+      CUDA_ERR_CHECK(cudaDeviceSynchronize()); 
+      std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
+      totalCudaKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+                  
+      CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
+      int numberPhotons = h_hitIndex[0];
+      
+      if( numberPhotons> maxHitIndex){
+            printf("Maximum number of photons exceeded, only receiving %" PRIu32
+            " of %" PRIu32 " photons", maxHitIndex, numberPhotons);
+            numberPhotons = maxHitIndex;
       }
+      
+      // copy (max fo maxHitIndex) photons to host.
+      struct I3CLSimPhotonCuda* h_cudaphotons = (struct I3CLSimPhotonCuda*) malloc(numberPhotons*sizeof(struct I3CLSimPhotonCuda));
+      CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
 
-    cudaFree(d_MWC_RNG_a);
-    cudaFree(d_MWC_RNG_x);
-    printf( "photon hits = %f from %d steps \n", h_totalHitIndex/float(nbenchmarks+1), nsteps);
-   
-    //check phtoton hits out:
-    //for (int i = numberPhotons-10; i< numberPhotons; ++i)printf(" %d photon= %d has hit DOM= %u \n",i, h_cudaphotons[i].stringID , h_cudaphotons[i].omID);       
-}
+      outphotons.resize(numberPhotons);
+      for (int i =0; i<numberPhotons; i++){
+            outphotons[i] = h_cudaphotons[i].getI3CLSimPhoton();               
+      } 
 
-
-void finalizeCUDA(){
-      cudaDeviceSynchronize();  
+      free(h_cudastep);    
+      free(h_cudaphotons);
+      cudaFree(d_cudaphotons); 
+      cudaFree(d_cudastep); 
+      cudaFree(d_geolayer); 
+      cudaFree(d_MWC_RNG_a);
+      cudaFree(d_MWC_RNG_x);
+      printf( "photon hits = %i from %i steps \n", numberPhotons, nsteps);
 }
 
 

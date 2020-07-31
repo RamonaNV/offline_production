@@ -813,8 +813,8 @@ void I3CLSimStepToPhotonConverterOpenCL::OpenCLThread()
     boost::this_thread::disable_interruption di;
     
     try {
-      OpenCLThread_impl(di);
-    //    CLCUDAThread(di);
+    //   OpenCLThread_impl(di);
+       CLCUDAThread(di);
         PRINTLC
     } catch(...) { // any exceptions?
         std::cerr << "OpenCL worker thread died unexpectedly.." << std::endl;
@@ -1744,7 +1744,8 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
     const boost::posix_time::ptime &last_timestamp, bool &shouldBreak,
     unsigned int bufferIndex, uint32_t &out_stepsIdentifier,
     uint64_t &out_totalNumberOfPhotons, std::size_t &out_numberOfInputSteps,
-    bool blocking) {
+    bool blocking) 
+{
 
   uint32_t stepsIdentifier = 0;
   I3CLSimStepSeriesConstPtr steps;
@@ -1830,42 +1831,31 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
 #endif // DUMP_STATISTICS
 
 
-  // CUDA PART
-  int NSteps = steps->size();
-  int nbenchmarks = 1;
-  //write some properites of photons to csv file to compare results
-  bool writePhotonsCsv = true;
-  std::string folderWritePhotonsCsv("/home/hschwanekamp/nvidia/offline_production/build/");
- 
- //return CUDA phtoons instead of CL phtotons
-  bool returnPhotonsCUDA = true;
-  struct I3CLSimPhoton* outphotonsCUDA = (struct I3CLSimPhoton*) malloc(maxNumOutputPhotons_*sizeof(struct I3CLSimPhoton));
-  uint32_t numberOutPhotonsCUDA;
+// ----------------------- CUDA PART -------------------------
+bool returnPhotonsCUDA = true;  //return CUDA phtoons instead of CL phtotons
+I3CLSimPhotonSeriesPtr photons(new I3CLSimPhotonSeries);
 
+printf(" -------------  CUDA ------------- \n");
+float totalCudaKernelTime = 0;
 
-  printf(" -------------  CUDA ------------- \n");
-    float totalCudaKernelTime = 0;
-
-  launch_CudaPropogate(&(*steps)[0], NSteps,  
+  launch_CudaPropogate( steps->data(), steps->size(),  
                        maxNumOutputPhotons_,
                        &geoLayerToOMNumIndexPerStringSetInfo_[0],
                        geoLayerToOMNumIndexPerStringSetInfo_.size(),
-                       returnPhotonsCUDA, outphotonsCUDA, numberOutPhotonsCUDA,
+                       *photons,
                        &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_,
-                        totalCudaKernelTime, nbenchmarks, writePhotonsCsv, folderWritePhotonsCsv);
+                        totalCudaKernelTime);
 
-  finalizeCUDA();
   printf(" -------------  done CUDA ------------- \n");
+
+
   printf(" -------------  CL ------------- \n");
-  // uncomment for profiling CUDA ncu :
- // NSteps = 1;
-  
   try {
     queue_[0]->enqueueWriteBuffer(
         *deviceBuffer_CurrentNumOutputPhotons[0], CL_FALSE, 0, sizeof(uint32_t),
         &zeroCounterBufferSource, NULL, &(bufferWriteEvents[0]));
     queue_[0]->enqueueWriteBuffer(
-        *deviceBuffer_InputSteps[0], CL_FALSE, 0, NSteps * sizeof(I3CLSimStep),
+        *deviceBuffer_InputSteps[0], CL_FALSE, 0, steps->size() * sizeof(I3CLSimStep),
         &((*steps)[0]), NULL, &(bufferWriteEvents[1]));
     queue_[0]->flush(); // make sure it starts executing on the device
 
@@ -1876,13 +1866,22 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
               err.err());
   }
 
- 
+ // make sure nothing is running so timing is accurate
+try {
+    // wait for the queue to really finish (just to make sure)
+    queue_[0]->finish();
+  } catch (cl::Error &err) {
+    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
+              err.err());
+  }
 
+// now run cl and measure time
+std::chrono::time_point<std::chrono::system_clock> startTimeCL = std::chrono::system_clock::now();
  cl::Event kernelFinishEvent;
   queue_[0]->enqueueNDRangeKernel(
       *(kernel_[0]),
       cl::NullRange,       // current implementations force this to be NULL
-      cl::NDRange(NSteps), // number of work items
+      cl::NDRange(steps->size()), // number of work items
       cl::NDRange(workgroupSize_),
       &(bufferWriteEvents),  // wait for buffers to be filled
       &kernelFinishEvent);
@@ -1902,50 +1901,12 @@ try {
     log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
               err.err());
   }
-
-
-  std::chrono::time_point<std::chrono::system_clock> startTimeCL = std::chrono::system_clock::now();
- for (int b = 0 ; b< nbenchmarks ; ++b){
-    queue_[0]->enqueueNDRangeKernel(
-        *(kernel_[0]),
-        cl::NullRange,       // current implementations force this to be NULL
-        cl::NDRange(NSteps), // number of work items
-        cl::NDRange(workgroupSize_),
-        &(bufferWriteEvents),  // wait for buffers to be filled
-        &kernelFinishEvent);
-    queue_[0]->flush();
-    
-}
- try {
-    // wait for the kernel to finish
-    waitForOpenCLEventYield(kernelFinishEvent);
-  } catch (cl::Error &err) {
-    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
-              err.err());
-  }
-try {
-    // wait for the queue to really finish (just to make sure)
-    queue_[0]->finish();
-  } catch (cl::Error &err) {
-    log_fatal("[%u] OpenCL ERROR (running kernel): %s (%i)", 0, err.what(),
-              err.err());
-  }
-
   std::chrono::time_point<std::chrono::system_clock> endTimeCL =
       std::chrono::system_clock::now();
 
  float  totalCLKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(
                     endTimeCL - startTimeCL).count();
 
-    printf("\n   %u runs with num threads per block CUDA =  %d,  CL = %d \n", nbenchmarks, NTHREADS_PER_BLOCK, workgroupSize_);
-    printf("total runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );
-    printf("total runtime CL   kernel    %f [ms] \n", totalCLKernelTime  );
-    printf("avrg runtime CUDA  kernel      %f [ms] \n", totalCudaKernelTime/float(nbenchmarks) );
-    printf("avrg runtime CL    kernel      %f [ms] \n", totalCLKernelTime/float(nbenchmarks) );
-    printf(" ------------- ------------- \n \n");
-
- 
-  I3CLSimPhotonSeriesPtr photons;
   I3CLSimPhotonHistorySeriesPtr photonHistories;
   boost::shared_ptr<std::vector<cl_float4>> photonHistoriesRaw;
  
@@ -1961,8 +1922,7 @@ try {
       waitForOpenCLEventYield(copyComplete);
     }
 
-    printf("photon hits = %f from %d steps \n", numberOfGeneratedPhotons/float(nbenchmarks+1),
-           NSteps);
+    printf("photon hits = %f from %d steps \n", numberOfGeneratedPhotons, steps->size());
 
     if (numberOfGeneratedPhotons > maxNumOutputPhotons_) {
       printf("Maximum number of photons exceeded, only receiving %" PRIu32
@@ -1971,72 +1931,52 @@ try {
       numberOfGeneratedPhotons = maxNumOutputPhotons_;
     }
 
-    if (numberOfGeneratedPhotons > 0) {
-      VECTOR_CLASS<cl::Event> copyComplete((photonHistoryEntries_ > 0) ? 2 : 1);
+    printf(" -------------  done CL ------------- \n");
+    printf(" 1 run with num threads per block CUDA =  %d,  CL = %d \n", NTHREADS_PER_BLOCK, workgroupSize_);
+    printf("runtime CUDA kernel    %f [ms] \n", totalCudaKernelTime  );
+    printf("runtime CL   kernel    %f [ms] \n", totalCLKernelTime  );
+    printf(" ------------- ------------- \n");
 
-      // allocate the result vector while waiting for the mapping operation to
-      // complete
-      photons = I3CLSimPhotonSeriesPtr(
-          new I3CLSimPhotonSeries(numberOfGeneratedPhotons));
-      if (photonHistoryEntries_ > 0) {
-        photonHistoriesRaw = boost::shared_ptr<std::vector<cl_float4>>(
-            new std::vector<cl_float4>(
-                numberOfGeneratedPhotons *
-                static_cast<std::size_t>(photonHistoryEntries_)));
-      }
-
-      queue_[0]->enqueueReadBuffer(*deviceBuffer_OutputPhotons[0], CL_FALSE, 0,
-                                   numberOfGeneratedPhotons *
-                                       sizeof(I3CLSimPhoton),
-                                   &((*photons)[0]), NULL, &copyComplete[0]);
-
-      if (photonHistoryEntries_ > 0) {
-        queue_[0]->enqueueReadBuffer(
-            *deviceBuffer_PhotonHistory[0], CL_FALSE, 0,
-            numberOfGeneratedPhotons *
-                static_cast<std::size_t>(photonHistoryEntries_) *
-                sizeof(cl_float4),
-            &((*photonHistoriesRaw)[0]), NULL, &copyComplete[1]);
-      }
-      queue_[bufferIndex]->flush();
-      waitForOpenCLEventsYield(
-          copyComplete); // wait for the buffer(s) to be copied
-      // convert the histories to the external representation
-      if (photonHistoriesRaw) {
-        photonHistories = ConvertPhotonHistories(*photonHistoriesRaw, *photons,
-                                                 photonHistoryEntries_);
-      }
+    if (returnPhotonsCUDA) {
+        // we do not care about photon history in cuda
+        photonHistories = I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
+        // also photon array was directly written from cuda, so no need to do it here
     } else {
-      // empty vector(s)
-      photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries());
-      if (photonHistoryEntries_ > 0) {
-        photonHistories =
-            I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
-      }
+        if (numberOfGeneratedPhotons > 0) {
+            VECTOR_CLASS<cl::Event> copyComplete((photonHistoryEntries_ > 0) ? 2 : 1);
+
+            // allocate the result vector while waiting for the mapping operation to
+            // complete
+            photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries(numberOfGeneratedPhotons));
+            if (photonHistoryEntries_ > 0) {
+                photonHistoriesRaw = boost::shared_ptr<std::vector<cl_float4>>(new std::vector<cl_float4>(
+                    numberOfGeneratedPhotons * static_cast<std::size_t>(photonHistoryEntries_)));
+            }
+
+            queue_[0]->enqueueReadBuffer(*deviceBuffer_OutputPhotons[0], CL_FALSE, 0,
+                                         numberOfGeneratedPhotons * sizeof(I3CLSimPhoton), &((*photons)[0]), NULL,
+                                         &copyComplete[0]);
+
+            if (photonHistoryEntries_ > 0) {
+                queue_[0]->enqueueReadBuffer(
+                    *deviceBuffer_PhotonHistory[0], CL_FALSE, 0,
+                    numberOfGeneratedPhotons * static_cast<std::size_t>(photonHistoryEntries_) * sizeof(cl_float4),
+                    &((*photonHistoriesRaw)[0]), NULL, &copyComplete[1]);
+            }
+            queue_[bufferIndex]->flush();
+            waitForOpenCLEventsYield(copyComplete);  // wait for the buffer(s) to be copied
+            // convert the histories to the external representation
+            if (photonHistoriesRaw) {
+                photonHistories = ConvertPhotonHistories(*photonHistoriesRaw, *photons, photonHistoryEntries_);
+            }
+        } else {
+            // empty vector(s)
+            photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries());
+            if (photonHistoryEntries_ > 0) {
+                photonHistories = I3CLSimPhotonHistorySeriesPtr(new I3CLSimPhotonHistorySeries());
+            }
+        }
     }
-
-   if(writePhotonsCsv)
-    {
-      photonsToFile(folderWritePhotonsCsv, &((*photons)[0]), uint32_t(numberOfGeneratedPhotons/float(nbenchmarks+1)) );
-    }
-
-
-
-if(returnPhotonsCUDA){
-
-    if(numberOutPhotonsCUDA>0)
-    {
-        photons = I3CLSimPhotonSeriesPtr( new I3CLSimPhotonSeries(numberOutPhotonsCUDA));
-       (*photons) = new I3Vector{outphotonsCUDA};
-       // &((*photons)[0]) = outphotonsCUDA;
-
-        
-    }else{
-          // empty vector(s)
-      photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries());
-       }
-}
-
 
   } catch (cl::Error &err) {
     log_fatal("OpenCL ERROR (memcpy from device): %s (%i)", err.what(),
