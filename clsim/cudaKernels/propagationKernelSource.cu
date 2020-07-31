@@ -99,6 +99,7 @@ void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x,  uint32_t*  MWC_RNG
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
       const uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
+      bool returnPhotons, I3CLSimPhoton* outphotons, uint32_t& numberOutPhotonsCUDA,
         uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a, int sizeRNG,
          float& totalCudaKernelTime, const int nbenchmarks, bool writePhotonsCsv, const std::string& csvFilename){
      
@@ -115,8 +116,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
       
       //these multiple launches correspond to numBuffers..   
       for (int ilaunch= 0 ; ilaunch<1; ++ilaunch )
-      {
-             
+      {     
             int launchnsteps = ( (1+ilaunch)*nsteps<= nsteps) ?  nsteps : nsteps-ilaunch*nsteps;   
            
             struct I3CLSimStepCuda* h_cudastep = (struct I3CLSimStepCuda*) malloc(launchnsteps*sizeof(struct I3CLSimStepCuda));
@@ -141,7 +141,12 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, launchnsteps);
 
             propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, launchnsteps, d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
-            cudaDeviceSynchronize(); 
+            cudaDeviceSynchronize();
+
+            CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
+            numberOutPhotonsCUDA = h_hitIndex[0];
+
+
 
             std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
             for (int b = 0 ; b< nbenchmarks; ++b){    
@@ -151,7 +156,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
               std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
               totalCudaKernelTime =  std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
                     
-             CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
+            CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1*sizeof(uint32_t),cudaMemcpyDeviceToHost));
             uint32_t  numberPhotons = h_hitIndex[0];
             h_totalHitIndex += h_hitIndex[0];
             
@@ -165,9 +170,18 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,
             struct I3CLSimPhotonCuda* h_cudaphotons = (struct I3CLSimPhotonCuda*) malloc(numberPhotons*sizeof(struct I3CLSimPhotonCuda));
             CUDA_ERR_CHECK(cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons*sizeof(I3CLSimPhotonCuda),cudaMemcpyDeviceToHost));
             cudaDeviceSynchronize();  
-            if(writePhotonsCsv)
+
+            if(writePhotonsCsv)  //of first run
             {
-              photonsToFile(csvFilename,h_cudaphotons, uint32_t(numberPhotons/float(nbenchmarks+1)) );
+              photonsToFile(csvFilename,h_cudaphotons, numberOutPhotonsCUDA );
+            }
+
+            if(returnPhotons) 
+            {
+                  for (int i =0; i<numberOutPhotonsCUDA && i< maxHitIndex; i++){
+                        outphotons[i] = h_cudaphotons[i].getI3CLSimPhoton();               
+                  } 
+              
             }
 
            free(h_cudastep);    

@@ -39,7 +39,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 void finalizeCUDA();
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps,  
-    uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,
+    uint32_t maxHitIndex, unsigned short *geoLayerToOMNumIndexPerStringSet, int ngeolayer,bool returnPhotons, I3CLSimPhoton* outphotons, uint32_t& numberOutPhotonsCUDA,
     uint64_t* __restrict__  MWC_RNG_x,    uint32_t* __restrict__   MWC_RNG_a,  int sizeRNG,
      float& totalCudaKernelTime,const int nbenchmarks,  bool writePhotonsCsv, const std::string& csvFilename);
 

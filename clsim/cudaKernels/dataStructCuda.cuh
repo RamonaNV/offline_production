@@ -90,6 +90,42 @@ struct I3CLSimPhotonCuda {
           distInAbsLens(i3photon.GetDistInAbsLens())
     {
     }
+
+
+    __host__ I3CLSimPhoton getI3CLSimPhoton(){
+
+        I3CLSimPhoton i3photon;
+        i3photon.SetPosX(posAndTime.x);
+        i3photon.SetPosY(posAndTime.y);
+        i3photon.SetPosZ(posAndTime.z);
+        i3photon.SetTime(posAndTime.w);
+
+        i3photon.SetStartPosX(startPosAndTime.x);
+        i3photon.SetStartPosY(startPosAndTime.y);
+        i3photon.SetStartPosZ(startPosAndTime.z);
+        i3photon.SetStartTime(startPosAndTime.w);
+
+        i3photon.SetDirTheta(dir.x);
+        i3photon.SetDirPhi(dir.y);
+        i3photon.SetStartDirTheta(startDir.x);
+        i3photon.SetStartDirPhi(startDir.y);
+
+
+        i3photon.SetWavelength(wavelength);
+        i3photon.SetCherenkovDist(cherenkovDist);
+        i3photon.SetNumScatters(numScatters);
+        i3photon.SetWeight(weight);
+        i3photon.SetID(identifier);
+        i3photon.SetStringID(stringID);
+        i3photon.SetOMID(omID);
+        i3photon.SetGroupVelocity(groupVelocity);
+        i3photon.SetDistInAbsLens(distInAbsLens); 
+
+        return i3photon;
+
+
+    }
+
 };
 
 #endif  // DATASTRUCCUDA_CUH

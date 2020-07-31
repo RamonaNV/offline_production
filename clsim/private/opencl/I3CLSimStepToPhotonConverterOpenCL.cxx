@@ -1835,7 +1835,13 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
   int nbenchmarks = 1;
   //write some properites of photons to csv file to compare results
   bool writePhotonsCsv = true;
-  std::string path("/home/hschwanekamp/nvidia/offline_production/build/");
+  std::string folderWritePhotonsCsv("/home/hschwanekamp/nvidia/offline_production/build/");
+ 
+ //return CUDA phtoons instead of CL phtotons
+  bool returnPhotonsCUDA = true;
+  struct I3CLSimPhoton* outphotonsCUDA = (struct I3CLSimPhoton*) malloc(maxNumOutputPhotons_*sizeof(struct I3CLSimPhoton));
+  uint32_t numberOutPhotonsCUDA;
+
 
   printf(" -------------  CUDA ------------- \n");
     float totalCudaKernelTime = 0;
@@ -1844,8 +1850,9 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(
                        maxNumOutputPhotons_,
                        &geoLayerToOMNumIndexPerStringSetInfo_[0],
                        geoLayerToOMNumIndexPerStringSetInfo_.size(),
+                       returnPhotonsCUDA, outphotonsCUDA, numberOutPhotonsCUDA,
                        &(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_,
-                        totalCudaKernelTime, nbenchmarks, writePhotonsCsv, path);
+                        totalCudaKernelTime, nbenchmarks, writePhotonsCsv, folderWritePhotonsCsv);
 
   finalizeCUDA();
   printf(" -------------  done CUDA ------------- \n");
@@ -2010,8 +2017,25 @@ try {
 
    if(writePhotonsCsv)
     {
-      photonsToFile(path, &((*photons)[0]), uint32_t(numberOfGeneratedPhotons/float(nbenchmarks+1)) );
+      photonsToFile(folderWritePhotonsCsv, &((*photons)[0]), uint32_t(numberOfGeneratedPhotons/float(nbenchmarks+1)) );
     }
+
+
+
+if(returnPhotonsCUDA){
+
+    if(numberOutPhotonsCUDA>0)
+    {
+        photons = I3CLSimPhotonSeriesPtr( new I3CLSimPhotonSeries(numberOutPhotonsCUDA));
+       (*photons) = new I3Vector{outphotonsCUDA};
+       // &((*photons)[0]) = outphotonsCUDA;
+
+        
+    }else{
+          // empty vector(s)
+      photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries());
+       }
+}
 
 
   } catch (cl::Error &err) {
