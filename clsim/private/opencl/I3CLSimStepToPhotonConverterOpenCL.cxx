@@ -2027,10 +2027,8 @@ if(returnPhotonsCUDA){
     if(numberOutPhotonsCUDA>0)
     {
         photons = I3CLSimPhotonSeriesPtr( new I3CLSimPhotonSeries(numberOutPhotonsCUDA));
-       (*photons) = new I3Vector{outphotonsCUDA};
+       (*photons)  =  I3Vector<I3CLSimPhoton>(outphotonsCUDA,outphotonsCUDA+ numberOutPhotonsCUDA) ;
        // &((*photons)[0]) = outphotonsCUDA;
-
-        
     }else{
           // empty vector(s)
       photons = I3CLSimPhotonSeriesPtr(new I3CLSimPhotonSeries());
