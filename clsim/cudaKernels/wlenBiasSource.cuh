@@ -25,7 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 //#include <CLnoneCUDA.cuh>
 
-__device__ __forceinline__ float getWavelengthBias(float wavelength,float* getWavelengthBias_dataShared);
+__device__ __forceinline__ float getWavelengthBias(float wavelength, const float* getWavelengthBias_dataShared);
 __device__ __forceinline__ void getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int &bin,
                                                                                  float &fraction);
 
@@ -59,7 +59,7 @@ __device__ __forceinline__ void getWavelengthBias_getInterpolationBinAndFraction
     bin = ibin;
 }
 
-__device__ __forceinline__ float getWavelengthBias(float wavelength, float* getWavelengthBias_dataShared)
+__device__ __forceinline__ float getWavelengthBias(float wavelength, const float* getWavelengthBias_dataShared)
 {
     int bin;
     float fraction;

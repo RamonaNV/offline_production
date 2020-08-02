@@ -144,6 +144,149 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     printf("photon hits = %i from %i steps \n", numberPhotons, nsteps);
 }
 
+/**
+ * @brief Creates a single photon to be propagated
+ * @param step the step to create the photon from
+ * @param stepDir step direction to create the photon ( calculated in propGroup() )
+ * @param _generateWavelength_0distY data needed for wavelength selection (pass pointer to global or shared data)
+ * @param _generateWavelength_0distYCumulative data needed for wavelength selection (pass pointer to global or shared data) 
+ * @param RNG_ARGS arguments for the random number generator (use RNG_ARGS_TO_CALL)
+ */
+__device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda &step, float4 stepDir, float* _generateWavelength_0distY, float* _generateWavelength_0distYCumulative, RNG_ARGS)
+{
+    // create a new photon
+    I3CLInitialPhoton ph;
+    createPhotonFromTrack(step, stepDir, RNG_ARGS_TO_CALL, ph.posAndTime, ph.dirAndWlen, _generateWavelength_0distY, _generateWavelength_0distYCumulative);
+    ph.invGroupvel = 1.f / (getGroupVelocity(0, ph.dirAndWlen.w));
+
+    // set an initial absorption length
+    ph.absLength = -logf(RNG_CALL_UNIFORM_OC);
+    return ph;
+}
+
+/**
+ * @brief  propgates a single photon
+ * @param ph the photon to propagate
+ * @param distancePropagated the distance the photon was propagated during this iteration
+ * @param RNG_ARGS arguments for the random number generator (use RNG_ARGS_TO_CALL)
+ * @return the propagated distance
+ */
+__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RNG_ARGS)
+{ 
+    const float effective_z = ph.posAndTime.z - getTiltZShift(ph.posAndTime);
+    const int currentPhotonLayer = min(max(findLayerForGivenZPos(effective_z), 0), MEDIUM_LAYERS - 1);
+    const float photon_dz = ph.dirAndWlen.z;
+
+    // add a correction factor to the number of absorption lengths
+    // abs_lens_left before the photon is absorbed. This factor will be
+    // taken out after this propagation step. Usually the factor is 1
+    // and thus has no effect, but it is used in a direction-dependent
+    // way for our model of ice anisotropy.
+    const float abs_len_correction_factor = getDirectionalAbsLenCorrFactor(ph.dirAndWlen);
+    ph.absLength *= abs_len_correction_factor;
+
+    // the "next" medium boundary (either top or bottom, depending on
+    // step direction)
+    float mediumBoundary = (photon_dz < ZERO)
+                                ? (mediumLayerBoundary(currentPhotonLayer))
+                                : (mediumLayerBoundary(currentPhotonLayer) + (float)MEDIUM_LAYER_THICKNESS);
+
+     // track this thing to the next scattering point
+    float scaStepLeft = -logf(RNG_CALL_UNIFORM_OC);
+
+    float currentScaLen = getScatteringLength(currentPhotonLayer, ph.dirAndWlen.w);
+    float currentAbsLen = getAbsorptionLength(currentPhotonLayer, ph.dirAndWlen.w);
+
+    float ais = (photon_dz * scaStepLeft - ((mediumBoundary - effective_z)) / currentScaLen) *
+                (ONE / (float)MEDIUM_LAYER_THICKNESS);
+    float aia = (photon_dz * ph.absLength - ((mediumBoundary - effective_z)) / currentAbsLen) *
+                (ONE / (float)MEDIUM_LAYER_THICKNESS);
+
+    
+    // propagate through layers
+    int j = currentPhotonLayer;
+    if (photon_dz < 0) {
+        for (; (j > 0) && (ais < ZERO) && (aia < ZERO);
+                mediumBoundary -= (float)MEDIUM_LAYER_THICKNESS,
+                currentScaLen = getScatteringLength(j, ph.dirAndWlen.w),
+                currentAbsLen = getAbsorptionLength(j, ph.dirAndWlen.w), ais += 1.f / (currentScaLen),
+                aia += 1.f / (currentAbsLen))
+            --j;
+    } else {
+        for (; (j < MEDIUM_LAYERS - 1) && (ais > ZERO) && (aia > ZERO);
+                mediumBoundary += (float)MEDIUM_LAYER_THICKNESS,
+                currentScaLen = getScatteringLength(j, ph.dirAndWlen.w),
+                currentAbsLen = getAbsorptionLength(j, ph.dirAndWlen.w), ais -= 1.f / (currentScaLen),
+                aia -= 1.f / (currentAbsLen))
+            ++j;
+    }
+
+    float distanceToAbsorption;
+    if ((currentPhotonLayer == j) || ((my_fabs(photon_dz)) < EPSILON)) {
+        distancePropagated = scaStepLeft * currentScaLen;
+        distanceToAbsorption = ph.absLength * currentAbsLen;
+    } else {
+        const float recip_photon_dz = 1.f / (photon_dz);
+        distancePropagated =
+            (ais * ((float)MEDIUM_LAYER_THICKNESS) * currentScaLen + mediumBoundary - effective_z) *
+            recip_photon_dz;
+        distanceToAbsorption =
+            (aia * ((float)MEDIUM_LAYER_THICKNESS) * currentAbsLen + mediumBoundary - effective_z) *
+            recip_photon_dz;
+    }
+
+    // get overburden for distance i.e. check if photon is absorbed
+    if (distanceToAbsorption < distancePropagated) {
+        distancePropagated = distanceToAbsorption;
+        ph.absLength = ZERO;
+        return true;
+    } else {
+        ph.absLength = (distanceToAbsorption - distancePropagated) / currentAbsLen;
+        
+        // hoist the correction factor back out of the absorption length
+        ph.absLength = ph.absLength / abs_len_correction_factor;
+        return false;
+    }
+
+}
+
+/**
+ * @brief moves a photon along its track
+ * @param ph the photon to move
+ * @param distancePropagated the distance the photon was propagated this iteration
+ */
+__device__ __forceinline__  void updatePhotonTrack(I3CLPhoton& ph, float distancePropagated)
+{
+        ph.posAndTime.x += ph.dirAndWlen.x * distancePropagated;
+        ph.posAndTime.y += ph.dirAndWlen.y * distancePropagated;
+        ph.posAndTime.z += ph.dirAndWlen.z * distancePropagated;
+        ph.posAndTime.w += ph.invGroupvel * distancePropagated;
+        ph.totalPathLength += distancePropagated;
+}
+
+/**
+ * @brief scatters a photon
+ * @param ph the photon to scatter
+ * @param RNG_ARGS arguments for the random number generator (use RNG_ARGS_TO_CALL) 
+ */
+__device__ __forceinline__  void scatterPhoton(I3CLPhoton& ph, RNG_ARGS)
+{
+     // optional direction transformation (for ice anisotropy)
+    transformDirectionPreScatter(ph.dirAndWlen);
+
+    // choose a scattering angle
+    const float cosScatAngle = makeScatteringCosAngle(RNG_ARGS_TO_CALL);
+    const float sinScatAngle = sqrt(ONE - sqr(cosScatAngle));
+
+    // change the current direction by that angle
+    scatterDirectionByAngle(cosScatAngle, sinScatAngle, ph.dirAndWlen, RNG_CALL_UNIFORM_CO);
+
+    // optional direction transformation (for ice anisotropy)
+    transformDirectionPostScatter(ph.dirAndWlen);
+
+    ++ph.numScatters;
+}
+
 __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentNumOutputPhotons
                            const uint32_t maxHitIndex,  // maxNumOutputPhotons_
                            const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
