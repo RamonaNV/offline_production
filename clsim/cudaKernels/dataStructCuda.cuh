@@ -55,6 +55,35 @@ struct I3CLSimStepCuda {
     }
 };
 
+// holds the initial conditions of a photon
+struct I3CLInitialPhoton {
+    float4 posAndTime;
+    float4 dirAndWlen;
+    float invGroupvel;
+    float absLength;
+};
+
+// holds photon while it is propagated through the ice
+struct I3CLPhoton {
+    I3CLPhoton() = default;
+    __host__ __device__ explicit I3CLPhoton(const I3CLInitialPhoton &initial)  // creates photon from initial conditions
+        : posAndTime(initial.posAndTime),
+          dirAndWlen(initial.dirAndWlen),
+          invGroupvel(initial.invGroupvel),
+          absLength(initial.absLength),
+          numScatters(0),
+          totalPathLength(0.0f)
+    {
+    }
+
+    float4 posAndTime;
+    float4 dirAndWlen;
+    float invGroupvel;
+    float absLength;
+    int numScatters;
+    float totalPathLength;
+};
+
 struct I3CLSimPhotonCuda {
     float4 posAndTime;       // x,y,z,time                      // 4x 32bit float
     float2 dir;              // theta,phi                                // 2x 32bit float
