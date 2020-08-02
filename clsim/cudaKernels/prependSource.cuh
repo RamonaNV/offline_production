@@ -28,6 +28,7 @@ typedef float4 floating4_t;
 #define convert_floating_t float
 #define ZERO 0.f
 #define ONE 1.f
+#define EPSILON 0.00001f
 
 #define STOP_PHOTONS_ON_DETECTION
 
