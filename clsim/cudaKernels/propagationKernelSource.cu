@@ -79,7 +79,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     // I3CLSimStepToPhotonConverterOpenCL setup.
     uint64_t* d_MWC_RNG_x;
     uint32_t* d_MWC_RNG_a;
-    init_RDM_CUDA(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
+    init_RDM_CUDA(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a); // TODO: one rng number PER THREAD
 
     unsigned short* d_geolayer;
     CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer, ngeolayer * sizeof(unsigned short)));
@@ -105,7 +105,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     I3CLSimPhotonCuda* d_cudaphotons;
     CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons, maxHitIndex * sizeof(I3CLSimPhotonCuda)));
 
-    int numBlocks = 8192; //9891; // with the jobqueue this depends on the device for performance tuning, not the problem //(nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
+    int numBlocks = 32768; // with the jobqueue this depends on the device for performance tuning, not the problem //(nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
     printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
 
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
@@ -449,8 +449,8 @@ __global__ void propKernel(uint32_t *hitIndex, const uint32_t maxHitIndex,
     __syncthreads();
 
     // download MWC RNG state
-    uint64_t real_rnd_x = MWC_RNG_x[threadId];
-    uint32_t real_rnd_a = MWC_RNG_a[threadId];
+    uint64_t real_rnd_x = MWC_RNG_x[threadId%nsteps];
+    uint32_t real_rnd_a = MWC_RNG_a[threadId%nsteps];
     uint64_t *rnd_x = &real_rnd_x;
     uint32_t *rnd_a = &real_rnd_a;
 
@@ -475,6 +475,6 @@ __global__ void propKernel(uint32_t *hitIndex, const uint32_t maxHitIndex,
     }
 
     // upload MWC RNG state
-    MWC_RNG_x[threadId] = real_rnd_x;
-    MWC_RNG_a[threadId] = real_rnd_a;
+    MWC_RNG_x[threadId%nsteps] = real_rnd_x;
+    MWC_RNG_a[threadId%nsteps] = real_rnd_a;
 }
