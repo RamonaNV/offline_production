@@ -105,7 +105,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     I3CLSimPhotonCuda* d_cudaphotons;
     CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons, maxHitIndex * sizeof(I3CLSimPhotonCuda)));
 
-    int numBlocks = (nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
+    int numBlocks = 8192; //9891; // with the jobqueue this depends on the device for performance tuning, not the problem //(nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
     printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
 
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();

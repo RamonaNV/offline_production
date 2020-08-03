@@ -30,7 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <opencl/mwcrng_init.h>
 #include <dataStructCuda.cuh>
 
-#define NTHREADS_PER_BLOCK 512
+#define NTHREADS_PER_BLOCK 256
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, uint32_t maxHitIndex,
                           unsigned short* geoLayerToOMNumIndexPerStringSet, int ngeolayer,
