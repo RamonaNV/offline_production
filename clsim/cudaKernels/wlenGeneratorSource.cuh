@@ -49,9 +49,9 @@ __device__ float _generateWavelength_0distYCumulativeValues[_generateWavelength_
     1.0000000000e+00f,
 };
 
-__device__ __forceinline__ float generateWavelength_0(RNG_ARGS, float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared);
+__device__ __forceinline__ float generateWavelength_0(RNG_ARGS, const float* _generateWavelength_0distYValuesShared, const float* _generateWavelength_0distYCumulativeValuesShared);
 
-__device__ __forceinline__ float generateWavelength_0(RNG_ARGS, float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared)
+__device__ __forceinline__ float generateWavelength_0(RNG_ARGS, const float* _generateWavelength_0distYValuesShared, const float* _generateWavelength_0distYCumulativeValuesShared)
 {
     const float randomNumber = RNG_CALL_UNIFORM_OC;
 
@@ -86,9 +86,9 @@ __device__ __forceinline__ float generateWavelength_0(RNG_ARGS, float* _generate
     }
 }
 
-__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS, float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared);
+__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS, const float* _generateWavelength_0distYValuesShared, const float* _generateWavelength_0distYCumulativeValuesShared);
 
-__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS, float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared)
+__device__ __forceinline__ float generateWavelength(uint number, RNG_ARGS, const float* _generateWavelength_0distYValuesShared, const float* _generateWavelength_0distYCumulativeValuesShared)
 {
     return generateWavelength_0(RNG_ARGS_TO_CALL,  _generateWavelength_0distYValuesShared,   _generateWavelength_0distYCumulativeValuesShared) ;
 }

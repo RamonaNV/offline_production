@@ -20,8 +20,15 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+#include <cooperative_groups.h>
+#include <cuda/std/atomic>
+
 #include <propagationKernelSource.cuh>
 #include <propagationKernelFunctions.cuh>
+
+
+// namespace alias
+namespace cg = cooperative_groups;
 
 cudaError_t gl_err;
 
@@ -150,7 +157,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
  * @param _generateWavelength_0distYCumulative data needed for wavelength selection (pass pointer to global or shared data) 
  * @param RNG_ARGS arguments for the random number generator (use RNG_ARGS_TO_CALL)
  */
-__device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda &step, float4 stepDir, float* _generateWavelength_0distY, float* _generateWavelength_0distYCumulative, RNG_ARGS)
+__device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda &step, float4 stepDir, const float* _generateWavelength_0distY, const float* _generateWavelength_0distYCumulative, RNG_ARGS)
 {
     // create a new photon
     I3CLInitialPhoton ph;
@@ -285,20 +292,150 @@ __device__ __forceinline__  void scatterPhoton(I3CLPhoton& ph, RNG_ARGS)
     ++ph.numScatters;
 }
 
-__global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentNumOutputPhotons
-                           const uint32_t maxHitIndex,  // maxNumOutputPhotons_
-                           const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
-                           const I3CLSimStepCuda* __restrict__ inputSteps,  // deviceBuffer_InputSteps
-                           int nsteps,
-                           I3CLSimPhotonCuda* __restrict__ outputPhotons,  // deviceBuffer_OutputPhotons
-                           uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a)
+/**
+ * @brief Generates photons for one "step" and simulates propagation through the ice.
+ * @param group the group of threads used to process one step (eg one warp)
+ * @param step the step to be processed
+ * @param sharedPhotonInitials shared memory to store photon initial conditions,
+ *                              !! size needs to be same as number of threads in the group !!
+ * @param numPhotonsInShared keeps track of the number of photons currently stored in shared memory
+ *                           !! needs to live in shared memory itself !!   
+ */
+__device__ __forceinline__  void propGroup(cg::thread_block_tile<32> group, const I3CLSimStepCuda &step,
+                          I3CLInitialPhoton *sharedPhotonInitials, int& numPhotonsInShared,
+                          uint32_t *hitIndex, const uint32_t maxHitIndex, 
+                          I3CLSimPhotonCuda *__restrict__ outputPhotons,
+                          const unsigned short* geoLayerToOMNumIndexPerStringSet, const float* _generateWavelength_0distY, 
+                          const float* _generateWavelength_0distYCumulative, const float* getWavelengthBias_data,
+                          RNG_ARGS)
 {
-#ifndef FUNCTION_getGroupVelocity_DOES_NOT_DEPEND_ON_LAYER
-#error This kernel only works with a constant group velocity (constant w.r.t. layers)
-#endif
+    // calculate step direction
+    float4 stepDir;
+    const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)
+    stepDir = float4{rho * cosf(step.dirAndLengthAndBeta.y),  // rho*cos(phi)
+                        rho * sinf(step.dirAndLengthAndBeta.y),  // rho*sin(phi)
+                        cosf(step.dirAndLengthAndBeta.x),        // cos(phi)
+                        ZERO};
+    
 
-    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    // variables for managing shared memory
+    int photonsLeftInStep = step.numPhotons; // will be 0 or negative if no photons are left
 
+    // local variables for propagating the photon
+    int photonId=-1; // threads with a photon id of 0 or bigger contain a valid photon
+    I3CLPhoton photon; // this threads current photon
+    I3CLInitialPhoton photonInitial; // initial conditions of this threads current photon
+
+    // generate photon for every thread in the Warp from the step
+    if(group.thread_rank() < photonsLeftInStep)
+    {
+        photonInitial = createPhoton(step, stepDir, _generateWavelength_0distY, _generateWavelength_0distYCumulative, RNG_ARGS_TO_CALL);
+        photon = I3CLPhoton(photonInitial);
+        photonId = 0; // set a valid id
+    }
+    photonsLeftInStep -= group.size(); // noet: if "photonsLeftInStep" goes negative, it does not matter 
+
+    // make sure shared memory is not in use anymore from previous call
+    group.sync();
+
+    // generate photons and store in shared memory
+    if(group.thread_rank() < photonsLeftInStep)    
+        sharedPhotonInitials[group.thread_rank()] = createPhoton(step, stepDir, _generateWavelength_0distY, _generateWavelength_0distYCumulative, RNG_ARGS_TO_CALL);
+    if(group.thread_rank() == 0) 
+        numPhotonsInShared = min(group.size(),photonsLeftInStep);
+    group.sync();
+    photonsLeftInStep -= numPhotonsInShared;
+    group.sync(); // make sure numPhotonsInShared is not changed before photonsLeftInStep was updated (maybe move photonsLeftInStep to shared?)
+    
+    // loop as long as this thread has a valid photon, this is true for all threads while there is is photon left in the "step" or in shared memory
+    while(photonId >= 0)
+    {
+        // propagate photon through the ice
+        float distancePropagated;
+        bool absorbed = propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
+
+        // check if a collision with the sensor did occur
+        bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
+                                  hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSet, getWavelengthBias_data);
+
+        if(collided)
+        {
+            // TODO: store (currently it is stored inside the collision check which is very confusing)
+            // photon is no longer valid
+            photonId = -1;
+        }
+        else if(absorbed)
+        {
+            // photon is no longer valid
+            photonId = -1;
+        }
+        else
+        {
+            // move the photon, scatter and repeat
+            updatePhotonTrack(photon, distancePropagated);
+            scatterPhoton(photon, RNG_ARGS_TO_CALL);
+        }
+
+        if(numPhotonsInShared > 0 || photonsLeftInStep > 0)
+        {
+            // there are still photons waiting to be processed as long as this is true, all threads will be in the loop
+
+            if(photonId < 0)
+            {
+                // try to grab a new photon from shared memory
+                photonId = atomicAdd(&numPhotonsInShared,-1)-1;
+                if(photonId >= 0)
+                {
+                    photonInitial = sharedPhotonInitials[photonId];
+                    photon = I3CLPhoton(photonInitial);
+                }
+            }
+
+            // if shared memory is empty, create new photons from the "step" (this branch is taken by all or none of the threads)
+            group.sync(); // make sure all threads see the same value of numPhotonsInShared
+            if( numPhotonsInShared <= 0 && photonsLeftInStep > 0)
+            {
+                if(group.thread_rank() < photonsLeftInStep)    
+                    sharedPhotonInitials[group.thread_rank()] = createPhoton(step, stepDir, _generateWavelength_0distY, _generateWavelength_0distYCumulative, RNG_ARGS_TO_CALL);
+                if(group.thread_rank() == 0) 
+                    numPhotonsInShared = min(group.size(),photonsLeftInStep);
+                group.sync();
+                photonsLeftInStep -= numPhotonsInShared;
+                group.sync(); // make sure numPhotonsInShared is not changed before photonsLeftInStep was updated (maybe move photonsLeftInStep to shared?)
+
+                // if the thread did not have a valid photon, try again to get one now
+                if(photonId < 0)
+                {
+                    // try to grab a new photon from shared memory
+                    photonId = atomicAdd(&numPhotonsInShared,-1)-1;
+                    if(photonId >= 0)
+                    {
+                        photonInitial = sharedPhotonInitials[photonId];
+                        photon = I3CLPhoton(photonInitial);
+                    }    
+                }
+                group.sync(); // make sure all threads see the same value of numPhotonsInShared for the next iteration
+            }
+        }
+    }
+}
+
+/**
+ * @brief Main cuda kernel for photon propagation simulation. Called from host with a number of "steps".
+ *        Photons for every "step" will be generated, propagated through the ice and stored if they hit the detector.
+ *        Does some setup work. Then splits the current work group into thread groups.
+ *        Each thread group simulated all photons in one step ( see propGroup() ).
+ */
+__global__ void propKernel(uint32_t *hitIndex, const uint32_t maxHitIndex,
+                           const unsigned short *__restrict__ geoLayerToOMNumIndexPerStringSet,
+                           const I3CLSimStepCuda *__restrict__ inputSteps, int nsteps,
+                           I3CLSimPhotonCuda *__restrict__ outputPhotons,
+                           uint64_t *__restrict__ MWC_RNG_x, uint32_t *__restrict__ MWC_RNG_a)
+{
+    cg::thread_block block = cg::this_thread_block();
+    int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // cache some data in shared memory
     __shared__ unsigned short geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
     __shared__ float _generateWavelength_0distYValuesShared[_generateWavelength_0NUM_DIST_ENTRIES];
     __shared__ float _generateWavelength_0distYCumulativeValuesShared[_generateWavelength_0NUM_DIST_ENTRIES];
@@ -307,66 +444,40 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     for (int ii = threadIdx.x; ii < GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; ii += blockDim.x) {
         geoLayerToOMNumIndexPerStringSetLocal[ii] = geoLayerToOMNumIndexPerStringSet[ii];
     }
-
     for (int ii = threadIdx.x; ii < _generateWavelength_0NUM_DIST_ENTRIES; ii += blockDim.x) {
         _generateWavelength_0distYValuesShared[ii] = _generateWavelength_0distYValues[ii];
         _generateWavelength_0distYCumulativeValuesShared[ii] = _generateWavelength_0distYCumulativeValues[ii];
         getWavelengthBias_dataShared[ii] = getWavelengthBias_data[ii];
     }
     __syncthreads();
-    if (i >= nsteps) return;
 
     // download MWC RNG state
-    uint64_t real_rnd_x = MWC_RNG_x[i];
-    uint32_t real_rnd_a = MWC_RNG_a[i];
-    uint64_t* rnd_x = &real_rnd_x;
-    uint32_t* rnd_a = &real_rnd_a;
+    uint64_t real_rnd_x = MWC_RNG_x[threadId];
+    uint32_t real_rnd_a = MWC_RNG_a[threadId];
+    uint64_t *rnd_x = &real_rnd_x;
+    uint32_t *rnd_a = &real_rnd_a;
 
-    const I3CLSimStepCuda step = inputSteps[i];
-    float4 stepDir;
+    // setup shared memory to hold generated photon initial conditions
+    __shared__ I3CLInitialPhoton sharedPhotonInitials[NTHREADS_PER_BLOCK];
+    __shared__ int numPhotonsInShared[NTHREADS_PER_BLOCK / 32];
+
+    // split up into warps sized groups, each group simulates one step at a time
+    cg::thread_block_tile<32> group = cg::tiled_partition<32>(block);
+    I3CLInitialPhoton* thisGroupSharedPhotonInitials = &sharedPhotonInitials[0] + (group.size() * group.meta_group_rank());
+    const int globalWarpId = blockIdx.x * group.meta_group_size() + group.meta_group_rank();
+    const int totalNumWarps = group.meta_group_size() * gridDim.x;
+
+    for(int i = globalWarpId; i < nsteps; i += totalNumWarps)
     {
-        const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)
-        stepDir = float4{rho * cosf(step.dirAndLengthAndBeta.y),  // rho*cos(phi)
-                         rho * sinf(step.dirAndLengthAndBeta.y),  // rho*sin(phi)
-                         cosf(step.dirAndLengthAndBeta.x),        // cos(phi)
-                         ZERO};
+        const I3CLSimStepCuda step = inputSteps[i];
+        propGroup(group, step, thisGroupSharedPhotonInitials, numPhotonsInShared[group.meta_group_rank()], 
+                    hitIndex, maxHitIndex, outputPhotons, 
+                    geoLayerToOMNumIndexPerStringSetLocal, _generateWavelength_0distYValuesShared,
+                    _generateWavelength_0distYCumulativeValuesShared, getWavelengthBias_dataShared, 
+                    RNG_ARGS_TO_CALL);
     }
 
-    uint32_t photonsLeftToPropagate = step.numPhotons;
-    I3CLPhoton photon;
-    photon.absLength = 0;
-    I3CLInitialPhoton photonInitial;
-
-    while (photonsLeftToPropagate > 0) {
-        if (photon.absLength < EPSILON) {
-            photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
-            photon = I3CLPhoton(photonInitial);
-        }
-
-        // this block is along the lines of the PPC kernel
-        float distancePropagated;
-        propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
-        bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
-                                  hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal, getWavelengthBias_dataShared);
-
-        if (collided) {
-            // get rid of the photon if we detected it
-            photon.absLength = ZERO;
-        }
-
-        // absorb or scatter the photon
-        if (photon.absLength < EPSILON) {
-            // photon was absorbed.
-            // a new one will be generated at the begin of the loop.
-            --photonsLeftToPropagate;
-        } else {  // photon was NOT absorbed. scatter it and re-start the loop
-
-            updatePhotonTrack(photon, distancePropagated);
-            scatterPhoton(photon, RNG_ARGS_TO_CALL);
-        }
-    }  // end while
-
     // upload MWC RNG state
-    MWC_RNG_x[i] = real_rnd_x;
-    MWC_RNG_a[i] = real_rnd_a;
+    MWC_RNG_x[threadId] = real_rnd_x;
+    MWC_RNG_a[threadId] = real_rnd_a;
 }

@@ -57,7 +57,7 @@ __device__ __forceinline__ void scatterDirectionByAngle(float cosa, float sina, 
 
 __device__ __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda &step, const float4 &stepDir, RNG_ARGS,
                                                       float4 &photonPosAndTime, float4 &photonDirAndWlen,
-                                                      float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared);
+                                                      const float* _generateWavelength_0distYValuesShared, const float* _generateWavelength_0distYCumulativeValuesShared);
 
 __device__ __forceinline__ float2 sphDirFromCar(float4 carDir);
 
@@ -629,7 +629,7 @@ __device__ __forceinline__ void scatterDirectionByAngle(float cosa, float sina, 
 
 __device__ __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda &step, const float4 &stepDir, RNG_ARGS,
                                                       float4 &photonPosAndTime, float4 &photonDirAndWlen,
-                                                      float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared)
+                                                      const float* _generateWavelength_0distYValuesShared, const float* _generateWavelength_0distYCumulativeValuesShared)
 {
     float shiftMultiplied = step.dirAndLengthAndBeta.z * RNG_CALL_UNIFORM_CO;
     float inverseParticleSpeed = 1.f / (speedOfLight * step.dirAndLengthAndBeta.w);
@@ -649,7 +649,7 @@ __device__ __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda &ste
         // particle/step
 
         // our photon still needs a wavelength. create one!
-        const float wavelength = generateWavelength_0(RNG_ARGS_TO_CALL, _generateWavelength_0distYValuesShared,   _generateWavelength_0distYCumulativeValuesShared);
+        const float wavelength = generateWavelength_0(RNG_ARGS_TO_CALL, _generateWavelength_0distYValuesShared, _generateWavelength_0distYCumulativeValuesShared);
 
         const float cosCherenkov = min(
             ONE, 1.f / (step.dirAndLengthAndBeta.w * getPhaseRefIndex(layer, wavelength)));  // cos theta = 1/(beta*n)
