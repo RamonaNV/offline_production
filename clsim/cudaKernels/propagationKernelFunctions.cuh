@@ -159,16 +159,6 @@ __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, cons
                                                   const unsigned short *geoLayerToOMNumIndexPerStringSetLocal, 
                                                   const float* getWavelengthBias_dataShared);
 
-__device__ __forceinline__ bool checkForCollision(const float4 &photonPosAndTime, const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-                                                  float inv_groupvel, float photonTotalPathLength,
-                                                  uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
-                                                  const float4 &photonStartPosAndTime,
-                                                  const float4 &photonStartDirAndWlen, const I3CLSimStepCuda &step,
-                                                  float &thisStepLength,
-                                                  uint32_t *hitIndex, uint32_t maxHitIndex,
-                                                  I3CLSimPhotonCuda *outputPhotons,  
-                                                  const unsigned short *geoLayerToOMNumIndexPerStringSetLocal);
-
 __device__ __forceinline__ void checkForCollision_OnString(const unsigned short stringNum,
                                                            const float photonDirLenXYSqr,
                                                            const float4 &photonPosAndTime,
@@ -545,37 +535,6 @@ __device__ __forceinline__ void checkForCollision_InCells(const float photonDirL
 #undef DO_CHECK
 }
 
-__device__ __forceinline__ bool checkForCollision(const float4 &photonPosAndTime, const float4 &photonDirAndWlen,float* getWavelengthBias_dataShared,
-                                                  float inv_groupvel, float photonTotalPathLength,
-                                                  uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
-                                                  const float4 &photonStartPosAndTime,
-                                                  const float4 &photonStartDirAndWlen, const I3CLSimStepCuda &step,
-                                                  float &thisStepLength,
-                                                  uint32_t *hitIndex, uint32_t maxHitIndex,
-                                                  I3CLSimPhotonCuda *outputPhotons, 
-                                                  const unsigned short *geoLayerToOMNumIndexPerStringSetLocal)
-{
-    // check for collisions
-    const float photonDirLenXYSqr = sqr(photonDirAndWlen.x) + sqr(photonDirAndWlen.y);
-    if (photonDirLenXYSqr <= ZERO) return false;
-
-    bool hitRecorded = false;
-    unsigned short hitOnString;
-    unsigned short hitOnDom;
-
-    checkForCollision_InCells(photonDirLenXYSqr, photonPosAndTime, photonDirAndWlen,getWavelengthBias_dataShared,
-                              thisStepLength, hitRecorded, hitOnString, hitOnDom,
-                              geoLayerToOMNumIndexPerStringSetLocal);
-
-    if (hitRecorded) {
-        saveHit(photonPosAndTime, photonDirAndWlen, getWavelengthBias_dataShared, thisStepLength, inv_groupvel, photonTotalPathLength,
-                photonNumScatters, distanceTraveledInAbsorptionLengths, photonStartPosAndTime, photonStartDirAndWlen,
-                step, hitOnString, hitOnDom, hitIndex, maxHitIndex, outputPhotons
-        );
-    }
-    return hitRecorded;
-}
-
 __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, const I3CLInitialPhoton& photonInitials,
                                                   const I3CLSimStepCuda &step, float &thisStepLength,
                                                   uint32_t *hitIndex, uint32_t maxHitIndex,
@@ -601,10 +560,6 @@ __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, cons
     // (i.e. absorbed by the DOM), we need to record
     // them here (after all possible DOM intersections
     // have been checked).
-    //
-    // Otherwise, the recording is done right after
-    // the intersection detection further down in
-    // checkForCollision_*().
 
     if (hitRecorded) {
         saveHit(photon.posAndTime, photon.dirAndWlen, getWavelengthBias_dataShared, thisStepLength, photon.invGroupvel, photon.totalPathLength,

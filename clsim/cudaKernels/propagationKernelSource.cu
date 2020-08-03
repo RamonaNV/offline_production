@@ -335,156 +335,36 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     }
 
     uint32_t photonsLeftToPropagate = step.numPhotons;
-    float abs_lens_left = ZERO;
-    float abs_lens_initial = ZERO;
-
-    float4 photonStartPosAndTime;
-    float4 photonStartDirAndWlen;
-    float4 photonPosAndTime;
-    float4 photonDirAndWlen;
-    uint32_t photonNumScatters = 0;
-    float photonTotalPathLength = ZERO;
-
-    float inv_groupvel = ZERO;
+    I3CLPhoton photon;
+    photon.absLength = 0;
+    I3CLInitialPhoton photonInitial;
 
     while (photonsLeftToPropagate > 0) {
-        if (abs_lens_left < EPSILON) {
-            // create a new photon
-            createPhotonFromTrack(step, stepDir, RNG_ARGS_TO_CALL, photonPosAndTime, photonDirAndWlen,
-                                  _generateWavelength_0distYValuesShared,
-                                  _generateWavelength_0distYCumulativeValuesShared);
-
-            // save the start position and time
-            photonStartPosAndTime = photonPosAndTime;
-            photonStartDirAndWlen = photonDirAndWlen;
-
-            photonNumScatters = 0;
-            photonTotalPathLength = ZERO;
-
-            inv_groupvel = 1.f / (getGroupVelocity(0, photonDirAndWlen.w));
-
-            // the photon needs a lifetime. determine distance to next scatter and
-            // absorption (this is in units of absorption/scattering lengths)
-            abs_lens_initial = -logf(RNG_CALL_UNIFORM_OC);
-            abs_lens_left = abs_lens_initial;
+        if (photon.absLength < EPSILON) {
+            photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
+            photon = I3CLPhoton(photonInitial);
         }
 
         // this block is along the lines of the PPC kernel
         float distancePropagated;
-        {
-            const float effective_z = photonPosAndTime.z - getTiltZShift(photonPosAndTime);
-            int currentPhotonLayer = min(max(findLayerForGivenZPos(effective_z), 0), MEDIUM_LAYERS - 1);
-            const float photon_dz = photonDirAndWlen.z;
-
-            // add a correction factor to the number of absorption lengths
-            // abs_lens_left before the photon is absorbed. This factor will be taken
-            // out after this propagation step. Usually the factor is 1 and thus has
-            // no effect, but it is used in a direction-dependent way for our model of
-            // ice anisotropy.
-
-            const float abs_len_correction_factor = getDirectionalAbsLenCorrFactor(photonDirAndWlen);
-            abs_lens_left *= abs_len_correction_factor;
-
-            // the "next" medium boundary (either top or bottom, depending on step
-            // direction)
-            float mediumBoundary = (photon_dz < ZERO)
-                                       ? (mediumLayerBoundary(currentPhotonLayer))
-                                       : (mediumLayerBoundary(currentPhotonLayer) + (float)MEDIUM_LAYER_THICKNESS);
-
-            // track this thing to the next scattering point
-            float sca_step_left = -logf(RNG_CALL_UNIFORM_OC);
-
-            float currentScaLen = getScatteringLength(currentPhotonLayer, photonDirAndWlen.w);
-            float currentAbsLen = getAbsorptionLength(currentPhotonLayer, photonDirAndWlen.w);
-
-            float ais = (photon_dz * sca_step_left - ((mediumBoundary - effective_z)) / currentScaLen) *
-                        (ONE / (float)MEDIUM_LAYER_THICKNESS);
-            float aia = (photon_dz * abs_lens_left - ((mediumBoundary - effective_z)) / currentAbsLen) *
-                        (ONE / (float)MEDIUM_LAYER_THICKNESS);
-
-            // propagate through layers
-            int j = currentPhotonLayer;
-            if (photon_dz < 0) {
-                for (; (j > 0) && (ais < ZERO) && (aia < ZERO);
-                     mediumBoundary -= (float)MEDIUM_LAYER_THICKNESS,
-                     currentScaLen = getScatteringLength(j, photonDirAndWlen.w),
-                     currentAbsLen = getAbsorptionLength(j, photonDirAndWlen.w), ais += 1.f / (currentScaLen),
-                     aia += 1.f / (currentAbsLen))
-                    --j;
-            } else {
-                for (; (j < MEDIUM_LAYERS - 1) && (ais > ZERO) && (aia > ZERO);
-                     mediumBoundary += (float)MEDIUM_LAYER_THICKNESS,
-                     currentScaLen = getScatteringLength(j, photonDirAndWlen.w),
-                     currentAbsLen = getAbsorptionLength(j, photonDirAndWlen.w), ais -= 1.f / (currentScaLen),
-                     aia -= 1.f / (currentAbsLen))
-                    ++j;
-            }
-
-            float distanceToAbsorption;
-            if ((currentPhotonLayer == j) || ((my_fabs(photon_dz)) < EPSILON)) {
-                distancePropagated = sca_step_left * currentScaLen;
-                distanceToAbsorption = abs_lens_left * currentAbsLen;
-            } else {
-                const float recip_photon_dz = 1.f / (photon_dz);
-                distancePropagated =
-                    (ais * ((float)MEDIUM_LAYER_THICKNESS) * currentScaLen + mediumBoundary - effective_z) *
-                    recip_photon_dz;
-                distanceToAbsorption =
-                    (aia * ((float)MEDIUM_LAYER_THICKNESS) * currentAbsLen + mediumBoundary - effective_z) *
-                    recip_photon_dz;
-            }
-
-            // get overburden for distance
-            if (distanceToAbsorption < distancePropagated) {
-                distancePropagated = distanceToAbsorption;
-                abs_lens_left = ZERO;
-            } else {
-                abs_lens_left = (distanceToAbsorption - distancePropagated) / currentAbsLen;
-            }
-
-            // hoist the correction factor back out of the absorption length
-            abs_lens_left = (abs_lens_left) / abs_len_correction_factor;
-        }
-
-        // the photon is now either being absorbed or scattered.
-        // Check for collisions in its way
-        bool collided = checkForCollision(
-            photonPosAndTime, photonDirAndWlen, getWavelengthBias_dataShared, inv_groupvel, photonTotalPathLength,
-            photonNumScatters, abs_lens_initial - abs_lens_left, photonStartPosAndTime, photonStartDirAndWlen, step,
-            distancePropagated, hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal);
+        propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
+        bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
+                                  hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSet, getWavelengthBias_dataShared);
 
         if (collided) {
             // get rid of the photon if we detected it
-            abs_lens_left = ZERO;
+            photon.absLength = ZERO;
         }
 
-        // update the track to its next position
-        photonPosAndTime.x += photonDirAndWlen.x * distancePropagated;
-        photonPosAndTime.y += photonDirAndWlen.y * distancePropagated;
-        photonPosAndTime.z += photonDirAndWlen.z * distancePropagated;
-        photonPosAndTime.w += inv_groupvel * distancePropagated;
-        photonTotalPathLength += distancePropagated;
-
         // absorb or scatter the photon
-        if (abs_lens_left < EPSILON) {
+        if (photon.absLength < EPSILON) {
             // photon was absorbed.
             // a new one will be generated at the begin of the loop.
             --photonsLeftToPropagate;
         } else {  // photon was NOT absorbed. scatter it and re-start the loop
-            // optional direction transformation (for ice anisotropy)
-            transformDirectionPreScatter(photonDirAndWlen);
 
-            // choose a scattering angle
-            const float cosScatAngle = makeScatteringCosAngle(RNG_ARGS_TO_CALL);
-            const float sinScatAngle = sqrt(ONE - sqr(cosScatAngle));
-
-            // change the current direction by that angle
-            scatterDirectionByAngle(cosScatAngle, sinScatAngle, photonDirAndWlen, RNG_CALL_UNIFORM_CO);
-
-            // optional direction transformation (for ice anisotropy)
-            transformDirectionPostScatter(photonDirAndWlen);
-
-            ++photonNumScatters;
+            updatePhotonTrack(photon, distancePropagated);
+            scatterPhoton(photon, RNG_ARGS_TO_CALL);
         }
     }  // end while
 
