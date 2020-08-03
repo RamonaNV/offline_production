@@ -20,12 +20,15 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+// WARNING: 
+// Code corresponds to the default contstructor of I3CLSimStepToPhotonConverterOpenCL
+// all extra options have been removed for now
+
 #include <cooperative_groups.h>
 #include <cuda/std/atomic>
 
 #include <propagationKernelSource.cuh>
 #include <propagationKernelFunctions.cuh>
-
 
 // namespace alias
 namespace cg = cooperative_groups;
@@ -39,11 +42,6 @@ cudaError_t gl_err;
     gl_err = cudaGetLastError();            \
     if (cudaError_t(gl_err) != cudaSuccess) \
         printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(gl_err)), __LINE__ - 1);
-
-// remark: ignored tabulate version, removed ifdef TABULATE
-// also removed ifdef DOUBLEPRECISION.
-// SAVE_PHOTON_HISTORY  and SAVE_ALL_PHOTONS are not define for now, i.e. commented out these snippets,
-// s.t. it corresponds to the default contstructor of I3CLSimStepToPhotonConverterOpenCL
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel(
     uint32_t* hitIndex,          // deviceBuffer_CurrentNumOutputPhotons
@@ -83,7 +81,6 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     uint32_t* d_MWC_RNG_a;
     init_RDM_CUDA(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
 
-    printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, 1, nsteps);
     unsigned short* d_geolayer;
     CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer, ngeolayer * sizeof(unsigned short)));
     CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer * sizeof(unsigned short),
