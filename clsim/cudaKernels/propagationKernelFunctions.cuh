@@ -23,20 +23,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef PROPAGATIONKERNELFUNCTIUONS_CUH
 #define PROPAGATIONKERNELFUNCTIUONS_CUH
 
-
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <math_constants.h>
-//!!! order matters:
+
+#include <mwcrngKernelSource.cuh>
 #include <CLnoneCUDA.cuh>
 #include <prependSource.cuh>
-#include <mwcrngKernelSource.cuh>
-#include <geometrySource.cuh>
-#include <mediumPropertiesSource.cuh>
-#include <wlenBiasSource.cuh>
 #include <wlenGeneratorSource.cuh>
-
 #include <dataStructCuda.cuh>
+#include <wlenBiasSource.cuh>
+#include <mediumPropertiesSource.cuh>
+#include <geometrySource.cuh>
 
 #include <chrono>
 #include <ctime>

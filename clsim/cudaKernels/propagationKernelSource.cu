@@ -20,10 +20,8 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-// !! order matters:
-#include <fstream>
-#include <propagationKernelFunctions.cuh>
 #include <propagationKernelSource.cuh>
+#include <propagationKernelFunctions.cuh>
 
 cudaError_t gl_err;
 
@@ -349,7 +347,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         float distancePropagated;
         propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
         bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
-                                  hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSet, getWavelengthBias_dataShared);
+                                  hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal, getWavelengthBias_dataShared);
 
         if (collided) {
             // get rid of the photon if we detected it

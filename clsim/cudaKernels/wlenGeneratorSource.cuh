@@ -22,7 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifndef WLENGENSOURCE_CUH
 #define WLENGENSOURCE_CUH
-#pragma once
+
+#include <mwcrngKernelSource.cuh>
 
 #define _generateWavelength_0NUM_DIST_ENTRIES 43
 

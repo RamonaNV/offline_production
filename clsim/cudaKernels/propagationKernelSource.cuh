@@ -26,12 +26,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
-
 #include <iostream>
-
-//#include <dataStructCuda.cuh>
 #include <opencl/mwcrng_init.h>
-
 #include <dataStructCuda.cuh>
 
 #define NTHREADS_PER_BLOCK 512
