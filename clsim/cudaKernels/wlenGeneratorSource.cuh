@@ -65,6 +65,8 @@ __device__ __forceinline__ float generateWavelength_0(RNG_ARGS, const float* _ge
         ++k;
     }
 
+    __syncwarp();
+
     // look between bins k and k+1
 
     const float b = _generateWavelength_0distYValuesShared[k];
