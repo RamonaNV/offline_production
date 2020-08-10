@@ -103,7 +103,10 @@ while True:
 	steps, markers, particleHistories, barrierWasReset = stepGenerator.GetConversionResultWithBarrierInfoAndMarkers()
 
 	#print('---> sending %d photons in bunch %d' % (sum((s.num for s in steps)), i))
- 
+	
+
+	steps.num = 10
+
 	clsimer.EnqueueSteps(steps, i)
 	i += 1
 	
