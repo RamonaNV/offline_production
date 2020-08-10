@@ -38,6 +38,7 @@
 #include <chrono>
 #include <ctime>
 #include <propagationKernelSource.cuh>
+#include <random>
 
 // debugging: show GPUtime/photon
 #define DUMP_STATISTICS
@@ -1555,6 +1556,8 @@ void I3CLSimStepToPhotonConverterOpenCL::SetGeometry(I3CLSimSimpleGeometryConstP
     geometry_ = geometry;
 }
 
+
+
 void I3CLSimStepToPhotonConverterOpenCL::EnqueueSteps(I3CLSimStepSeriesConstPtr steps, uint32_t identifier)
 {
     if (!initialized_)
@@ -1674,6 +1677,60 @@ std::map<std::string, double> I3CLSimStepToPhotonConverterOpenCL::GetStatistics(
     return summary;
 }
 
+
+// shuffles the number of photons per step within +/- 10-90% of current number.
+// while leaving total number of phtons over all steps constant.
+//round32 rounds number of photons per step to a value divisible by 32
+void shuffleStepSeries(I3CLSimStepSeriesPtr& steps, bool roundToPower32)
+{
+    float maxPhotonPerStep = 0.9;
+    float minPhotonPerStep = 0.1;
+    std::random_device rndmdev;
+    std::mt19937 rndmGen(rndmdev());
+    std::uniform_real_distribution<> dis(minPhotonPerStep, maxPhotonPerStep);
+
+    int modulo32 = 0;
+    int Nhalf = int(std::floor(steps->size()/2));
+ 
+    for( int i = 0; i < Nhalf ; ++i )
+    {
+        float rndNumbPhtotons = 1.0*(rand()%2==0)+ dis(rndmGen);
+        int oldval0 = int(steps->data()[i].GetNumPhotons());
+        int oldval1 = int(steps->data()[i+Nhalf].GetNumPhotons());
+        
+        int newval0 = int(std::floor(oldval0*rndNumbPhtotons));
+        int newval1 = oldval1 + oldval0-newval0;
+
+        if(newval1 < 0 )
+        {
+            newval1 = 0;
+            newval0 = oldval1 + oldval0;
+        }     
+    
+        if(roundToPower32)
+        { 
+            newval0 = int(std::floor(newval0/32.0))*32;
+            newval1 = oldval1 + oldval0-newval0; 
+            newval1 = int( std::floor(newval1/32.0))*32;
+            modulo32 +=  (oldval0 +oldval1- newval0-newval1 );
+            while(modulo32 >=32)
+            {
+                newval1 += 32;
+                modulo32 -= 32;
+            } 
+            if(i >= Nhalf-1 )
+            {
+                newval1 += modulo32;
+                modulo32 = 0;
+            }
+        }          
+        steps->data()[i].SetNumPhotons( uint32_t(newval0));
+        steps->data()[i+Nhalf].SetNumPhotons(uint32_t(newval1));
+
+    }//end for loop
+}
+
+
 void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_interruption &di,
                                                    const boost::posix_time::ptime &last_timestamp, bool &shouldBreak,
                                                    unsigned int bufferIndex, uint32_t &out_stepsIdentifier,
@@ -1682,13 +1739,14 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
 {
     uint32_t stepsIdentifier = 0;
     I3CLSimStepSeriesConstPtr steps;
-
+    const bool shuffleSteps = false;
+    const bool shuffleStepsTo32 = false;
+    
     const uint32_t zeroCounterBufferSource = 0;
     VECTOR_CLASS<cl::Event> bufferWriteEvents(2);
 
     while (!steps) {
         // we need to fetch new steps
-
         boost::this_thread::restore_interruption ri(di);
         typedef std::chrono::high_resolution_clock clock_t;
         try {
@@ -1714,7 +1772,30 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
                                      << std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count()
                                      << " ns for bunch " << val.first);
                 stepsIdentifier = val.first;
-                steps = val.second;
+                
+                if(! shuffleSteps)
+                { 
+                    steps = val.second;
+                }else{
+                    I3CLSimStepSeriesPtr nonConstSteps(new I3CLSimStepSeries(*val.second));
+
+                    uint64_t testtotalNumberOfPhotons0 = 0;
+                        BOOST_FOREACH (const I3CLSimStep& step, *nonConstSteps) {
+                            testtotalNumberOfPhotons0 += step.numPhotons;
+                        }
+                    
+                    shuffleStepSeries(nonConstSteps, shuffleStepsTo32);
+
+                    uint64_t testtotalNumberOfPhotons1 = 0;
+                        BOOST_FOREACH (const I3CLSimStep &step, *nonConstSteps) {
+                            testtotalNumberOfPhotons1 += step.numPhotons;
+                        }
+
+                    if(testtotalNumberOfPhotons1 != testtotalNumberOfPhotons0) std::cout<< "warning: wrong shuffler, old num of photons total =  " <<testtotalNumberOfPhotons0 << " new num of photons total =  " <<testtotalNumberOfPhotons1 << std::endl;
+
+                    steps = nonConstSteps;
+                    }
+
             } else {
                 ToOpenCLPair_t val;
                 // this will never block:
@@ -1732,14 +1813,35 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
                           queueToOpenCL_->size(), queueToOpenCL_->max_size());
 
                 stepsIdentifier = val.first;
-                steps = val.second;
+               if(! shuffleSteps)
+                { 
+                    steps = val.second;
+                }else{
+                     I3CLSimStepSeriesPtr nonConstSteps(new I3CLSimStepSeries(*val.second));
+
+                    uint64_t testtotalNumberOfPhotons0 = 0;
+                        BOOST_FOREACH (const I3CLSimStep& step, *nonConstSteps) {
+                            testtotalNumberOfPhotons0 += step.numPhotons;
+                        }
+                    
+                    shuffleStepSeries(nonConstSteps, shuffleStepsTo32);
+
+                    uint64_t testtotalNumberOfPhotons1 = 0;
+                        BOOST_FOREACH (const I3CLSimStep &step, *nonConstSteps) {
+                            testtotalNumberOfPhotons1 += step.numPhotons;
+                        }
+
+                    if(testtotalNumberOfPhotons1 != testtotalNumberOfPhotons0) std::cout<< "warning: wrong shuffler, old num of photons total =  " <<testtotalNumberOfPhotons0 << " new num of photons total =  " <<testtotalNumberOfPhotons1 << std::endl;
+
+                    steps = nonConstSteps;
+                    }
             }
         } catch (boost::thread_interrupted &i) {
             printf("[%u] OpenCL worker thread was interrupted -  closing.", bufferIndex);
             shouldBreak = true;
             return;
         }
-    }
+    } //end while !steps
 
     log_trace("[%u] OpenCL thread got steps with id %zu", bufferIndex, static_cast<std::size_t>(stepsIdentifier));
     out_stepsIdentifier = stepsIdentifier;
@@ -1753,6 +1855,8 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
 #else
     out_totalNumberOfPhotons = 0;
 #endif  // DUMP_STATISTICS
+
+
 
     // ----------------------- CUDA PART -------------------------
     const bool runCudaOnly = true; // only run cuda and not opencl (to speed up big runs)  
