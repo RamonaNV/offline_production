@@ -1680,17 +1680,23 @@ std::map<std::string, double> I3CLSimStepToPhotonConverterOpenCL::GetStatistics(
 
 // shuffles the number of photons per step within +/- 10-90% of current number.
 // while leaving total number of phtons over all steps constant.
-//round32 rounds number of photons per step to a value divisible by 32
-void shuffleStepSeries(I3CLSimStepSeriesPtr& steps, bool roundToPower32)
+// @param roundToPower32  rounds number of photons per step to a value divisible by 32
+// @param halfNumberSteps, halfs the step size/ doubles average number photons per step
+void shuffleStepSeries(I3CLSimStepSeriesPtr& steps, const bool roundToPower32, const bool halfNumberSteps=false)
 {
-    float maxPhotonPerStep = 0.9;
-    float minPhotonPerStep = 0.1;
+    float maxPercentageChangePerStep = 0.9;
+    float minPercentageChangePerStep = 0.1;
     std::random_device rndmdev;
     std::mt19937 rndmGen(rndmdev());
-    std::uniform_real_distribution<> dis(minPhotonPerStep, maxPhotonPerStep);
+    std::uniform_real_distribution<> dis(minPercentageChangePerStep, maxPercentageChangePerStep);
 
+    bool nUneven  =   steps->size()%2 !=0  ;
     int modulo32 = 0;
     int Nhalf = int(std::floor(steps->size()/2));
+
+     if(halfNumberSteps){
+        steps->resize(Nhalf);
+    }
  
     for( int i = 0; i < Nhalf ; ++i )
     {
@@ -1724,8 +1730,16 @@ void shuffleStepSeries(I3CLSimStepSeriesPtr& steps, bool roundToPower32)
                 modulo32 = 0;
             }
         }          
-        steps->data()[i].SetNumPhotons( uint32_t(newval0));
-        steps->data()[i+Nhalf].SetNumPhotons(uint32_t(newval1));
+        if(nUneven && i>= Nhalf-1)  newval1 += steps->data()[i+1+Nhalf].GetNumPhotons();
+
+        if (!halfNumberSteps){
+            steps->data()[i].SetNumPhotons( uint32_t(newval0));
+            steps->data()[i+Nhalf].SetNumPhotons(uint32_t(newval1));
+            
+
+        }else{
+            steps->data()[i].SetNumPhotons( uint32_t(newval0+newval1)); 
+        }
 
     }//end for loop
 }
@@ -1741,6 +1755,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
     I3CLSimStepSeriesConstPtr steps;
     const bool shuffleSteps = false;
     const bool shuffleStepsTo32 = false;
+    int resizingNrStepsby2PowerMinus = 2;
     
     const uint32_t zeroCounterBufferSource = 0;
     VECTOR_CLASS<cl::Event> bufferWriteEvents(2);
@@ -1783,8 +1798,17 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
                         BOOST_FOREACH (const I3CLSimStep& step, *nonConstSteps) {
                             testtotalNumberOfPhotons0 += step.numPhotons;
                         }
+
+                    if(resizingNrStepsby2PowerMinus>0) std::cout<< "old number steps "<< nonConstSteps->size() <<std::endl;
                     
-                    shuffleStepSeries(nonConstSteps, shuffleStepsTo32);
+                    shuffleStepSeries(nonConstSteps, shuffleStepsTo32, resizingNrStepsby2PowerMinus>0 );
+
+                    while ( resizingNrStepsby2PowerMinus > 1){
+                         shuffleStepSeries(nonConstSteps, false, true);
+                         --resizingNrStepsby2PowerMinus;
+                    }
+                    if(resizingNrStepsby2PowerMinus>0) std::cout<< "new number steps "<< nonConstSteps->size() <<std::endl;
+
 
                     uint64_t testtotalNumberOfPhotons1 = 0;
                         BOOST_FOREACH (const I3CLSimStep &step, *nonConstSteps) {
@@ -1823,8 +1847,16 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
                         BOOST_FOREACH (const I3CLSimStep& step, *nonConstSteps) {
                             testtotalNumberOfPhotons0 += step.numPhotons;
                         }
+                     if(resizingNrStepsby2PowerMinus>0) std::cout<< "old number steps "<< nonConstSteps->size() <<std::endl;
                     
-                    shuffleStepSeries(nonConstSteps, shuffleStepsTo32);
+                    shuffleStepSeries(nonConstSteps, shuffleStepsTo32, resizingNrStepsby2PowerMinus>0  );
+
+                    while ( resizingNrStepsby2PowerMinus > 1){
+                         shuffleStepSeries(nonConstSteps, false, true);
+                         --resizingNrStepsby2PowerMinus;
+                    }
+                    if(resizingNrStepsby2PowerMinus>0) std::cout<< "new number steps "<< nonConstSteps->size() <<std::endl;
+
 
                     uint64_t testtotalNumberOfPhotons1 = 0;
                         BOOST_FOREACH (const I3CLSimStep &step, *nonConstSteps) {
