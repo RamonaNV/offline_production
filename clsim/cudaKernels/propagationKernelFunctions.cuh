@@ -716,6 +716,8 @@ __device__ __forceinline__ void saveHit(const float4 &photonPosAndTime, const fl
 {
     // PRINTL
     uint32_t myIndex = atomicAdd(&hitIndex[0], 1);
+   // printf( "interestin phton at step id %u of thread idx %u and block idx %u \n",step.identifier, threadIdx.x, blockIdx.x  );
+
 
     if (myIndex < maxHitIndex) {
         // Emit photon position relative to the hit DOM

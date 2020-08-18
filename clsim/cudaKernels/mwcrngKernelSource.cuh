@@ -32,7 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //////////////////////////////////////////////////////////////////////////////
 __device__ __forceinline__ float rand_MWC_co(uint64_t *x, uint32_t *a)
 {
-    // float rndm[10] = {0.2, 0.6, 0.43, 0.21, 0.9, 0.76, 0.1, 0.6, 0.34, 0.78};   return rndm[*a%10];
+    // float rndm[10] = {0.2, 0.6, 0.43, 0.21, 0.9, 0.76, 0.1, 0.88 ,0.34, 0.78};   return rndm[*a%10];
     // Generate a random number [0,1);
     *x = (*x & 0xffffffffull) * (*a) + (*x >> 32);
     return __fdividef(__uint2float_rz((unsigned int)(*x)), (float)0x100000000);
