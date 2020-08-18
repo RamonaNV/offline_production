@@ -95,7 +95,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
                         )
 {
     #ifdef STATS_TIMERS
-    //    nsteps = 1;
+      //  nsteps = 1;
     #endif 
 
 
@@ -204,6 +204,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
             maxEnd[m]  = timer[m* numBlocks + numBlocks*ntimers];
             avrgTime[m] = (timer[m* numBlocks + numBlocks*ntimers]-timer[m* numBlocks + 0])/numBlocks; 
             avrgCounters[m] = counters[m* numBlocks + 0]/numBlocks;
+            if( m == 2 or m ==3)   avrgTime[m] = double(  timer[m* numBlocks + 0] )/numBlocks; 
        }
 
        
@@ -212,12 +213,14 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
        {
         for( int m = 0; m< 5; ++m)
         {
-         
+       
           minStart[m] = timer[m* numBlocks + i] < minStart[m] ? timer[m* numBlocks + i] : minStart[m];
           maxEnd[m] = timer[numBlocks*ntimers+m* numBlocks + i] > maxEnd[m] ? timer[numBlocks*ntimers+m* numBlocks + i] : maxEnd[m];
 
            avrgTime[m] += double(timer[numBlocks*ntimers+m* numBlocks + i] - timer[m* numBlocks + i] )/numBlocks; 
            avrgCounters[m] += counters[m* numBlocks + i]/numBlocks;
+         
+           if( m == 2 or m ==3)   avrgTime[m] += double(  timer[m* numBlocks + i] )/numBlocks; 
         }
 
        }
@@ -425,12 +428,14 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
 
         if(tid == 0){
            for (int m = 0; m<5; ++m) counters[m* gridDim.x + bid] = 0.0;
+           for (int m = 0; m<5; ++m) timers[m* gridDim.x + bid] = 0.0;
+         
        }
-
+       int m = 0;
 
         if(tid == 0) start0 = clock64();
 
-       int m = 0;
+      
 
     #endif
   
@@ -461,13 +466,13 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     
     #ifdef STATS_TIMERS
         uint64_t start, end;
-        if(tid == 0) start = clock64();
         perStepCounter[i] = 0;
+        if(tid == 0) start = clock64();
     #endif
 
     // download MWC RNG state
-    uint64_t real_rnd_x = MWC_RNG_x[89];
-    uint32_t real_rnd_a = MWC_RNG_a[89];
+    uint64_t real_rnd_x = MWC_RNG_x[i];
+    uint32_t real_rnd_a = MWC_RNG_a[i];
     uint64_t* rnd_x = &real_rnd_x;
     uint32_t* rnd_a = &real_rnd_a;
 
@@ -476,8 +481,8 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     #ifdef STATS_TIMERS
     if( tid==0 )
     {  
-        m = 1;
         end = clock64();
+        m = 1;
         timers[m* gridDim.x + bid] = start;
         timers[m* gridDim.x + bid + 5*gridDim.x] = end;
         counters[m* gridDim.x + bid] += 1.0;
@@ -502,12 +507,14 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     photon.absLength = 0;
     I3CLInitialPhoton photonInitial;
     
+ 
     #ifdef STATS_TIMERS
         uint64_t start1, end1;
         if(tid == 0) start1 = clock64();
     #endif
 
- 
+
+   // #undef STATS_TIMERS
    
     while (photonsLeftToPropagate > 0) {
         
@@ -517,8 +524,8 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         }
 
         #ifdef STATS_TIMERS
+             perStepCounter[i] += 1;
             if(tid == 0) start = clock64();
-            perStepCounter[i] += 1;
         #endif
 
         // this block is along the lines of the PPC kernel
@@ -528,10 +535,9 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         #ifdef STATS_TIMERS
         if( tid==0 )
         {  
-            m =2;
             end = clock64();
-            timers[m* gridDim.x + bid] = start;
-            timers[m* gridDim.x + bid + 5*gridDim.x] = end;
+            m =2;
+            timers[m* gridDim.x + bid] += float(end- start);
             counters[m* gridDim.x + bid] += 1.0;
         }
       #endif
@@ -547,10 +553,10 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         #ifdef STATS_TIMERS
         if( tid==0 )
         {  
-            m = 3;
+        
             end = clock64();
-            timers[m* gridDim.x + bid] = start;
-            timers[m* gridDim.x + bid + 5*gridDim.x] = end;
+            m = 3;
+            timers[m* gridDim.x + bid] += float(end- start);
             counters[m* gridDim.x + bid] += 1.0;
         }
        #endif
@@ -576,15 +582,19 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
    
     
     
-
+    //#define STATS_TIMERS
     #ifdef STATS_TIMERS
     if( tid==0 )
     {  
-        m = 4;
+       
         end1 = clock64();
+        m = 4;
         timers[m* gridDim.x + bid] = start1;
         timers[m* gridDim.x + bid + 5*gridDim.x] = end1;
         counters[m* gridDim.x + bid] += 1.0;
+
+        timers[2* gridDim.x + bid] =timers[2* gridDim.x + bid]/perStepCounter[i]*nphot ;
+        timers[3* gridDim.x + bid] =timers[3* gridDim.x + bid]/perStepCounter[i]*nphot ;
     }
   #endif
 
@@ -592,7 +602,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     // upload MWC RNG state
     MWC_RNG_x[i] = real_rnd_x;
     MWC_RNG_a[i] = real_rnd_a;
-     
+    #define STATS_TIMERS
     #ifdef STATS_TIMERS
     if( tid==0 )
     {
@@ -604,7 +614,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         
    
     }
-    perStepCounter[i] = int(float(perStepCounter[i])/nphot);
+    perStepCounter[i] =  int(float(perStepCounter[i])/nphot);
 
     #endif
  
