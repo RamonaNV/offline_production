@@ -23,7 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <propagationKernelSource.cuh>
 #include <propagationKernelFunctions.cuh>
 
-
+#include <random>
 #define STATS_TIMERS
 
 
@@ -45,7 +45,64 @@ void statsToFile( int* counters, unsigned int n){
     std::ofstream outputFile; outputFile.open (filename);
     for (unsigned int i = 0; i <  n; i++)
     {  
-            outputFile <<counters[i] << std::endl;
+          if(counters[i] != 0)  outputFile <<counters[i] << std::endl;
+    }
+    outputFile.close();
+}
+
+void statsToIntegerHistToFile( int* counters, int n){
+    const std::string filename = "/home/rhohl/IceCube/offline_production/build/hist.csv";
+    std::cout<< " writing "<< n << " to file "<< filename<<std::endl;
+
+    int max = counters[0];
+    int min = counters[0];
+    for( int i = 1; i<n;i++ )
+    {
+        if(counters[i]!=-1)
+        {
+        if( counters[i] < min ) min = counters[i];
+        if( counters[i] > max) max = counters[i];
+        }
+
+    }
+    std::cout << " min = "<< min<< " max= "<<max<<std::endl;
+    int nbins =  (max-min< 200) ? max-min-1: 200;
+   
+    float bins[nbins+1];
+    int hits[nbins];
+    float h = (max-min)/(1+nbins);
+
+    for( int b  = 0 ; b<nbins;b++ )
+    {
+        hits[b] = 0;
+        bins[b] = h*b;
+    }
+    bins[nbins] = max;
+
+    for( int i = 0; i<n;i++ )
+    {
+        if(counters[i]!=-1)  if (counters[i] == bins[0]) ++hits[0];
+        for( int b  = 0 ; b<nbins; b++ )
+        {
+            if( (counters[i]!=-1) && counters[i]<= bins[b+1] && counters[i]>bins[b]){
+                 ++hits[b];
+            }
+        }
+    }
+
+    std::ofstream outputFile; outputFile.open (filename);
+    outputFile  << " nbins = "<< nbins << " min = "<< min<< " max= "<<max<<std::endl;
+    
+    for (unsigned int i = 0; i <  nbins+1; i++)
+    {  
+        outputFile <<bins[i] << "," ;
+    }
+
+    outputFile   << std::endl;
+
+    for (unsigned int i = 0; i <  nbins; i++)
+    {  
+        outputFile <<hits[i] << ",";
     }
     outputFile.close();
 }
@@ -95,7 +152,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
                         )
 {
     #ifdef STATS_TIMERS
-      //  nsteps = 1;
+   //nsteps = 1;
     #endif 
 
 
@@ -121,7 +178,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
 
     #ifdef STATS_TIMERS
 
-   // h_cudastep[0].numPhotons = 1;
+    //  h_cudastep[0].numPhotons = 1;
     /*
     h_cudastep[0] = I3CLSimStep(in_steps[2649]);
     h_cudastep[0].identifier = 2649;
@@ -151,7 +208,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
 
     #ifdef STATS_TIMERS 
-    int ntimers = 5;
+    int ntimers = 7;
     float* d_counters  ;
     clock_t* d_timers  ;
     int * d_perStepCounter;
@@ -161,17 +218,21 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     measurementName[3]= "check collision";
     measurementName[4]= "while loop";
     measurementName[0] = "whole Kernel";
+    measurementName[5] = "scattering";
+    measurementName[6] = "create photon";
     
     clock_t timer[numBlocks*2*ntimers];
     float counters[numBlocks*ntimers];
-    int perStepCounter[nsteps];
+ 
+    int *  perStepCounter = (int*)malloc(nsteps *  sizeof(int));
+
 
     cudaMalloc((void **)&d_timers, sizeof(clock_t) * ntimers * numBlocks *2);
     cudaMalloc((void **)&d_counters, sizeof(float) * numBlocks*ntimers);
     cudaMalloc((void **)&d_perStepCounter, sizeof(int) * nsteps);
 
     #endif 
-
+    
 
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
     propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps,
@@ -187,9 +248,13 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
 
     CUDA_ERR_CHECK(cudaMemcpy(timer, d_timers, sizeof(clock_t) *ntimers* numBlocks * 2, cudaMemcpyDeviceToHost));
     CUDA_ERR_CHECK(cudaMemcpy(counters, d_counters, sizeof(float) *ntimers* numBlocks, cudaMemcpyDeviceToHost));
-    CUDA_ERR_CHECK(cudaMemcpy(perStepCounter,d_perStepCounter , sizeof(int) *nsteps, cudaMemcpyDeviceToHost));
+    CUDA_ERR_CHECK(cudaMemcpy(perStepCounter,d_perStepCounter , sizeof(int)*nsteps, cudaMemcpyDeviceToHost));
 
-    statsToFile(perStepCounter, nsteps);
+
+
+   
+
+   // statsToIntegerHistToFile(perStepCounter, 200*nsteps);
 
 
        // Compute the difference between the last block end and the first block start.
@@ -198,20 +263,20 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
        double avrgTime[ntimers];
        double avrgCounters[ntimers];
  
-       for( int m = 0; m< 5; ++m)
+       for( int m = 0; m< ntimers; ++m)
        {
            minStart[m] = timer[m* numBlocks + 0];
             maxEnd[m]  = timer[m* numBlocks + numBlocks*ntimers];
             avrgTime[m] = (timer[m* numBlocks + numBlocks*ntimers]-timer[m* numBlocks + 0])/numBlocks; 
             avrgCounters[m] = counters[m* numBlocks + 0]/numBlocks;
-            if( m == 2 or m ==3)   avrgTime[m] = double(  timer[m* numBlocks + 0] )/numBlocks; 
+            if( m == 2 or m ==3 or m >=5)   avrgTime[m] = double(  timer[m* numBlocks + 0] )/numBlocks; 
        }
 
        
    
        for (int i = 1; i < numBlocks; i++)
        {
-        for( int m = 0; m< 5; ++m)
+        for( int m = 0; m< ntimers; ++m)
         {
        
           minStart[m] = timer[m* numBlocks + i] < minStart[m] ? timer[m* numBlocks + i] : minStart[m];
@@ -220,13 +285,13 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
            avrgTime[m] += double(timer[numBlocks*ntimers+m* numBlocks + i] - timer[m* numBlocks + i] )/numBlocks; 
            avrgCounters[m] += counters[m* numBlocks + i]/numBlocks;
          
-           if( m == 2 or m ==3)   avrgTime[m] += double(  timer[m* numBlocks + i] )/numBlocks; 
+           if( m == 2 or m ==3 or m >=5)   avrgTime[m] += double(  timer[m* numBlocks + i] )/numBlocks; 
         }
 
        }
 
        printf("clock64 Cycles for one thread, i.e. one step   :  \n" );
-       for( int m = 0; m< 5; ++m){
+       for( int m = 0; m< ntimers; ++m){
            printf("counted   %f repetition of ' %s '  = %f  and max span %f \n", avrgCounters[m], measurementName[m], avrgTime[m], double(maxEnd[m]-minStart[m]));
        }
            //printf("counted   %f repetition of ' %s '  = %f \n", avrgCounters[m], measurementName[m], avrgTime[m] );
@@ -425,20 +490,19 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         uint64_t start0, end0;
         const int tid = threadIdx.x;
         const int bid = blockIdx.x;
+        int ntimers = 7;
 
         if(tid == 0){
-           for (int m = 0; m<5; ++m) counters[m* gridDim.x + bid] = 0.0;
-           for (int m = 0; m<5; ++m) timers[m* gridDim.x + bid] = 0.0;
+           for (int m = 0; m<ntimers; ++m) counters[m* gridDim.x + bid] = 0.0;
+           for (int m = 0; m<ntimers; ++m) timers[m* gridDim.x + bid] = 0.0;
          
        }
        int m = 0;
 
-        if(tid == 0) start0 = clock64();
-
-      
+        if(tid == 0) start0 = clock64();     
 
     #endif
-  
+   
 
 #ifndef FUNCTION_getGroupVelocity_DOES_NOT_DEPEND_ON_LAYER
 #error This kernel only works with a constant group velocity (constant w.r.t. layers)
@@ -466,10 +530,16 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     
     #ifdef STATS_TIMERS
         uint64_t start, end;
-        perStepCounter[i] = 0;
+    /*    for (int ip = 0; ip<200; ++ip)
+        {
+            perStepCounter[i*200+ip] = -1;
+        }
+       */
         if(tid == 0) start = clock64();
-    #endif
 
+        int ip = 0;
+    #endif
+ 
     // download MWC RNG state
     uint64_t real_rnd_x = MWC_RNG_x[i];
     uint32_t real_rnd_a = MWC_RNG_a[i];
@@ -484,7 +554,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         end = clock64();
         m = 1;
         timers[m* gridDim.x + bid] = start;
-        timers[m* gridDim.x + bid + 5*gridDim.x] = end;
+        timers[m* gridDim.x + bid + ntimers*gridDim.x] = end;
         counters[m* gridDim.x + bid] += 1.0;
     }
    #endif
@@ -514,19 +584,44 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     #endif
 
 
-   // #undef STATS_TIMERS
+    // #undef STATS_TIMERS
    
     while (photonsLeftToPropagate > 0) {
-        
-        if (photon.absLength < EPSILON) {
-            photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
-            photon = I3CLPhoton(photonInitial);
-        }
 
         #ifdef STATS_TIMERS
-             perStepCounter[i] += 1;
-            if(tid == 0) start = clock64();
+        perStepCounter[i] += 1;
+
+       /* if(ip < 200){ //when counting for each photon
+            
+             if(perStepCounter[i*200+ip]==-1) ++perStepCounter[i*200+ip]; //because we set all to minus one...
+             ++perStepCounter[i*200+ip];
+        }*/
+
         #endif
+
+        if (photon.absLength < EPSILON) {
+            #ifdef STATS_TIMERS
+               if(tid == 0) start = clock64();
+           #endif
+
+           
+            photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
+            photon = I3CLPhoton(photonInitial);
+            #ifdef STATS_TIMERS
+            if( tid==0 )
+            {  
+                end = clock64();
+                m =6;
+                timers[m* gridDim.x + bid] += float(end- start);
+                counters[m* gridDim.x + bid] += 1.0;
+            }
+            #endif
+
+        }
+ 
+        #ifdef STATS_TIMERS
+            if(tid == 0) start = clock64();
+        #endif 
 
         // this block is along the lines of the PPC kernel
         float distancePropagated;
@@ -541,7 +636,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
             counters[m* gridDim.x + bid] += 1.0;
         }
       #endif
-
+ 
 
         #ifdef STATS_TIMERS
         if(tid == 0) start = clock64();
@@ -573,16 +668,34 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
             // photon was absorbed.
             // a new one will be generated at the begin of the loop.
             --photonsLeftToPropagate;
+         
+         //   ++ip;
+
         } else {  // photon was NOT absorbed. scatter it and re-start the loop
+
+
+            #ifdef STATS_TIMERS
+            if(tid == 0) start = clock64();
+            #endif
 
             updatePhotonTrack(photon, distancePropagated);
             scatterPhoton(photon, RNG_ARGS_TO_CALL);
+
+            #ifdef STATS_TIMERS
+            if( tid==0 )
+            {  
+            
+                end = clock64();
+                m = 5;
+                timers[m* gridDim.x + bid] += float(end- start);
+                counters[m* gridDim.x + bid] += 1.0;
+            }
+           #endif
+
         }
     }  // end while
    
-    
-    
-    //#define STATS_TIMERS
+  //  #define STATS_TIMERS
     #ifdef STATS_TIMERS
     if( tid==0 )
     {  
@@ -590,28 +703,29 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         end1 = clock64();
         m = 4;
         timers[m* gridDim.x + bid] = start1;
-        timers[m* gridDim.x + bid + 5*gridDim.x] = end1;
+        timers[m* gridDim.x + bid + ntimers*gridDim.x] = end1;
         counters[m* gridDim.x + bid] += 1.0;
 
-        timers[2* gridDim.x + bid] =timers[2* gridDim.x + bid]/perStepCounter[i]*nphot ;
-        timers[3* gridDim.x + bid] =timers[3* gridDim.x + bid]/perStepCounter[i]*nphot ;
+    
+        for(int m = 2; m<ntimers; ++m){
+          if(m!=4)  timers[m* gridDim.x + bid] =timers[m* gridDim.x + bid]; // / counters[m* gridDim.x + bid]*nphot;
+        }
     }
   #endif
-
-
+ 
     // upload MWC RNG state
     MWC_RNG_x[i] = real_rnd_x;
     MWC_RNG_a[i] = real_rnd_a;
-    #define STATS_TIMERS
+
     #ifdef STATS_TIMERS
     if( tid==0 )
     {
           end0 = clock64();
           m = 0;
           timers[m* gridDim.x + bid] = start0;
-          timers[m* gridDim.x + bid + 5*gridDim.x] = end0;
+          timers[m* gridDim.x + bid + ntimers*gridDim.x] = end0;
           counters[m* gridDim.x + bid] += 1.0;
-        
+ 
    
     }
     perStepCounter[i] =  int(float(perStepCounter[i])/nphot);
