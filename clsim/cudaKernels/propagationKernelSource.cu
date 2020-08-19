@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <propagationKernelFunctions.cuh>
 
 #include <random>
+
 #define STATS_TIMERS
 
 
@@ -66,7 +67,7 @@ void statsToIntegerHistToFile( int* counters, int n){
 
     }
     std::cout << " min = "<< min<< " max= "<<max<<std::endl;
-    int nbins =  (max-min< 200) ? max-min-1: 200;
+    int nbins =  (max-min< 20) ? max-min-1: 20;
    
     float bins[nbins+1];
     int hits[nbins];
@@ -126,7 +127,7 @@ __global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel(
 #endif
     uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a
     #ifdef STATS_TIMERS 
-    ,clock_t* timers , float* counters, int* perStepCounter
+    ,clock_t* timers , float* counters, int* perStepCounter,int* perPhotonCounter
      #endif
     );
 
@@ -152,7 +153,8 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
                         )
 {
     #ifdef STATS_TIMERS
-   //nsteps = 1;
+   nsteps = 1;
+ 
     #endif 
 
 
@@ -175,10 +177,12 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
         h_cudastep[i] = I3CLSimStep(in_steps[i]);
         h_cudastep[i].identifier = i;
     }
-
+    
     #ifdef STATS_TIMERS
+    int pickthread = 42597;
+    h_cudastep[0] = I3CLSimStep(in_steps[pickthread]);
 
-    //  h_cudastep[0].numPhotons = 1;
+    h_cudastep[0].numPhotons = 1;
     /*
     h_cudastep[0] = I3CLSimStep(in_steps[2649]);
     h_cudastep[0].identifier = 2649;
@@ -206,31 +210,35 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
 
     int numBlocks = (nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
     printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
-
+ 
     #ifdef STATS_TIMERS 
-    int ntimers = 7;
+    int ntimers = 8;
+   
     float* d_counters  ;
     clock_t* d_timers  ;
     int * d_perStepCounter;
+    int * d_perPhotonCounter;
     const  char *  measurementName[ntimers]; 
+    measurementName[0] = "whole Kernel";
     measurementName[1]= "download Photonn and Rng";
-    measurementName[2]= "prop Photon";
+    measurementName[2]= "load shared";
     measurementName[3]= "check collision";
     measurementName[4]= "while loop";
-    measurementName[0] = "whole Kernel";
     measurementName[5] = "scattering";
     measurementName[6] = "create photon";
-    
+    measurementName[7] = "prop photon";
+
+
     clock_t timer[numBlocks*2*ntimers];
     float counters[numBlocks*ntimers];
  
     int *  perStepCounter = (int*)malloc(nsteps *  sizeof(int));
-
+    int *  perPhotonCounter = (int*)malloc(nsteps *200*  sizeof(int));
 
     cudaMalloc((void **)&d_timers, sizeof(clock_t) * ntimers * numBlocks *2);
     cudaMalloc((void **)&d_counters, sizeof(float) * numBlocks*ntimers);
     cudaMalloc((void **)&d_perStepCounter, sizeof(int) * nsteps);
-
+    cudaMalloc((void **)&d_perPhotonCounter, sizeof(int) *200* nsteps);
     #endif 
     
 
@@ -238,7 +246,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps,
                                                   d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a
                                                   #ifdef STATS_TIMERS 
-                                                  ,d_timers, d_counters,d_perStepCounter
+                                                  ,d_timers, d_counters,d_perStepCounter, d_perPhotonCounter
                                                    #endif
                                                 );
     CUDA_CHECK_CALL
@@ -246,15 +254,14 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
     totalCudaKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
 
+    #ifdef STATS_TIMERS 
     CUDA_ERR_CHECK(cudaMemcpy(timer, d_timers, sizeof(clock_t) *ntimers* numBlocks * 2, cudaMemcpyDeviceToHost));
     CUDA_ERR_CHECK(cudaMemcpy(counters, d_counters, sizeof(float) *ntimers* numBlocks, cudaMemcpyDeviceToHost));
-    CUDA_ERR_CHECK(cudaMemcpy(perStepCounter,d_perStepCounter , sizeof(int)*nsteps, cudaMemcpyDeviceToHost));
+  //  CUDA_ERR_CHECK(cudaMemcpy(perStepCounter,d_perStepCounter , sizeof(int)*nsteps, cudaMemcpyDeviceToHost));
+   // CUDA_ERR_CHECK(cudaMemcpy(perPhotonCounter,d_perPhotonCounter , sizeof(int)*200*nsteps, cudaMemcpyDeviceToHost));
 
-
-
-   
-
-   // statsToIntegerHistToFile(perStepCounter, 200*nsteps);
+    //statsToIntegerHistToFile(perPhotonCounter, 200*nsteps);
+   // statsToFile(perPhotonCounter, 200*nsteps);
 
 
        // Compute the difference between the last block end and the first block start.
@@ -269,34 +276,25 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
             maxEnd[m]  = timer[m* numBlocks + numBlocks*ntimers];
             avrgTime[m] = (timer[m* numBlocks + numBlocks*ntimers]-timer[m* numBlocks + 0])/numBlocks; 
             avrgCounters[m] = counters[m* numBlocks + 0]/numBlocks;
-            if( m == 2 or m ==3 or m >=5)   avrgTime[m] = double(  timer[m* numBlocks + 0] )/numBlocks; 
+            if( m ==3 or m >=5)   avrgTime[m] = double(  timer[m* numBlocks + 0] )/numBlocks; 
        }
-
-       
-   
        for (int i = 1; i < numBlocks; i++)
        {
         for( int m = 0; m< ntimers; ++m)
         {
-       
           minStart[m] = timer[m* numBlocks + i] < minStart[m] ? timer[m* numBlocks + i] : minStart[m];
           maxEnd[m] = timer[numBlocks*ntimers+m* numBlocks + i] > maxEnd[m] ? timer[numBlocks*ntimers+m* numBlocks + i] : maxEnd[m];
-
            avrgTime[m] += double(timer[numBlocks*ntimers+m* numBlocks + i] - timer[m* numBlocks + i] )/numBlocks; 
            avrgCounters[m] += counters[m* numBlocks + i]/numBlocks;
-         
-           if( m == 2 or m ==3 or m >=5)   avrgTime[m] += double(  timer[m* numBlocks + i] )/numBlocks; 
+           if(  m ==3 or m >=5)   avrgTime[m] += double(  timer[m* numBlocks + i] )/numBlocks; 
         }
-
        }
 
        printf("clock64 Cycles for one thread, i.e. one step   :  \n" );
        for( int m = 0; m< ntimers; ++m){
-           printf("counted   %f repetition of ' %s '  = %f  and max span %f \n", avrgCounters[m], measurementName[m], avrgTime[m], double(maxEnd[m]-minStart[m]));
+           printf("counted   %f repetition of ' %s '  total clock cycles = %f  and max span %f \n", avrgCounters[m], measurementName[m], avrgTime[m], double(maxEnd[m]-minStart[m]));
        }
-           //printf("counted   %f repetition of ' %s '  = %f \n", avrgCounters[m], measurementName[m], avrgTime[m] );
-      
-       
+       #endif
 
     CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
     int numberPhotons = h_hitIndex[0];
@@ -325,8 +323,10 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     cudaFree(d_geolayer);
     cudaFree(d_MWC_RNG_a);
     cudaFree(d_MWC_RNG_x);
+    #ifdef STATS_TIMERS 
     cudaFree(d_counters);
     cudaFree(d_timers);
+    #endif
     printf("photon hits = %i from %i steps \n", numberPhotons, nsteps);
 }
 
@@ -481,16 +481,18 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
                            I3CLSimPhotonCuda* __restrict__ outputPhotons,  // deviceBuffer_OutputPhotons
                            uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a
                            #ifdef STATS_TIMERS 
-                            ,clock_t* timers , float* counters, int* perStepCounter
+                            ,clock_t* timers , float* counters, int* perStepCounter, int* perPhotonCounter
                             #endif
                         )
 {
+    int pickthread = 42597;
 
     #ifdef STATS_TIMERS
+        const bool countEachPhoton =false;
         uint64_t start0, end0;
         const int tid = threadIdx.x;
         const int bid = blockIdx.x;
-        int ntimers = 7;
+        int ntimers = 8;
 
         if(tid == 0){
            for (int m = 0; m<ntimers; ++m) counters[m* gridDim.x + bid] = 0.0;
@@ -503,12 +505,18 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
 
     #endif
    
-
+  
+  
 #ifndef FUNCTION_getGroupVelocity_DOES_NOT_DEPEND_ON_LAYER
 #error This kernel only works with a constant group velocity (constant w.r.t. layers)
 #endif
 
     unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    #ifdef STATS_TIMERS
+    uint64_t start, end;
+    if(tid == 0) start = clock64();
+    #endif
 
     __shared__ unsigned short geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
     __shared__ float _generateWavelength_0distYValuesShared[_generateWavelength_0NUM_DIST_ENTRIES];
@@ -525,24 +533,36 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         getWavelengthBias_dataShared[ii] = getWavelengthBias_data[ii];
     }
      __syncthreads();
+
+     #ifdef STATS_TIMERS
+     if( tid==0 )
+     {  
+         end = clock64();
+         m = 2;
+         timers[m* gridDim.x + bid] = start;
+         timers[m* gridDim.x + bid + ntimers*gridDim.x] = end;
+         counters[m* gridDim.x + bid] += 1.0;
+     }
+    #endif
+
     if (i >= nsteps) return;
 
     
     #ifdef STATS_TIMERS
-        uint64_t start, end;
-    /*    for (int ip = 0; ip<200; ++ip)
-        {
-            perStepCounter[i*200+ip] = -1;
-        }
-       */
-        if(tid == 0) start = clock64();
-
+        if(countEachPhoton){  
+            for (int ip = 0; ip<200; ++ip)
+            {
+                perPhotonCounter[i*200+ip] = -1;
+            }      
+         }
         int ip = 0;
+       perStepCounter[i] = 0;
+        if(tid == 0) start = clock64();
     #endif
  
     // download MWC RNG state
-    uint64_t real_rnd_x = MWC_RNG_x[i];
-    uint32_t real_rnd_a = MWC_RNG_a[i];
+    uint64_t real_rnd_x = MWC_RNG_x[pickthread];
+    uint32_t real_rnd_a = MWC_RNG_a[pickthread];
     uint64_t* rnd_x = &real_rnd_x;
     uint32_t* rnd_a = &real_rnd_a;
 
@@ -583,28 +603,27 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         if(tid == 0) start1 = clock64();
     #endif
 
-
-    // #undef STATS_TIMERS
+    #undef STATS_TIMERS
    
+  
     while (photonsLeftToPropagate > 0) {
 
         #ifdef STATS_TIMERS
         perStepCounter[i] += 1;
-
-       /* if(ip < 200){ //when counting for each photon
-            
-             if(perStepCounter[i*200+ip]==-1) ++perStepCounter[i*200+ip]; //because we set all to minus one...
-             ++perStepCounter[i*200+ip];
-        }*/
+        if(countEachPhoton){
+            if(ip < 200){ //when counting for each photon
+                if(perPhotonCounter[i*200+ip]==-1) ++perPhotonCounter[i*200+ip]; //because we set all to minus one...
+                ++perPhotonCounter[i*200+ip];
+            }
+        }
 
         #endif
 
         if (photon.absLength < EPSILON) {
+
             #ifdef STATS_TIMERS
                if(tid == 0) start = clock64();
            #endif
-
-           
             photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
             photon = I3CLPhoton(photonInitial);
             #ifdef STATS_TIMERS
@@ -631,7 +650,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         if( tid==0 )
         {  
             end = clock64();
-            m =2;
+            m =7;
             timers[m* gridDim.x + bid] += float(end- start);
             counters[m* gridDim.x + bid] += 1.0;
         }
@@ -648,7 +667,6 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         #ifdef STATS_TIMERS
         if( tid==0 )
         {  
-        
             end = clock64();
             m = 3;
             timers[m* gridDim.x + bid] += float(end- start);
@@ -659,8 +677,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         if (collided) {
             // get rid of the photon if we detected it
             photon.absLength = ZERO;
-     //       printf( " photon id = %u of global thread idx %u  and local thread idx %u and block idx %u \n" , photonsLeftToPropagate,i, threadIdx.x, blockIdx.x );
-          
+        //    printf( " photon id = %u of global thread idx %u  and local thread idx %u and block idx %u \n" , photonsLeftToPropagate,i, threadIdx.x, blockIdx.x );
         }
 
         // absorb or scatter the photon
@@ -668,8 +685,9 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
             // photon was absorbed.
             // a new one will be generated at the begin of the loop.
             --photonsLeftToPropagate;
-         
-         //   ++ip;
+            #ifdef STATS_TIMERS
+                  if(countEachPhoton) ++ip;
+            #endif
 
         } else {  // photon was NOT absorbed. scatter it and re-start the loop
 
@@ -683,8 +701,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
 
             #ifdef STATS_TIMERS
             if( tid==0 )
-            {  
-            
+            {       
                 end = clock64();
                 m = 5;
                 timers[m* gridDim.x + bid] += float(end- start);
@@ -695,28 +712,29 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         }
     }  // end while
    
-  //  #define STATS_TIMERS
+    #define STATS_TIMERS
+   
     #ifdef STATS_TIMERS
+
     if( tid==0 )
-    {  
-       
+    {      
         end1 = clock64();
         m = 4;
         timers[m* gridDim.x + bid] = start1;
         timers[m* gridDim.x + bid + ntimers*gridDim.x] = end1;
         counters[m* gridDim.x + bid] += 1.0;
 
-    
-        for(int m = 2; m<ntimers; ++m){
+       /* for(int m = 2; m<ntimers; ++m){
           if(m!=4)  timers[m* gridDim.x + bid] =timers[m* gridDim.x + bid]; // / counters[m* gridDim.x + bid]*nphot;
-        }
+        }*/
     }
   #endif
  
     // upload MWC RNG state
-    MWC_RNG_x[i] = real_rnd_x;
-    MWC_RNG_a[i] = real_rnd_a;
-
+    MWC_RNG_x[pickthread] = real_rnd_x;
+    MWC_RNG_a[pickthread] = real_rnd_a;
+   
+   // __syncthreads();
     #ifdef STATS_TIMERS
     if( tid==0 )
     {
@@ -725,8 +743,6 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
           timers[m* gridDim.x + bid] = start0;
           timers[m* gridDim.x + bid + ntimers*gridDim.x] = end0;
           counters[m* gridDim.x + bid] += 1.0;
- 
-   
     }
     perStepCounter[i] =  int(float(perStepCounter[i])/nphot);
 
