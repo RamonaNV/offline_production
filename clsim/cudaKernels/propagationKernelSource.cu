@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // Code corresponds to the default contstructor of I3CLSimStepToPhotonConverterOpenCL
 // all extra options have been removed for now
 
+#include <random>
+
 #include <cooperative_groups.h>
 #include <cuda/std/atomic>
 
@@ -50,24 +52,43 @@ __global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel(
     const I3CLSimStepCuda* __restrict__ inputSteps,  // deviceBuffer_InputSteps
     int nsteps,
     I3CLSimPhotonCuda* __restrict__ outputPhotons,  // deviceBuffer_OutputPhotons
-
-#ifdef SAVE_PHOTON_HISTORY
-    float4* photonHistory,
-#endif
     uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a);
 
 // maxNumbWOrkItems from  CL rndm arrays
-void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
+void init_RDM_CUDA(int numRngPrimes, int requestedThreads, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
                    uint32_t** d_MWC_RNG_a)
 {
-    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a, maxNumWorkitems * sizeof(uint32_t)));
-    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_x, maxNumWorkitems * sizeof(uint64_t)));
+    printf("RNG setup. Available primes: %i. Requested threads %i \n", numRngPrimes, requestedThreads);
 
-    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_a, MWC_RNG_a, maxNumWorkitems * sizeof(uint32_t), cudaMemcpyHostToDevice));
-    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_x, MWC_RNG_x, maxNumWorkitems * sizeof(uint64_t), cudaMemcpyHostToDevice));
+    // allocate
+    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a, requestedThreads * sizeof(uint32_t)));
+    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_x, requestedThreads * sizeof(uint64_t)));
 
-    cudaDeviceSynchronize();
-    printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
+    // copy as many values as we have available
+    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_a, MWC_RNG_a, min(numRngPrimes,requestedThreads) * sizeof(uint32_t), cudaMemcpyHostToDevice));
+    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_x, MWC_RNG_x, min(numRngPrimes,requestedThreads) * sizeof(uint64_t), cudaMemcpyHostToDevice));
+
+    // if we do not have enough primes, pick random primes to upload
+    if(requestedThreads > numRngPrimes)
+    {
+        int missing = requestedThreads - numRngPrimes;
+        printf("Randomly picking: %i extra primes.\n", missing);
+        std::vector<uint64_t> x(missing);
+        std::vector<uint32_t> a(missing);
+
+        std::random_device rd;
+        std::default_random_engine rng(rd());
+        std::uniform_int_distribution<> dist(0,numRngPrimes-1);
+
+        for(int i = 0; i<missing; i++)
+        {
+            x[i] = MWC_RNG_x[dist(rng)];
+            a[i] = MWC_RNG_a[dist(rng)];
+        }
+
+        CUDA_ERR_CHECK(cudaMemcpy( (*d_MWC_RNG_a)+numRngPrimes, a.data(), missing * sizeof(uint32_t), cudaMemcpyHostToDevice));
+        CUDA_ERR_CHECK(cudaMemcpy( (*d_MWC_RNG_x)+numRngPrimes, x.data(), missing * sizeof(uint64_t), cudaMemcpyHostToDevice));
+    }
 }
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, const uint32_t maxHitIndex,
@@ -75,11 +96,14 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
                           I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
                           uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime)
 {
+    int numBlocks = 32000; // with the jobqueue this depends on the device for performance tuning, not the problem //(nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
+    int numThreads = numBlocks * NTHREADS_PER_BLOCK;
+
     // set up congruental random number generator, reusing host arrays and randomService from
     // I3CLSimStepToPhotonConverterOpenCL setup.
     uint64_t* d_MWC_RNG_x;
     uint32_t* d_MWC_RNG_a;
-    init_RDM_CUDA(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a); // TODO: one rng number PER THREAD
+    init_RDM_CUDA(sizeRNG, numThreads, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
 
     unsigned short* d_geolayer;
     CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer, ngeolayer * sizeof(unsigned short)));
@@ -105,7 +129,6 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     I3CLSimPhotonCuda* d_cudaphotons;
     CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons, maxHitIndex * sizeof(I3CLSimPhotonCuda)));
 
-    int numBlocks = 32768; // with the jobqueue this depends on the device for performance tuning, not the problem //(nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
     printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
 
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
@@ -449,8 +472,8 @@ __global__ void propKernel(uint32_t *hitIndex, const uint32_t maxHitIndex,
     __syncthreads();
 
     // download MWC RNG state
-    uint64_t real_rnd_x = MWC_RNG_x[threadId%nsteps];
-    uint32_t real_rnd_a = MWC_RNG_a[threadId%nsteps];
+    uint64_t real_rnd_x = MWC_RNG_x[threadId];
+    uint32_t real_rnd_a = MWC_RNG_a[threadId];
     uint64_t *rnd_x = &real_rnd_x;
     uint32_t *rnd_a = &real_rnd_a;
 
@@ -475,6 +498,6 @@ __global__ void propKernel(uint32_t *hitIndex, const uint32_t maxHitIndex,
     }
 
     // upload MWC RNG state
-    MWC_RNG_x[threadId%nsteps] = real_rnd_x;
-    MWC_RNG_a[threadId%nsteps] = real_rnd_a;
+    MWC_RNG_x[threadId] = real_rnd_x;
+    MWC_RNG_a[threadId] = real_rnd_a;
 }
