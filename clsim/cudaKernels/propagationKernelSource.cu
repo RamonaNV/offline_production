@@ -96,7 +96,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
                           I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
                           uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime)
 {
-    int numBlocks = 32000; // with the jobqueue this depends on the device for performance tuning, not the problem //(nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
+    int numBlocks = (nsteps*32 + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK; // run 32 threads per step
     int numThreads = numBlocks * NTHREADS_PER_BLOCK;
 
     // set up congruental random number generator, reusing host arrays and randomService from
