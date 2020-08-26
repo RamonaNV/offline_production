@@ -286,7 +286,6 @@ __device__ __forceinline__  void updatePhotonTrack(I3CLPhoton& ph, float distanc
         ph.posAndTime.y += ph.dirAndWlen.y * distancePropagated;
         ph.posAndTime.z += ph.dirAndWlen.z * distancePropagated;
         ph.posAndTime.w += ph.invGroupvel * distancePropagated;
-        ph.totalPathLength += distancePropagated;
 }
 
 /**
@@ -308,8 +307,6 @@ __device__ __forceinline__  void scatterPhoton(I3CLPhoton& ph, RNG_ARGS)
 
     // optional direction transformation (for ice anisotropy)
     transformDirectionPostScatter(ph.dirAndWlen);
-
-    ++ph.numScatters;
 }
 
 /**
@@ -344,12 +341,11 @@ __device__ __forceinline__  void propGroup(cg::thread_block_tile<32> group, cons
     // local variables for propagating the photon
     int photonId=-1; // threads with a photon id of 0 or bigger contain a valid photon
     I3CLPhoton photon; // this threads current photon
-    I3CLInitialPhoton photonInitial; // initial conditions of this threads current photon
 
     // generate photon for every thread in the Warp from the step
     if(group.thread_rank() < photonsLeftInStep)
     {
-        photonInitial = createPhoton(step, stepDir, _generateWavelength_0distY, _generateWavelength_0distYCumulative, RNG_ARGS_TO_CALL);
+        I3CLInitialPhoton photonInitial = createPhoton(step, stepDir, _generateWavelength_0distY, _generateWavelength_0distYCumulative, RNG_ARGS_TO_CALL);
         photon = I3CLPhoton(photonInitial);
         photonId = 0; // set a valid id
     }
@@ -375,7 +371,7 @@ __device__ __forceinline__  void propGroup(cg::thread_block_tile<32> group, cons
         bool absorbed = propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
 
         // check if a collision with the sensor did occur
-        bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
+        bool collided = checkForCollision(photon, step, distancePropagated, 
                                   hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSet, getWavelengthBias_data);
 
         if(collided)
@@ -406,7 +402,7 @@ __device__ __forceinline__  void propGroup(cg::thread_block_tile<32> group, cons
                 photonId = atomicAdd(&numPhotonsInShared,-1)-1;
                 if(photonId >= 0)
                 {
-                    photonInitial = sharedPhotonInitials[photonId];
+                    I3CLInitialPhoton photonInitial = sharedPhotonInitials[photonId];
                     photon = I3CLPhoton(photonInitial);
                 }
             }
@@ -430,7 +426,7 @@ __device__ __forceinline__  void propGroup(cg::thread_block_tile<32> group, cons
                     photonId = atomicAdd(&numPhotonsInShared,-1)-1;
                     if(photonId >= 0)
                     {
-                        photonInitial = sharedPhotonInitials[photonId];
+                        I3CLInitialPhoton photonInitial = sharedPhotonInitials[photonId];
                         photon = I3CLPhoton(photonInitial);
                     }    
                 }

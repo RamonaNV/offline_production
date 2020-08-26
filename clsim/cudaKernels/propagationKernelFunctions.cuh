@@ -62,16 +62,10 @@ __device__ __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda &ste
 __device__ __forceinline__ float2 sphDirFromCar(float4 carDir);
 
 __device__ __forceinline__ void saveHit(const float4 &photonPosAndTime, const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-                                        const float thisStepLength, float inv_groupvel, float photonTotalPathLength,
-                                        uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
-                                        const float4 &photonStartPosAndTime, const float4 &photonStartDirAndWlen,
+                                        const float thisStepLength, float inv_groupvel,
                                         const I3CLSimStepCuda &step, unsigned short hitOnString,
                                         unsigned short hitOnDom, uint32_t *hitIndex, uint32_t maxHitIndex,
                                         I3CLSimPhotonCuda *outputPhotons
-#ifdef SAVE_PHOTON_HISTORY
-                                        ,
-                                        float4 *photonHistory, float4 *currentPhotonHistory
-#endif
 );
 
 ///////////////////////// some constants
@@ -150,7 +144,7 @@ __device__ __forceinline__ void checkForCollision_InCells(const float photonDirL
 #endif
                                                           const unsigned short *geoLayerToOMNumIndexPerStringSetLocal);
 
-__device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, const I3CLInitialPhoton& photonInitials,
+__device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon,
                                                   const I3CLSimStepCuda &step, float &thisStepLength,
                                                   uint32_t *hitIndex, uint32_t maxHitIndex,
                                                   I3CLSimPhotonCuda *outputPhotons,  
@@ -533,7 +527,7 @@ __device__ __forceinline__ void checkForCollision_InCells(const float photonDirL
 #undef DO_CHECK
 }
 
-__device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, const I3CLInitialPhoton& photonInitials,
+__device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, 
                                                   const I3CLSimStepCuda &step, float &thisStepLength,
                                                   uint32_t *hitIndex, uint32_t maxHitIndex,
                                                   I3CLSimPhotonCuda *outputPhotons,  
@@ -549,7 +543,6 @@ __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, cons
     unsigned short hitOnString;
     unsigned short hitOnDom;
 
-    float distanceTraveledInAbsorptionLengths = photonInitials.absLength - photon.absLength;
     checkForCollision_InCells(photonDirLenXYSqr, photon.posAndTime, photon.dirAndWlen, getWavelengthBias_dataShared,
                               thisStepLength, hitRecorded, hitOnString, hitOnDom,
                               geoLayerToOMNumIndexPerStringSetLocal);
@@ -560,8 +553,7 @@ __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, cons
     // have been checked).
 
     if (hitRecorded) {
-        saveHit(photon.posAndTime, photon.dirAndWlen, getWavelengthBias_dataShared, thisStepLength, photon.invGroupvel, photon.totalPathLength,
-                photon.numScatters, distanceTraveledInAbsorptionLengths, photonInitials.posAndTime, photonInitials.dirAndWlen,
+        saveHit(photon.posAndTime, photon.dirAndWlen, getWavelengthBias_dataShared, thisStepLength, photon.invGroupvel,
                 step, hitOnString, hitOnDom, hitIndex, maxHitIndex, outputPhotons);
     }
     return hitRecorded;
@@ -701,18 +693,10 @@ __device__ __forceinline__ float2 sphDirFromCar(float4 carDir)
 
 // Record a photon on a DOM
 __device__ __forceinline__ void saveHit(const float4 &photonPosAndTime, const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-                                        const float thisStepLength, float inv_groupvel, float photonTotalPathLength,
-                                        uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
-                                        const float4 &photonStartPosAndTime, const float4 &photonStartDirAndWlen,
+                                        const float thisStepLength, float inv_groupvel,
                                         const I3CLSimStepCuda &step, unsigned short hitOnString,
-                                        unsigned short hitOnDom,
-                                        uint32_t *hitIndex,  // shared
-                                        uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons                                 
-#ifdef SAVE_PHOTON_HISTORY
-                                        ,
-                                        float4 *photonHistory, float4 *currentPhotonHistory
-#endif
-)
+                                        unsigned short hitOnDom, uint32_t *hitIndex, uint32_t maxHitIndex,
+                                        I3CLSimPhotonCuda *outputPhotons)
 {
     // PRINTL
     uint32_t myIndex = atomicAdd(&hitIndex[0], 1);
@@ -751,21 +735,13 @@ __device__ __forceinline__ void saveHit(const float4 &photonPosAndTime, const fl
         outphoton.dir = sphDirFromCar(photonDirAndWlen);
         outphoton.wavelength = photonDirAndWlen.w;
 
-        outphoton.cherenkovDist = photonTotalPathLength + thisStepLength;
-        outphoton.numScatters = photonNumScatters;
         outphoton.weight = step.weight / getWavelengthBias(photonDirAndWlen.w, getWavelengthBias_dataShared);
         outphoton.identifier = step.identifier;
 
         outphoton.stringID = short(hitOnString);
         outphoton.omID = ushort(hitOnDom);
 
-        outphoton.startPosAndTime = photonStartPosAndTime;
-
-        outphoton.startDir = sphDirFromCar(photonStartDirAndWlen);
-
         outphoton.groupVelocity = 1.f / (inv_groupvel);
-
-        outphoton.distInAbsLens = distanceTraveledInAbsorptionLengths;
 
         outputPhotons[myIndex] = outphoton;
 

@@ -70,9 +70,7 @@ struct I3CLPhoton {
         : posAndTime(initial.posAndTime),
           dirAndWlen(initial.dirAndWlen),
           invGroupvel(initial.invGroupvel),
-          absLength(initial.absLength),
-          numScatters(0),
-          totalPathLength(0.0f)
+          absLength(initial.absLength)
     {
     }
 
@@ -80,25 +78,17 @@ struct I3CLPhoton {
     float4 dirAndWlen;
     float invGroupvel;
     float absLength;
-    int numScatters;
-    float totalPathLength;
 };
 
 struct I3CLSimPhotonCuda {
     float4 posAndTime;       // x,y,z,time                      // 4x 32bit float
     float2 dir;              // theta,phi                                // 2x 32bit float
     float wavelength;        // photon wavelength                  //    32bit float
-    float cherenkovDist;     // Cherenkov distance travelled    //    32bit float
-    uint32_t numScatters;    // number of scatters                 //    32bit unsigned
     float weight;            //    32bit float
     uint32_t identifier;     //    32bit unsigned
     short stringID;          //    16bit signed
     ushort omID;             //    16bit unsigned
-    float4 startPosAndTime;  // 4x 32bit float
-    float2 startDir;         // 2x 32bit float
     float groupVelocity;     //    32bit float
-    float distInAbsLens;     //    32bit float
-                             // total: 20x 32bit float = 80 bytes
 
     __host__ __device__ I3CLSimPhotonCuda() : posAndTime{0, 0, 0, 0} {}
 
@@ -106,17 +96,11 @@ struct I3CLSimPhotonCuda {
         : posAndTime{i3photon.GetPosX(), i3photon.GetPosY(), i3photon.GetPosZ(), i3photon.GetTime()},
           dir{i3photon.GetDirTheta(), i3photon.GetDirPhi()},
           wavelength(i3photon.GetWavelength()),
-          cherenkovDist(i3photon.GetCherenkovDist()),
-          numScatters(i3photon.GetNumScatters()),
           weight(i3photon.weight),
           identifier(i3photon.GetID()),
           stringID(i3photon.GetStringID()),
           omID(i3photon.GetOMID()),
-          startPosAndTime{i3photon.GetStartPosX(), i3photon.GetStartPosY(), i3photon.GetStartPosZ(),
-                          i3photon.GetStartTime()},
-          startDir{i3photon.GetStartDirTheta(), i3photon.GetStartDirPhi()},
-          groupVelocity(i3photon.GetGroupVelocity()),
-          distInAbsLens(i3photon.GetDistInAbsLens())
+          groupVelocity(i3photon.GetGroupVelocity())
     {
     }
 
@@ -128,25 +112,25 @@ struct I3CLSimPhotonCuda {
         i3photon.SetPosZ(posAndTime.z);
         i3photon.SetTime(posAndTime.w);
 
-        i3photon.SetStartPosX(startPosAndTime.x);
-        i3photon.SetStartPosY(startPosAndTime.y);
-        i3photon.SetStartPosZ(startPosAndTime.z);
-        i3photon.SetStartTime(startPosAndTime.w);
+        i3photon.SetStartPosX(0);
+        i3photon.SetStartPosY(0);
+        i3photon.SetStartPosZ(0);
+        i3photon.SetStartTime(0);
 
         i3photon.SetDirTheta(dir.x);
         i3photon.SetDirPhi(dir.y);
-        i3photon.SetStartDirTheta(startDir.x);
-        i3photon.SetStartDirPhi(startDir.y);
+        i3photon.SetStartDirTheta(0);
+        i3photon.SetStartDirPhi(0);
 
         i3photon.SetWavelength(wavelength);
-        i3photon.SetCherenkovDist(cherenkovDist);
-        i3photon.SetNumScatters(numScatters);
+        i3photon.SetCherenkovDist(0);
+        i3photon.SetNumScatters(0);
         i3photon.SetWeight(weight);
         i3photon.SetID(identifier);
         i3photon.SetStringID(stringID);
         i3photon.SetOMID(omID);
-        i3photon.SetGroupVelocity(groupVelocity);
-        i3photon.SetDistInAbsLens(distInAbsLens);
+        i3photon.SetGroupVelocity(0);
+        i3photon.SetDistInAbsLens(0);
 
         return i3photon;
     }
