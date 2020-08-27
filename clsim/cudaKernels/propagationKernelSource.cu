@@ -105,7 +105,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
 
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-    propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps,
+    propKernel<<<1, 1>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps,
                                                   d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
 
     CUDA_ERR_CHECK(cudaDeviceSynchronize());
@@ -314,59 +314,75 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         getWavelengthBias_dataShared[ii] = getWavelengthBias_data[ii];
     }
     __syncthreads();
-    if (i >= nsteps) return;
+    // if (i >= nsteps) return;
 
-    // download MWC RNG state
-    uint64_t real_rnd_x = MWC_RNG_x[i];
-    uint32_t real_rnd_a = MWC_RNG_a[i];
-    uint64_t* rnd_x = &real_rnd_x;
-    uint32_t* rnd_a = &real_rnd_a;
+    float domPosX;
+    float domPosY;
+    float domPosZ;
 
-    const I3CLSimStepCuda step = inputSteps[i];
-    float4 stepDir;
-    {
-        const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)
-        stepDir = float4{rho * cosf(step.dirAndLengthAndBeta.y),  // rho*cos(phi)
-                         rho * sinf(step.dirAndLengthAndBeta.y),  // rho*sin(phi)
-                         cosf(step.dirAndLengthAndBeta.x),        // cos(phi)
-                         ZERO};
-    }
+    int stringId;
+    int domId;
 
-    uint32_t photonsLeftToPropagate = step.numPhotons;
-    I3CLPhoton photon;
-    photon.absLength = 0;
-    I3CLInitialPhoton photonInitial;
+    printf("string\tdom\tx\ty\tz\n");
+    for(stringId = 0; stringId < GEO_DOM_POS_NUM_STRINGS; stringId++)
+        for(domId = 0; domId < GEO_MAX_DOM_INDEX; domId++)
+        {
+            geometryGetDomPosition(stringId, domId, domPosX, domPosY, domPosZ);
 
-    while (photonsLeftToPropagate > 0) {
-        if (photon.absLength < EPSILON) {
-            photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
-            photon = I3CLPhoton(photonInitial);
+            printf("%i\t%i\t%f\t%f\t%f\n", stringId,domId,domPosX, domPosY, domPosZ);
         }
 
-        // this block is along the lines of the PPC kernel
-        float distancePropagated;
-        propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
-        bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
-                                  hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal, getWavelengthBias_dataShared);
+    // // download MWC RNG state
+    // uint64_t real_rnd_x = MWC_RNG_x[i];
+    // uint32_t real_rnd_a = MWC_RNG_a[i];
+    // uint64_t* rnd_x = &real_rnd_x;
+    // uint32_t* rnd_a = &real_rnd_a;
 
-        if (collided) {
-            // get rid of the photon if we detected it
-            photon.absLength = ZERO;
-        }
+    // const I3CLSimStepCuda step = inputSteps[i];
+    // float4 stepDir;
+    // {
+    //     const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)
+    //     stepDir = float4{rho * cosf(step.dirAndLengthAndBeta.y),  // rho*cos(phi)
+    //                      rho * sinf(step.dirAndLengthAndBeta.y),  // rho*sin(phi)
+    //                      cosf(step.dirAndLengthAndBeta.x),        // cos(phi)
+    //                      ZERO};
+    // }
 
-        // absorb or scatter the photon
-        if (photon.absLength < EPSILON) {
-            // photon was absorbed.
-            // a new one will be generated at the begin of the loop.
-            --photonsLeftToPropagate;
-        } else {  // photon was NOT absorbed. scatter it and re-start the loop
+    // uint32_t photonsLeftToPropagate = step.numPhotons;
+    // I3CLPhoton photon;
+    // photon.absLength = 0;
+    // I3CLInitialPhoton photonInitial;
 
-            updatePhotonTrack(photon, distancePropagated);
-            scatterPhoton(photon, RNG_ARGS_TO_CALL);
-        }
-    }  // end while
+    // while (photonsLeftToPropagate > 0) {
+    //     if (photon.absLength < EPSILON) {
+    //         photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
+    //         photon = I3CLPhoton(photonInitial);
+    //     }
 
-    // upload MWC RNG state
-    MWC_RNG_x[i] = real_rnd_x;
-    MWC_RNG_a[i] = real_rnd_a;
+    //     // this block is along the lines of the PPC kernel
+    //     float distancePropagated;
+    //     propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
+    //     bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
+    //                               hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal, getWavelengthBias_dataShared);
+
+    //     if (collided) {
+    //         // get rid of the photon if we detected it
+    //         photon.absLength = ZERO;
+    //     }
+
+    //     // absorb or scatter the photon
+    //     if (photon.absLength < EPSILON) {
+    //         // photon was absorbed.
+    //         // a new one will be generated at the begin of the loop.
+    //         --photonsLeftToPropagate;
+    //     } else {  // photon was NOT absorbed. scatter it and re-start the loop
+
+    //         updatePhotonTrack(photon, distancePropagated);
+    //         scatterPhoton(photon, RNG_ARGS_TO_CALL);
+    //     }
+    // }  // end while
+
+    // // upload MWC RNG state
+    // MWC_RNG_x[i] = real_rnd_x;
+    // MWC_RNG_a[i] = real_rnd_a;
 }
