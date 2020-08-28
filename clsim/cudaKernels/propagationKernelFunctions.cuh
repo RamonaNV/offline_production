@@ -155,7 +155,7 @@ __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, cons
                                                   uint32_t *hitIndex, uint32_t maxHitIndex,
                                                   I3CLSimPhotonCuda *outputPhotons,  
                                                   const unsigned short *geoLayerToOMNumIndexPerStringSetLocal, 
-                                                  const float* getWavelengthBias_dataShared);
+                                                  const float* getWavelengthBias_dataShared, int* collisionCheckIndex, CollisionCheck* collisionChecks);
 
 __device__ __forceinline__ void checkForCollision_OnString(const unsigned short stringNum,
                                                            const float photonDirLenXYSqr,
@@ -538,11 +538,19 @@ __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, cons
                                                   uint32_t *hitIndex, uint32_t maxHitIndex,
                                                   I3CLSimPhotonCuda *outputPhotons,  
                                                   const unsigned short *geoLayerToOMNumIndexPerStringSetLocal, 
-                                                  const float* getWavelengthBias_dataShared)
+                                                  const float* getWavelengthBias_dataShared, int* collisionCheckIndex, CollisionCheck* collisionChecks)
 {
+    uint32_t myIndex = atomicAdd(collisionCheckIndex, 1);
+
     // check for collisions
     const float photonDirLenXYSqr = sqr(photon.dirAndWlen.x) + sqr(photon.dirAndWlen.y);
-    if (photonDirLenXYSqr <= ZERO) return false;
+    if (photonDirLenXYSqr <= ZERO)
+    {
+        collisionChecks[myIndex] = CollisionCheck{ float3{photon.posAndTime.x, photon.posAndTime.y, photon.posAndTime.z},  
+                                                    float3{photon.dirAndWlen.x, photon.dirAndWlen.y, photon.dirAndWlen.z},
+                                                    thisStepLength, -1, -1};
+        return false;
+    }
 
 
     bool hitRecorded = false;
@@ -564,6 +572,11 @@ __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, cons
                 photon.numScatters, distanceTraveledInAbsorptionLengths, photonInitials.posAndTime, photonInitials.dirAndWlen,
                 step, hitOnString, hitOnDom, hitIndex, maxHitIndex, outputPhotons);
     }
+
+    collisionChecks[myIndex] = CollisionCheck{ float3{photon.posAndTime.x, photon.posAndTime.y, photon.posAndTime.z},  
+                                                float3{photon.dirAndWlen.x, photon.dirAndWlen.y, photon.dirAndWlen.z},
+                                                thisStepLength, (hitRecorded ? hitOnString : -1), (hitRecorded ? hitOnDom : -1)};
+
     return hitRecorded;
 }
 

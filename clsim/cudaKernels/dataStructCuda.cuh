@@ -63,6 +63,15 @@ struct I3CLInitialPhoton {
     float absLength;
 };
 
+// used to log collision checks
+struct CollisionCheck {
+    float3 pos;
+    float3 dir;
+    float length;
+    int string;
+    int dom;
+};
+
 // holds photon while it is propagated through the ice
 struct I3CLPhoton {
     I3CLPhoton() = default;

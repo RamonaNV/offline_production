@@ -49,7 +49,7 @@ __global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel(
 #ifdef SAVE_PHOTON_HISTORY
     float4* photonHistory,
 #endif
-    uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a);
+    uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a, int* collisionCheckIndex, CollisionCheck* collisionChecks);
 
 // maxNumbWOrkItems from  CL rndm arrays
 void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
@@ -104,13 +104,52 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     int numBlocks = (nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
     printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
 
+    // get some memory to store collision data
+    int collisionIndex = 0;
+    int* d_collisionIndex;
+    CUDA_ERR_CHECK(cudaMalloc((void**)&d_collisionIndex, 1 * sizeof(int)));
+    CUDA_ERR_CHECK(cudaMemcpy(d_collisionIndex, &collisionIndex, 1 * sizeof(int), cudaMemcpyHostToDevice));
+
+    int maxNumCollisions = nsteps * 200 * 30;
+    CollisionCheck* d_collisionChecks;
+    CUDA_ERR_CHECK(cudaMalloc(&d_collisionChecks, maxNumCollisions * sizeof(CollisionCheck)));
+
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-    propKernel<<<1, 1>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps,
-                                                  d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+    propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps,
+                                                  d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a, d_collisionIndex, d_collisionChecks);
 
     CUDA_ERR_CHECK(cudaDeviceSynchronize());
     std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
     totalCudaKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+
+    // write collision data to the console as tsv
+    {
+        CUDA_ERR_CHECK(cudaMemcpy(&collisionIndex, d_collisionIndex, sizeof(int), cudaMemcpyDeviceToHost));
+
+        std::vector<CollisionCheck> collisions(collisionIndex);
+        CUDA_ERR_CHECK(cudaMemcpy(collisions.data(), d_collisionChecks, collisionIndex * sizeof(CollisionCheck), cudaMemcpyDeviceToHost));
+
+        if(collisionIndex > maxNumCollisions)
+            throw std::runtime_error("more collision dectections occured than planned, memory out of bounds");
+
+        printf("%i collision checks recorded, writing to file...\n", collisionIndex);
+
+        std::ofstream of("collisionChecks.tsv");
+        if(!of.is_open())
+            throw std::runtime_error("failed to create output file");
+
+        of << "posx\tposy\tposz\tdirx\tdiry\tdirz\tlength\thitstring\thitdom\t\n";
+        int line = 0; 
+        for(const auto& c : collisions)
+        {
+            of << c.pos.x << "\t" << c.pos.y << "\t" << c.pos.z << "\t" 
+               << c.dir.x << "\t" << c.dir.y << "\t" << c.dir.z << "\t"
+               << c.length << "\t" << c.string << "\t" << c.dom << "\n";
+            ++line;
+            if(line % 1000000 == 0)
+                printf("\t%i\n", line);
+        }
+    }
 
     CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
     int numberPhotons = h_hitIndex[0];
@@ -291,7 +330,8 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
                            const I3CLSimStepCuda* __restrict__ inputSteps,  // deviceBuffer_InputSteps
                            int nsteps,
                            I3CLSimPhotonCuda* __restrict__ outputPhotons,  // deviceBuffer_OutputPhotons
-                           uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a)
+                           uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a,
+                           int* collisionCheckIndex, CollisionCheck* collisionChecks)
 {
 #ifndef FUNCTION_getGroupVelocity_DOES_NOT_DEPEND_ON_LAYER
 #error This kernel only works with a constant group velocity (constant w.r.t. layers)
@@ -314,75 +354,78 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         getWavelengthBias_dataShared[ii] = getWavelengthBias_data[ii];
     }
     __syncthreads();
-    // if (i >= nsteps) return;
+    if (i >= nsteps) return;
 
-    float domPosX;
-    float domPosY;
-    float domPosZ;
+    // float domPosX;
+    // float domPosY;
+    // float domPosZ;
 
-    int stringId;
-    int domId;
+    // int stringId;
+    // int domId;
 
-    printf("string\tdom\tx\ty\tz\n");
-    for(stringId = 0; stringId < GEO_DOM_POS_NUM_STRINGS; stringId++)
-        for(domId = 0; domId < GEO_MAX_DOM_INDEX; domId++)
-        {
-            geometryGetDomPosition(stringId, domId, domPosX, domPosY, domPosZ);
+    // printf("string\tdom\tx\ty\tz\n");
+    // for(stringId = 0; stringId < GEO_DOM_POS_NUM_STRINGS; stringId++)
+    //     for(domId = 0; domId < GEO_MAX_DOM_INDEX; domId++)
+    //     {
+    //         geometryGetDomPosition(stringId, domId, domPosX, domPosY, domPosZ);
 
-            printf("%i\t%i\t%f\t%f\t%f\n", stringId,domId,domPosX, domPosY, domPosZ);
+    //         printf("%i\t%i\t%f\t%f\t%f\n", stringId,domId,domPosX, domPosY, domPosZ);
+    //     }
+
+    // download MWC RNG state
+    uint64_t real_rnd_x = MWC_RNG_x[i];
+    uint32_t real_rnd_a = MWC_RNG_a[i];
+    uint64_t* rnd_x = &real_rnd_x;
+    uint32_t* rnd_a = &real_rnd_a;
+
+    const I3CLSimStepCuda step = inputSteps[i];
+    float4 stepDir;
+    {
+        const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)
+        stepDir = float4{rho * cosf(step.dirAndLengthAndBeta.y),  // rho*cos(phi)
+                         rho * sinf(step.dirAndLengthAndBeta.y),  // rho*sin(phi)
+                         cosf(step.dirAndLengthAndBeta.x),        // cos(phi)
+                         ZERO};
+    }
+
+    uint32_t photonsLeftToPropagate = step.numPhotons;
+    I3CLPhoton photon;
+    photon.absLength = 0;
+    I3CLInitialPhoton photonInitial;
+
+    // printf("%i\n",photonsLeftToPropagate);
+
+    while (photonsLeftToPropagate > 0) {
+        if (photon.absLength < EPSILON) {
+            photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
+            photon = I3CLPhoton(photonInitial);
         }
 
-    // // download MWC RNG state
-    // uint64_t real_rnd_x = MWC_RNG_x[i];
-    // uint32_t real_rnd_a = MWC_RNG_a[i];
-    // uint64_t* rnd_x = &real_rnd_x;
-    // uint32_t* rnd_a = &real_rnd_a;
+        // this block is along the lines of the PPC kernel
+        float distancePropagated;
+        propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
+        bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
+                                  hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal, 
+                                  getWavelengthBias_dataShared, collisionCheckIndex, collisionChecks);
 
-    // const I3CLSimStepCuda step = inputSteps[i];
-    // float4 stepDir;
-    // {
-    //     const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)
-    //     stepDir = float4{rho * cosf(step.dirAndLengthAndBeta.y),  // rho*cos(phi)
-    //                      rho * sinf(step.dirAndLengthAndBeta.y),  // rho*sin(phi)
-    //                      cosf(step.dirAndLengthAndBeta.x),        // cos(phi)
-    //                      ZERO};
-    // }
+        if (collided) {
+            // get rid of the photon if we detected it
+            photon.absLength = ZERO;
+        }
 
-    // uint32_t photonsLeftToPropagate = step.numPhotons;
-    // I3CLPhoton photon;
-    // photon.absLength = 0;
-    // I3CLInitialPhoton photonInitial;
+        // absorb or scatter the photon
+        if (photon.absLength < EPSILON) {
+            // photon was absorbed.
+            // a new one will be generated at the begin of the loop.
+            --photonsLeftToPropagate;
+        } else {  // photon was NOT absorbed. scatter it and re-start the loop
 
-    // while (photonsLeftToPropagate > 0) {
-    //     if (photon.absLength < EPSILON) {
-    //         photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
-    //         photon = I3CLPhoton(photonInitial);
-    //     }
+            updatePhotonTrack(photon, distancePropagated);
+            scatterPhoton(photon, RNG_ARGS_TO_CALL);
+        }
+    }  // end while
 
-    //     // this block is along the lines of the PPC kernel
-    //     float distancePropagated;
-    //     propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
-    //     bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
-    //                               hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal, getWavelengthBias_dataShared);
-
-    //     if (collided) {
-    //         // get rid of the photon if we detected it
-    //         photon.absLength = ZERO;
-    //     }
-
-    //     // absorb or scatter the photon
-    //     if (photon.absLength < EPSILON) {
-    //         // photon was absorbed.
-    //         // a new one will be generated at the begin of the loop.
-    //         --photonsLeftToPropagate;
-    //     } else {  // photon was NOT absorbed. scatter it and re-start the loop
-
-    //         updatePhotonTrack(photon, distancePropagated);
-    //         scatterPhoton(photon, RNG_ARGS_TO_CALL);
-    //     }
-    // }  // end while
-
-    // // upload MWC RNG state
-    // MWC_RNG_x[i] = real_rnd_x;
-    // MWC_RNG_a[i] = real_rnd_a;
+    // upload MWC RNG state
+    MWC_RNG_x[i] = real_rnd_x;
+    MWC_RNG_a[i] = real_rnd_a;
 }
