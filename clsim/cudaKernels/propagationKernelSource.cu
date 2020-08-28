@@ -49,7 +49,7 @@ __global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel(
 #ifdef SAVE_PHOTON_HISTORY
     float4* photonHistory,
 #endif
-    uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a, int* collisionCheckIndex, CollisionCheck* collisionChecks);
+    uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a, int* collisionCheckIndex, CollisionCheck* collisionChecks, Dom* doms);
 
 // maxNumbWOrkItems from  CL rndm arrays
 void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
@@ -114,13 +114,34 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     CollisionCheck* d_collisionChecks;
     CUDA_ERR_CHECK(cudaMalloc(&d_collisionChecks, maxNumCollisions * sizeof(CollisionCheck)));
 
+    // get some memory to store dom positions
+    int ndoms =  GEO_DOM_POS_NUM_STRINGS * GEO_MAX_DOM_INDEX;
+    Dom* d_doms;
+    CUDA_ERR_CHECK(cudaMalloc(&d_doms, ndoms * sizeof(Dom)));
+
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
     propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps,
-                                                  d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a, d_collisionIndex, d_collisionChecks);
+                                                  d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a, d_collisionIndex, d_collisionChecks, d_doms);
 
     CUDA_ERR_CHECK(cudaDeviceSynchronize());
     std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
     totalCudaKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
+
+    // write doms to tsv file
+    {
+        std::vector<Dom> doms(ndoms);
+        CUDA_ERR_CHECK(cudaMemcpy(doms.data(), d_doms, ndoms*sizeof(Dom), cudaMemcpyDeviceToHost));
+
+        printf("%i doms found, writing to file...\n", ndoms);
+
+        std::ofstream of("doms.tsv");
+        if(!of.is_open())
+            throw std::runtime_error("failed to create output file");
+
+        of << "stringId\tdomId\tposx\tposy\tposz\n";
+        for(const auto& d : doms)
+            of << d.stringId << "\t" << d.domId << "\t" << d.domPos.x << "\t" << d.domPos.y << "\t" << d.domPos.z << "\n";
+    }
 
     // write collision data to the console as tsv
     {
@@ -331,13 +352,30 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
                            int nsteps,
                            I3CLSimPhotonCuda* __restrict__ outputPhotons,  // deviceBuffer_OutputPhotons
                            uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a,
-                           int* collisionCheckIndex, CollisionCheck* collisionChecks)
+                           int* collisionCheckIndex, CollisionCheck* collisionChecks, Dom* doms)
 {
 #ifndef FUNCTION_getGroupVelocity_DOES_NOT_DEPEND_ON_LAYER
 #error This kernel only works with a constant group velocity (constant w.r.t. layers)
 #endif
 
     unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // thread one, write all doms
+    if(i == 0)
+    {
+        int stringId;
+        int domId;
+        float domPosX;
+        float domPosY;
+        float domPosZ;
+        for(stringId = 0; stringId < GEO_DOM_POS_NUM_STRINGS; stringId++)
+            for(domId = 0; domId < GEO_MAX_DOM_INDEX; domId++)
+            {
+                int id = stringId*GEO_MAX_DOM_INDEX + domId;
+                geometryGetDomPosition(stringId, domId, domPosX, domPosY, domPosZ);
+                doms[id] = Dom{stringId, domId, float3{domPosX, domPosY, domPosZ}};
+            }
+    }
 
     __shared__ unsigned short geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
     __shared__ float _generateWavelength_0distYValuesShared[_generateWavelength_0NUM_DIST_ENTRIES];
@@ -355,22 +393,6 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     }
     __syncthreads();
     if (i >= nsteps) return;
-
-    // float domPosX;
-    // float domPosY;
-    // float domPosZ;
-
-    // int stringId;
-    // int domId;
-
-    // printf("string\tdom\tx\ty\tz\n");
-    // for(stringId = 0; stringId < GEO_DOM_POS_NUM_STRINGS; stringId++)
-    //     for(domId = 0; domId < GEO_MAX_DOM_INDEX; domId++)
-    //     {
-    //         geometryGetDomPosition(stringId, domId, domPosX, domPosY, domPosZ);
-
-    //         printf("%i\t%i\t%f\t%f\t%f\n", stringId,domId,domPosX, domPosY, domPosZ);
-    //     }
 
     // download MWC RNG state
     uint64_t real_rnd_x = MWC_RNG_x[i];

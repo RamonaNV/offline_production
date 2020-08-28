@@ -72,6 +72,13 @@ struct CollisionCheck {
     int dom;
 };
 
+// used to log doms
+struct Dom {
+    int stringId;
+    int domId;
+    float3 domPos;
+};
+
 // holds photon while it is propagated through the ice
 struct I3CLPhoton {
     I3CLPhoton() = default;
