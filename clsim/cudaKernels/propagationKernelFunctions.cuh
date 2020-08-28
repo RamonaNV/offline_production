@@ -557,6 +557,8 @@ __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, cons
     unsigned short hitOnString;
     unsigned short hitOnDom;
 
+    float cachedStepLength = thisStepLength;
+
     float distanceTraveledInAbsorptionLengths = photonInitials.absLength - photon.absLength;
     checkForCollision_InCells(photonDirLenXYSqr, photon.posAndTime, photon.dirAndWlen, getWavelengthBias_dataShared,
                               thisStepLength, hitRecorded, hitOnString, hitOnDom,
@@ -575,7 +577,7 @@ __device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, cons
 
     collisionChecks[myIndex] = CollisionCheck{ float3{photon.posAndTime.x, photon.posAndTime.y, photon.posAndTime.z},  
                                                 float3{photon.dirAndWlen.x, photon.dirAndWlen.y, photon.dirAndWlen.z},
-                                                thisStepLength, (hitRecorded ? hitOnString : -1), (hitRecorded ? hitOnDom : -1)};
+                                                cachedStepLength, (hitRecorded ? hitOnString : -1), (hitRecorded ? hitOnDom : -1)};
 
     return hitRecorded;
 }
