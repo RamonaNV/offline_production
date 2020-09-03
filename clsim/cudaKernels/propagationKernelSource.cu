@@ -50,10 +50,10 @@ __global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel(
 #ifdef SAVE_PHOTON_HISTORY
     float4* photonHistory,
 #endif
-    curandState_t* __restrict__ rngState);
+    curandStatePhilox4_32_10_t* __restrict__ rngState);
 
 // generates random state for curand
-__global__ void generateRandomState(int seed, int numThreads, curandState_t* state)
+__global__ void generateRandomState(int seed, int numThreads, curandStatePhilox4_32_10_t* state)
 {
     int id = threadIdx.x + blockIdx.x * blockDim.x;
     if(id >= numThreads)
@@ -61,9 +61,9 @@ __global__ void generateRandomState(int seed, int numThreads, curandState_t* sta
     curand_init(seed, id, 0, &state[id]);
 }
 
-void initRng(int numThreads, curandState_t** d_state, int seed = 161214)
+void initRng(int numThreads, curandStatePhilox4_32_10_t** d_state, int seed = 161214)
 {
-    CUDA_ERR_CHECK(cudaMalloc(d_state, numThreads * sizeof(curandState_t)));
+    CUDA_ERR_CHECK(cudaMalloc(d_state, numThreads * sizeof(curandStatePhilox4_32_10_t)));
     int numBlocks = (numThreads + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
     generateRandomState<<<numBlocks, NTHREADS_PER_BLOCK>>>( seed, numThreads, *d_state);
     CUDA_ERR_CHECK(cudaGetLastError());
@@ -75,7 +75,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
                           uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime)
 {
     // setup curand rng
-    curandState_t* d_rngState;
+    curandStatePhilox4_32_10_t* d_rngState;
     initRng(nsteps, &d_rngState);
 
     printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, 1, nsteps);
@@ -292,7 +292,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
                            const I3CLSimStepCuda* __restrict__ inputSteps,  // deviceBuffer_InputSteps
                            int nsteps,
                            I3CLSimPhotonCuda* __restrict__ outputPhotons,  // deviceBuffer_OutputPhotons
-                           curandState_t* __restrict__ rngState)
+                           curandStatePhilox4_32_10_t* __restrict__ rngState)
 {
 #ifndef FUNCTION_getGroupVelocity_DOES_NOT_DEPEND_ON_LAYER
 #error This kernel only works with a constant group velocity (constant w.r.t. layers)
@@ -318,8 +318,10 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     if (i >= nsteps) return;
 
     // download RNG state
-    curandState_t real_thisRngState = rngState[i];
-    curandState_t* thisRngState = &real_thisRngState;
+    curandStatePhilox4_32_10_t real_thisRngState = rngState[i];
+    curandStatePhilox4_32_10_t* thisRngState = &real_thisRngState;
+    localRngData rngData;
+    rngData.numRnums = 0;
 
     // printf("%f \n", RNG_CALL_UNIFORM_CO);
 

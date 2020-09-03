@@ -25,22 +25,38 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <curand_kernel.h>
 
+struct localRngData
+{
+    float4 rnum;
+    int numRnums{0};
+};
+
 //////////////////////////////////////////////////////////////////////////////
 //   Generates a random number between 0 and 1 (0,1]
 //////////////////////////////////////////////////////////////////////////////
-__device__ __forceinline__ float rand_MWC_oc(curandState_t* thisRngState)
+__device__ __forceinline__ float rand_MWC_oc(curandStatePhilox4_32_10_t* thisRngState, localRngData& d)
 {
-    return curand_uniform(thisRngState);
+    --d.numRnums;
+    switch (d.numRnums)
+    {
+    case 2: return d.rnum.y;
+    case 1: return d.rnum.z;
+    case 0: return d.rnum.w;   
+    case -1: 
+         d.rnum = curand_uniform4(thisRngState);
+         d.numRnums = 3;
+         return d.rnum.x;
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////
 //   Generates a random number between 0 and 1 [0,1)
 //////////////////////////////////////////////////////////////////////////////
-__device__ __forceinline__ float rand_MWC_co(curandState_t* thisRngState) { return 1.0f-rand_MWC_oc(thisRngState); }
+__device__ __forceinline__ float rand_MWC_co(curandStatePhilox4_32_10_t* thisRngState, localRngData& d) { return 1.0f-rand_MWC_oc(thisRngState,d); }
 
-#define RNG_ARGS curandState_t* thisRngState
-#define RNG_ARGS_TO_CALL thisRngState
-#define RNG_CALL_UNIFORM_CO rand_MWC_co(thisRngState)
-#define RNG_CALL_UNIFORM_OC rand_MWC_oc(thisRngState)
+#define RNG_ARGS curandStatePhilox4_32_10_t* thisRngState, localRngData& rngData
+#define RNG_ARGS_TO_CALL thisRngState, rngData
+#define RNG_CALL_UNIFORM_CO rand_MWC_co(thisRngState, rngData)
+#define RNG_CALL_UNIFORM_OC rand_MWC_oc(thisRngState, rngData)
 
 #endif
