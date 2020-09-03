@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <propagationKernelSource.cuh>
 #include <propagationKernelFunctions.cuh>
+#include <curand_kernel.h>
 
 cudaError_t gl_err;
 
@@ -49,20 +50,23 @@ __global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel(
 #ifdef SAVE_PHOTON_HISTORY
     float4* photonHistory,
 #endif
-    uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a);
+    curandState_t* __restrict__ rngState);
 
-// maxNumbWOrkItems from  CL rndm arrays
-void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
-                   uint32_t** d_MWC_RNG_a)
+// generates random state for curand
+__global__ void generateRandomState(int seed, int numThreads, curandState_t* state)
 {
-    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a, maxNumWorkitems * sizeof(uint32_t)));
-    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_x, maxNumWorkitems * sizeof(uint64_t)));
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
+    if(id >= numThreads)
+        return;
+    curand_init(seed, id, 0, &state[id]);
+}
 
-    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_a, MWC_RNG_a, maxNumWorkitems * sizeof(uint32_t), cudaMemcpyHostToDevice));
-    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_x, MWC_RNG_x, maxNumWorkitems * sizeof(uint64_t), cudaMemcpyHostToDevice));
-
-    cudaDeviceSynchronize();
-    printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
+void initRng(int numThreads, curandState_t** d_state, int seed = 161214)
+{
+    CUDA_ERR_CHECK(cudaMalloc(d_state, numThreads * sizeof(curandState_t)));
+    int numBlocks = (numThreads + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
+    generateRandomState<<<numBlocks, NTHREADS_PER_BLOCK>>>( seed, numThreads, *d_state);
+    CUDA_ERR_CHECK(cudaGetLastError());
 }
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, const uint32_t maxHitIndex,
@@ -70,11 +74,9 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
                           I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
                           uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime)
 {
-    // set up congruental random number generator, reusing host arrays and randomService from
-    // I3CLSimStepToPhotonConverterOpenCL setup.
-    uint64_t* d_MWC_RNG_x;
-    uint32_t* d_MWC_RNG_a;
-    init_RDM_CUDA(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
+    // setup curand rng
+    curandState_t* d_rngState;
+    initRng(nsteps, &d_rngState);
 
     printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, 1, nsteps);
     unsigned short* d_geolayer;
@@ -106,8 +108,8 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
 
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
     propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps,
-                                                  d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
-
+                                                  d_cudaphotons, d_rngState);
+    CUDA_ERR_CHECK(cudaGetLastError());
     CUDA_ERR_CHECK(cudaDeviceSynchronize());
     std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
     totalCudaKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
@@ -137,8 +139,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     cudaFree(d_cudaphotons);
     cudaFree(d_cudastep);
     cudaFree(d_geolayer);
-    cudaFree(d_MWC_RNG_a);
-    cudaFree(d_MWC_RNG_x);
+    cudaFree(d_rngState);
     printf("photon hits = %i from %i steps \n", numberPhotons, nsteps);
 }
 
@@ -291,7 +292,7 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
                            const I3CLSimStepCuda* __restrict__ inputSteps,  // deviceBuffer_InputSteps
                            int nsteps,
                            I3CLSimPhotonCuda* __restrict__ outputPhotons,  // deviceBuffer_OutputPhotons
-                           uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a)
+                           curandState_t* __restrict__ rngState)
 {
 #ifndef FUNCTION_getGroupVelocity_DOES_NOT_DEPEND_ON_LAYER
 #error This kernel only works with a constant group velocity (constant w.r.t. layers)
@@ -316,11 +317,11 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
     __syncthreads();
     if (i >= nsteps) return;
 
-    // download MWC RNG state
-    uint64_t real_rnd_x = MWC_RNG_x[i];
-    uint32_t real_rnd_a = MWC_RNG_a[i];
-    uint64_t* rnd_x = &real_rnd_x;
-    uint32_t* rnd_a = &real_rnd_a;
+    // download RNG state
+    curandState_t real_thisRngState = rngState[i];
+    curandState_t* thisRngState = &real_thisRngState;
+
+    // printf("%f \n", RNG_CALL_UNIFORM_CO);
 
     const I3CLSimStepCuda step = inputSteps[i];
     float4 stepDir;
@@ -366,7 +367,6 @@ __global__ void propKernel(uint32_t* hitIndex,          // deviceBuffer_CurrentN
         }
     }  // end while
 
-    // upload MWC RNG state
-    MWC_RNG_x[i] = real_rnd_x;
-    MWC_RNG_a[i] = real_rnd_a;
+    // upload RNG state
+    rngState[i] = real_thisRngState;
 }
