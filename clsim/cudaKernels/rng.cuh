@@ -80,8 +80,9 @@ private:
 void inline initMWCRng(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
                    uint32_t** d_MWC_RNG_a);
 
-// ------------------------------------
 // function definitions
+// ------------------------------------
+
 void inline initMWCRng(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
                    uint32_t** d_MWC_RNG_a)
 {

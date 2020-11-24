@@ -20,10 +20,12 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#ifndef GEOMETRYSOURCE_CUH
-#define GEOMETRYSOURCE_CUH
+/* 
+    contains geometry data for DOM-collision check
+*/
 
-#pragma once
+#ifndef DOMGEODATA_CUH
+#define DOMGEODATA_CUH
 
 ///////////////// BEGIN ice/water properties ////////////
 

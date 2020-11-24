@@ -1,6 +1,6 @@
 /*The MIT License (MIT)
 
-Copyright (c) 2020, Ramona Hohl, rhohl@nvidia.com
+Copyright (c) 2020, Hendrik Schwanekaml, hschwanekamp@nvidia.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -14,767 +14,403 @@ copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+FOR A PARTICULAR PURPOSE AND NONINFRINGSEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+/* 
+    contains all helper functions used to actually run the simulation
+*/
+
 #ifndef PROPAGATIONKERNELFUNCTIUONS_CUH
 #define PROPAGATIONKERNELFUNCTIUONS_CUH
 
+// includes
+// ------------------
 #include <cuda.h>
 #include <cuda_runtime_api.h>
-#include <math_constants.h>
 
-#include <mwcrngKernelSource.cuh>
-#include <CLnoneCUDA.cuh>
-#include <prependSource.cuh>
-#include <wlenGeneratorSource.cuh>
-#include <dataStructCuda.cuh>
-#include <wlenBiasSource.cuh>
-#include <mediumPropertiesSource.cuh>
-#include <geometrySource.cuh>
-
-#include <chrono>
-#include <ctime>
-
-// for debugging:
-#define PRINTLROOT                                                              \
-    if (blockIdx.x * blockDim.x + threadIdx.x == 0) {                           \
-        printf("thread 0 - in line %d and function %s \n", __LINE__, __func__); \
-    }
-//#define PRINTL        printf("thread %d - in line %d and function %s \n", blockIdx.x * blockDim.x + threadIdx.x,
-//__LINE__, __func__);
-
-///////////////// forward declarations
-
-__device__ __forceinline__ int findLayerForGivenZPos(float posZ);
-
-__device__ __forceinline__ float mediumLayerBoundary(int layer);
-
-__device__ __forceinline__ void scatterDirectionByAngle(float cosa, float sina, float4 &direction, float randomNumber);
-
-__device__ __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda &step, const float4 &stepDir, RNG_ARGS,
-                                                      float4 &photonPosAndTime, float4 &photonDirAndWlen,
-                                                      float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared);
-
-__device__ __forceinline__ float2 sphDirFromCar(float4 carDir);
-
-__device__ __forceinline__ void saveHit(const float4 &photonPosAndTime, const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-                                        const float thisStepLength, float inv_groupvel, float photonTotalPathLength,
-                                        uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
-                                        const float4 &photonStartPosAndTime, const float4 &photonStartDirAndWlen,
-                                        const I3CLSimStepCuda &step, unsigned short hitOnString,
-                                        unsigned short hitOnDom, uint32_t *hitIndex, uint32_t maxHitIndex,
-                                        I3CLSimPhotonCuda *outputPhotons
-#ifdef SAVE_PHOTON_HISTORY
-                                        ,
-                                        float4 *photonHistory, float4 *currentPhotonHistory
-#endif
-);
-
-///////////////////////// some constants
-
-constexpr float speedOfLight = 0.299792458f;       // [m/ns]F
-constexpr float recip_speedOfLight = 3.33564095f;  // [ns/m]
-constexpr float PI = 3.14159265359f;
-
-///////////////////////////
-
-__device__ __forceinline__ float my_fabs(const float a);
-__device__ __forceinline__ float sqr(const float a);
-
-__device__ __forceinline__ void checkForCollision_OnString(const unsigned short stringNum,
-                                                           const float photonDirLenXYSqr,
-                                                           const float4 &photonPosAndTime,
-                                                           const float4 &photonDirAndWlen,
-                                                           const float* getWavelengthBias_dataShared,
-#ifdef STOP_PHOTONS_ON_DETECTION
-                                                           float &thisStepLength, bool &hitRecorded,
-                                                           unsigned short &hitOnString, unsigned short &hitOnDom,
-#else
-                                                           float thisStepLength, float inv_groupvel,
-                                                           float photonTotalPathLength, uint32_t photonNumScatters,
-                                                           float distanceTraveledInAbsorptionLengths,
-                                                           const float4 &photonStartPosAndTime,
-                                                           const float4 &photonStartDirAndWlen,
-                                                           const I3CLSimStepCuda &step, uint32_t *hitIndex,
-                                                           uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
-#ifdef SAVE_PHOTON_HISTORY
-                                                           float4 *photonHistory, float4 *currentPhotonHistory,
-#endif
-#endif
-                                                           const unsigned short *geoLayerToOMNumIndexPerStringSetLocal);
-
-__device__ __forceinline__ void checkForCollision_InCell(const float photonDirLenXYSqr, const float4 &photonPosAndTime,
-                                                         const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-#ifdef STOP_PHOTONS_ON_DETECTION
-                                                         float &thisStepLength, bool &hitRecorded,
-                                                         unsigned short &hitOnString, unsigned short &hitOnDom,
-#else
-                                                         float thisStepLength, float inv_groupvel,
-                                                         float photonTotalPathLength, uint32_t photonNumScatters,
-                                                         float distanceTraveledInAbsorptionLengths,
-                                                         const float4 &photonStartPosAndTime,
-                                                         const float4 &photonStartDirAndWlen,
-                                                         const I3CLSimStepCuda &step, uint32_t *hitIndex,
-                                                         uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons, 
-#ifdef SAVE_PHOTON_HISTORY
-                                                         float4 *photonHistory, float4 *currentPhotonHistory,
-#endif
-#endif
-                                                         const unsigned short *geoLayerToOMNumIndexPerStringSetLocal,
-
-                                                         unsigned short *this_geoCellIndex,
-                                                         const float this_geoCellStartX, const float this_geoCellStartY,
-                                                         const float this_geoCellWidthX, const float this_geoCellWidthY,
-                                                         const int this_geoCellNumX, const int this_geoCellNumY);
-
-__device__ __forceinline__ void checkForCollision_InCells(const float photonDirLenXYSqr, const float4 &photonPosAndTime,
-                                                          const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-#ifdef STOP_PHOTONS_ON_DETECTION
-                                                          float &thisStepLength, bool &hitRecorded,
-                                                          unsigned short &hitOnString, unsigned short &hitOnDom,
-#else
-                                                          float thisStepLength, float inv_groupvel,
-                                                          float photonTotalPathLength, uint32_t photonNumScatters,
-                                                          float distanceTraveledInAbsorptionLengths,
-                                                          const float4 &photonStartPosAndTime,
-                                                          const float4 &photonStartDirAndWlen,
-                                                          const I3CLSimStepCuda &step, uint32_t *hitIndex,
-                                                          uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons, 
-#ifdef SAVE_PHOTON_HISTORY
-                                                          float4 *photonHistory, float4 *currentPhotonHistory,
-#endif
-#endif
-                                                          const unsigned short *geoLayerToOMNumIndexPerStringSetLocal);
-
-__device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, const I3CLInitialPhoton& photonInitials,
-                                                  const I3CLSimStepCuda &step, float &thisStepLength,
-                                                  uint32_t *hitIndex, uint32_t maxHitIndex,
-                                                  I3CLSimPhotonCuda *outputPhotons,  
-                                                  const unsigned short *geoLayerToOMNumIndexPerStringSetLocal, 
-                                                  const float* getWavelengthBias_dataShared);
-
-__device__ __forceinline__ void checkForCollision_OnString(const unsigned short stringNum,
-                                                           const float photonDirLenXYSqr,
-                                                           const float4 &photonPosAndTime,
-                                                           const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-#ifdef STOP_PHOTONS_ON_DETECTION
-                                                           float &thisStepLength, bool &hitRecorded,
-                                                           unsigned short &hitOnString, unsigned short &hitOnDom,
-#else
-                                                           float thisStepLength, float inv_groupvel,
-                                                           float photonTotalPathLength, uint32_t photonNumScatters,
-                                                           float distanceTraveledInAbsorptionLengths,
-                                                           const float4 &photonStartPosAndTime,
-                                                           const float4 &photonStartDirAndWlen,
-                                                           const I3CLSimStepCuda &step, uint32_t *hitIndex,
-                                                           uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,  
-#ifdef SAVE_PHOTON_HISTORY
-                                                           float4 *photonHistory, float4 *currentPhotonHistory,
-#endif
-#endif
-                                                           const unsigned short *geoLayerToOMNumIndexPerStringSetLocal)
-{
-    // find the string set for this string
-    unsigned char stringSet = geoStringInStringSet[stringNum];
-
-    {  // check intersection with string cylinder
-        // only use test if uhat lateral component is bigger than about 0.1 (NEED to
-        // check bigger than zero)
-        const float smin = sqr(((photonPosAndTime.x - float(geoStringPosX[stringNum])) * photonDirAndWlen.y -
-                                (photonPosAndTime.y - float(geoStringPosY[stringNum])) * photonDirAndWlen.x)) /
-                           photonDirLenXYSqr;
-        // if (smin > sqr( float(geoStringRadius[stringNum]))) return;  //
-        // NOTE: smin == distance squared
-
-        if (smin > sqr(float(GEO_STRING_MAX_RADIUS))) return;  // NOTE: smin == distance squared
-    }
-
-    {  // check if photon is above or below the string (geoStringMaxZ and
-        // geoStringMinZ do not include the OM radius!)
-        if ((photonDirAndWlen.z > ZERO) && (photonPosAndTime.z > geoStringMaxZ[stringNum] + OM_RADIUS)) return;
-        if ((photonDirAndWlen.z < ZERO) && (photonPosAndTime.z < geoStringMinZ[stringNum] - OM_RADIUS)) return;
-    }
-
-    // this photon could potentially be hitting an om
-    // -> check them all
-
-    int lowLayerZ = int((photonPosAndTime.z - geoLayerStartZ[stringSet]) / geoLayerHeight[stringSet]);
-#ifdef STOP_PHOTONS_ON_DETECTION
-    int highLayerZ = int((photonPosAndTime.z + photonDirAndWlen.z * (thisStepLength)-geoLayerStartZ[stringSet]) /
-                         geoLayerHeight[stringSet]);
-#else
-    int highLayerZ = int((photonPosAndTime.z + photonDirAndWlen.z * thisStepLength - geoLayerStartZ[stringSet]) /
-                         geoLayerHeight[stringSet]);
-#endif
-    if (highLayerZ < lowLayerZ) {
-        int tmp = lowLayerZ;
-        lowLayerZ = highLayerZ;
-        highLayerZ = tmp;
-    }
-    lowLayerZ = min(max(lowLayerZ, 0), geoLayerNum[stringSet] - 1);
-    highLayerZ = min(max(highLayerZ, 0), geoLayerNum[stringSet] - 1);
-
-#ifndef STOP_PHOTONS_ON_DETECTION
-// the number of 64bit integers needed to store bits for all doms
-#define numComponents ((GEO_MAX_DOM_INDEX + 64 - 1) / 64)
-    uint64_t dom_bitmask[numComponents];
-    for (uint32_t i = 0; i < numComponents; ++i) dom_bitmask[i] = 0;
-#undef numComponents
-#endif
-
-    //__device__ const unsigned short
-    //*geoLayerToOMNumIndex=geoLayerToOMNumIndexPerStringSet + (
-    // uint(stringSet)*GEO_LAYER_STRINGSET_MAX_NUM_LAYERS) + lowLayerZ;
-    //  __local const unsigned short *geoLayerToOMNumIndex=geoLayerToOMNumIndexPerStringSetLocal +
-    //  (convert_uint(stringSet)*GEO_LAYER_STRINGSET_MAX_NUM_LAYERS) + lowLayerZ;
-    const unsigned short *geoLayerToOMNumIndex =
-        geoLayerToOMNumIndexPerStringSetLocal + (uint32_t(stringSet) * GEO_LAYER_STRINGSET_MAX_NUM_LAYERS) + lowLayerZ;
-
-    for (int layer_z = lowLayerZ; layer_z <= highLayerZ; ++layer_z, ++geoLayerToOMNumIndex) {
-        const unsigned short domNum = *geoLayerToOMNumIndex;
-        if (domNum == 0xFFFF) continue;  // empty layer for this string
-
-#ifndef STOP_PHOTONS_ON_DETECTION
-        // prevent strings from being checked twice
-        if (dom_bitmask[stringNum / 64] & (1 << uint64_t(domNum % 64))) continue;  // already check this string
-        dom_bitmask[stringNum / 64] |= (1 << uint64_t(domNum % 64));               // mark this string as checked
-#endif
-
-#ifndef CABLE_RADIUS
-        float domPosX, domPosY, domPosZ;
-        geometryGetDomPosition(stringNum, domNum, domPosX, domPosY, domPosZ);
-#else
-        float domPosX, domPosY, domPosZ, cableOrientation;
-        geometryGetDomPosition(stringNum, domNum, domPosX, domPosY, domPosZ, &cableOrientation);
-#endif
-
-        float urdot, discr;
-        {
-            const float4 drvec =
-                float4{domPosX - photonPosAndTime.x, domPosY - photonPosAndTime.y, domPosZ - photonPosAndTime.z, ZERO};
-            const float dr2 = dot(drvec, drvec);
-
-            urdot = dot(drvec, photonDirAndWlen);              // this assumes drvec.w==0
-            discr = sqr(urdot) - dr2 + OM_RADIUS * OM_RADIUS;  // (discr)^2
-        }
-
-#ifdef CABLE_RADIUS
-        // Check intersection with cable
-        float discr_cable;
-        {
-            // check intersection with infinite cylinder
-            const float4 drvec =
-                float4{domPosX + (OM_RADIUS + CABLE_RADIUS) * cos(cableOrientation) - photonPosAndTime.x,
-                       domPosY + (OM_RADIUS + CABLE_RADIUS) * sin(cableOrientation) - photonPosAndTime.y, ZERO, ZERO};
-            const float dr2 = dot(drvec, drvec);
-
-            const float h_norm = hypot(photonDirAndWlen.x, photonDirAndWlen.y);
-            const float urdot =
-                h_norm > ZERO ? dot(drvec, photonDirAndWlen / h_norm) : ZERO;  // this assumes drvec.w==0
-            discr_cable = sqr(urdot) - dr2 + CABLE_RADIUS * CABLE_RADIUS;      // (discr)^2
-        }
-
-        // no intersection, or blocked by cable
-        if (discr < ZERO || discr_cable >= ZERO) continue;
-#else
-        if (discr < ZERO) continue;  // no intersection with this DOM
-#endif
-
-#ifdef PANCAKE_FACTOR
-        discr = sqrtf(discr) / PANCAKE_FACTOR;
-#else
-        discr = sqrtf(discr);
-#endif
-
-        // by construction: smin1 < smin2
-
-        {
-            // distance from current point along the track to second intersection
-            const float smin2 = urdot + discr;
-
-            if (smin2 < ZERO) continue;  // implies smin1 < 0, so no intersection
-        }
-
-        // distance from current point along the track to first intersection
-        const float smin1 = urdot - discr;
-
-        // smin2 > 0 && smin1 < 0 means that there *is* an intersection, but we are
-        // starting inside the DOM. This allows photons starting inside a DOM to
-        // leave (necessary for flashers):
-        if (smin1 < ZERO) continue;
-
-            // if we get here, there *is* an intersection with the DOM (there are two
-            // actually, one for the ray enetering the DOM and one when it leaves
-            // again). We are interested in the one where enters the ray enters the
-            // DOM.
-
-            // check if distance to intersection <= thisStepLength; if not then no
-            // detection
-#ifdef STOP_PHOTONS_ON_DETECTION
-        if (smin1 < thisStepLength)
-#else
-        if (smin1 < thisStepLength)
-#endif
-        {
-#ifdef STOP_PHOTONS_ON_DETECTION
-            // record a hit (for later, the actual recording is done
-            // in checkForCollision().)
-            thisStepLength = smin1;  // limit step length
-            hitOnString = stringNum;
-            hitOnDom = domNum;
-            hitRecorded = true;
-            // continue searching, maybe we hit a closer OM..
-            // (in that case, no hit will be saved for this one)
-#else  // STOP_PHOTONS_ON_DETECTION
-       // save the hit right here
-
-            saveHit(photonPosAndTime, photonDirAndWlen, getWavelengthBias_dataShared,
-                    smin1,  // this is the limited thisStepLength
-                    inv_groupvel, photonTotalPathLength, photonNumScatters, distanceTraveledInAbsorptionLengths,
-                    photonStartPosAndTime, photonStartDirAndWlen, step, stringNum, domNum, hitIndex, maxHitIndex,
-                    outputPhotons
-#ifdef SAVE_PHOTON_HISTORY
-                    ,
-                    photonHistory, currentPhotonHistory
-#endif  // SAVE_PHOTON_HISTORY
-            );
-#endif  // STOP_PHOTONS_ON_DETECTION
-        }
-    }  // end for loop layer_z
-}
-
-__device__ __forceinline__ void checkForCollision_InCell(
-    const float photonDirLenXYSqr, const float4 &photonPosAndTime, const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-#ifdef STOP_PHOTONS_ON_DETECTION
-    float &thisStepLength, bool &hitRecorded, unsigned short &hitOnString, unsigned short &hitOnDom,
-#else
-    float thisStepLength, float inv_groupvel, float photonTotalPathLength, uint32_t photonNumScatters,
-    float distanceTraveledInAbsorptionLengths, const float4 &photonStartPosAndTime, const float4 &photonStartDirAndWlen,
-    const I3CLSimStepCuda &step, uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,  
-#ifdef SAVE_PHOTON_HISTORY
-    float4 *photonHistory, float4 *currentPhotonHistory,
-#endif
-#endif
-    const unsigned short *geoLayerToOMNumIndexPerStringSetLocal, unsigned short *this_geoCellIndex,
-    const float this_geoCellStartX, const float this_geoCellStartY, const float this_geoCellWidthX,
-    const float this_geoCellWidthY, const int this_geoCellNumX, const int this_geoCellNumY)
-{
-    int lowCellX = int((photonPosAndTime.x - this_geoCellStartX) / this_geoCellWidthX);
-    int lowCellY = int((photonPosAndTime.y - this_geoCellStartY) / this_geoCellWidthY);
-
-#ifdef STOP_PHOTONS_ON_DETECTION
-    int highCellX =
-        int((photonPosAndTime.x + photonDirAndWlen.x * (thisStepLength)-this_geoCellStartX) / this_geoCellWidthX);
-    int highCellY =
-        int((photonPosAndTime.y + photonDirAndWlen.y * (thisStepLength)-this_geoCellStartY) / this_geoCellWidthY);
-#else
-    int highCellX =
-        int((photonPosAndTime.x + photonDirAndWlen.x * thisStepLength - this_geoCellStartX) / this_geoCellWidthX);
-    int highCellY =
-        int((photonPosAndTime.y + photonDirAndWlen.y * thisStepLength - this_geoCellStartY) / this_geoCellWidthY);
-#endif
-
-    if (highCellX < lowCellX) {
-        int tmp = lowCellX;
-        lowCellX = highCellX;
-        highCellX = tmp;
-    }
-    if (highCellY < lowCellY) {
-        int tmp = lowCellY;
-        lowCellY = highCellY;
-        highCellY = tmp;
-    }
-
-    lowCellX = min(max(lowCellX, 0), this_geoCellNumX - 1);
-    lowCellY = min(max(lowCellY, 0), this_geoCellNumY - 1);
-    highCellX = min(max(highCellX, 0), this_geoCellNumX - 1);
-    highCellY = min(max(highCellY, 0), this_geoCellNumY - 1);
-
-#ifndef STOP_PHOTONS_ON_DETECTION
-// the number of 64bit integers needed to store bits for all strings
-#define numComponents ((NUM_STRINGS + 64 - 1) / 64)
-    uint64_t string_bitmask[numComponents];
-    for (uint32_t i = 0; i < numComponents; ++i) string_bitmask[i] = 0;
-#undef numComponents
-#endif
-
-    for (int cell_y = lowCellY; cell_y <= highCellY; ++cell_y) {
-        for (int cell_x = lowCellX; cell_x <= highCellX; ++cell_x) {
-            const unsigned short stringNum = this_geoCellIndex[cell_y * this_geoCellNumX + cell_x];
-            if (stringNum == 0xFFFF) continue;  // empty cell
-
-#ifndef STOP_PHOTONS_ON_DETECTION
-            // prevent strings from being checked twice
-            if (string_bitmask[stringNum / 64] & (1 << uint64_t(stringNum % 64)))
-                continue;                                                       // already check this string
-            string_bitmask[stringNum / 64] |= (1 << uint64_t(stringNum % 64));  // mark this string as checked
-#endif
-
-            checkForCollision_OnString(stringNum, photonDirLenXYSqr, photonPosAndTime, photonDirAndWlen, getWavelengthBias_dataShared,
-#ifdef STOP_PHOTONS_ON_DETECTION
-                                       thisStepLength, hitRecorded, hitOnString, hitOnDom,
-#else  // STOP_PHOTONS_ON_DETECTION
-                                       thisStepLength, inv_groupvel, photonTotalPathLength, photonNumScatters,
-                                       distanceTraveledInAbsorptionLengths, photonStartPosAndTime,
-                                       photonStartDirAndWlen, step, hitIndex, maxHitIndex, outputPhotons
-#ifdef SAVE_PHOTON_HISTORY
-                                       photonHistory, currentPhotonHistory,
-#endif  // SAVE_PHOTON_HISTORY
-#endif  // STOP_PHOTONS_ON_DETECTION
-                                       geoLayerToOMNumIndexPerStringSetLocal);
-        }
-    }
-
-    // onecellsyncthreads
-}
-
-__device__ __forceinline__ void checkForCollision_InCells(const float photonDirLenXYSqr, const float4 &photonPosAndTime,
-                                                          const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-#ifdef STOP_PHOTONS_ON_DETECTION
-                                                          float &thisStepLength, bool &hitRecorded,
-                                                          unsigned short &hitOnString, unsigned short &hitOnDom,
-#else
-                                                          float thisStepLength, float inv_groupvel,
-                                                          float photonTotalPathLength, uint32_t photonNumScatters,
-                                                          float distanceTraveledInAbsorptionLengths,
-                                                          const float4 &photonStartPosAndTime,
-                                                          const float4 &photonStartDirAndWlen,
-                                                          const I3CLSimStepCuda &step, uint32_t *hitIndex,
-                                                          uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons, 
-#ifdef SAVE_PHOTON_HISTORY
-                                                          float4 *photonHistory, float4 *currentPhotonHistory,
-#endif
-#endif
-                                                          const unsigned short *geoLayerToOMNumIndexPerStringSetLocal)
-{
-    // using macros and hard-coded names is
-    // not really the best thing to do here..
-    // replace with a loop sometime.
-
-#ifdef STOP_PHOTONS_ON_DETECTION
-#define DO_CHECK(subdetectorNum)                                                                                 \
-    checkForCollision_InCell(photonDirLenXYSqr, photonPosAndTime, photonDirAndWlen, getWavelengthBias_dataShared, thisStepLength, hitRecorded, \
-                             hitOnString, hitOnDom, geoLayerToOMNumIndexPerStringSetLocal,                       \
-                                                                                                                 \
-                            geoCellIndex_##subdetectorNum, GEO_CELL_START_X_##subdetectorNum,  \
-                             GEO_CELL_START_Y_##subdetectorNum, GEO_CELL_WIDTH_X_##subdetectorNum,               \
-                             GEO_CELL_WIDTH_Y_##subdetectorNum, GEO_CELL_NUM_X_##subdetectorNum,                 \
-                             GEO_CELL_NUM_Y_##subdetectorNum);
-#else  // STOP_PHOTONS_ON_DETECTION
-#ifdef SAVE_PHOTON_HISTORY
-#define DO_CHECK(subdetectorNum)                                                                                       \
-    checkForCollision_InCell(photonDirLenXYSqr, photonPosAndTime, photonDirAndWlen,getWavelengthBias_dataShared, thisStepLength, inv_groupvel,      \
-                             photonTotalPathLength, photonNumScatters, distanceTraveledInAbsorptionLengths,            \
-                             photonStartPosAndTime, photonStartDirAndWlen, step, hitIndex, maxHitIndex, outputPhotons \
-                             photonHistory, currentPhotonHistory, geoLayerToOMNumIndexPerStringSetLocal,               \
-                                                                                                                       \
-                             geoCellIndex_##subdetectorNum, GEO_CELL_START_X_##subdetectorNum,                         \
-                             GEO_CELL_START_Y_##subdetectorNum, GEO_CELL_WIDTH_X_##subdetectorNum,                     \
-                             GEO_CELL_WIDTH_Y_##subdetectorNum, GEO_CELL_NUM_X_##subdetectorNum,                       \
-                             GEO_CELL_NUM_Y_##subdetectorNum);
-#else  // SAVE_PHOTON_HISTORY
-#define DO_CHECK(subdetectorNum)                                                                                    \
-    checkForCollision_InCell(                                                                                       \
-        photonDirLenXYSqr, photonPosAndTime, photonDirAndWlen,getWavelengthBias_dataShared, thisStepLength, inv_groupvel, photonTotalPathLength, \
-        photonNumScatters, distanceTraveledInAbsorptionLengths, photonStartPosAndTime, photonStartDirAndWlen, step, \
-        hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal,                                \
-                                                                                                                    \
-        geoCellIndex_##subdetectorNum, GEO_CELL_START_X_##subdetectorNum, GEO_CELL_START_Y_##subdetectorNum,        \
-        GEO_CELL_WIDTH_X_##subdetectorNum, GEO_CELL_WIDTH_Y_##subdetectorNum, GEO_CELL_NUM_X_##subdetectorNum,      \
-        GEO_CELL_NUM_Y_##subdetectorNum);
-#endif  // SAVE_PHOTON_HISTORY
-#endif  // STOP_PHOTONS_ON_DETECTION
-
-    // argh..
-#if GEO_CELL_NUM_SUBDETECTORS > 0
-    DO_CHECK(0);
-#endif
-
-#if GEO_CELL_NUM_SUBDETECTORS > 1
-    DO_CHECK(1);
-#endif
-
-#if GEO_CELL_NUM_SUBDETECTORS > 2
-    DO_CHECK(2);
-#endif
-
-#if GEO_CELL_NUM_SUBDETECTORS > 3
-    DO_CHECK(3);
-#endif
-
-#if GEO_CELL_NUM_SUBDETECTORS > 4
-    DO_CHECK(4);
-#endif
-
-#if GEO_CELL_NUM_SUBDETECTORS > 5
-    DO_CHECK(5);
-#endif
-
-#if GEO_CELL_NUM_SUBDETECTORS > 6
-    DO_CHECK(6);
-#endif
-
-#if GEO_CELL_NUM_SUBDETECTORS > 7
-    DO_CHECK(7);
-#endif
-
-#if GEO_CELL_NUM_SUBDETECTORS > 8
-    DO_CHECK(8);
-#endif
-
-#if GEO_CELL_NUM_SUBDETECTORS > 9
-#error more than 9 subdetectors are currently not supported.
-#endif
-
-#undef DO_CHECK
-}
-
-__device__ __forceinline__ bool checkForCollision(const I3CLPhoton& photon, const I3CLInitialPhoton& photonInitials,
-                                                  const I3CLSimStepCuda &step, float &thisStepLength,
-                                                  uint32_t *hitIndex, uint32_t maxHitIndex,
-                                                  I3CLSimPhotonCuda *outputPhotons,  
-                                                  const unsigned short *geoLayerToOMNumIndexPerStringSetLocal, 
-                                                  const float* getWavelengthBias_dataShared)
-{
-    // check for collisions
-    const float photonDirLenXYSqr = sqr(photon.dirAndWlen.x) + sqr(photon.dirAndWlen.y);
-    if (photonDirLenXYSqr <= ZERO) return false;
-
-
-    bool hitRecorded = false;
-    unsigned short hitOnString;
-    unsigned short hitOnDom;
-
-    float distanceTraveledInAbsorptionLengths = photonInitials.absLength - photon.absLength;
-    checkForCollision_InCells(photonDirLenXYSqr, photon.posAndTime, photon.dirAndWlen, getWavelengthBias_dataShared,
-                              thisStepLength, hitRecorded, hitOnString, hitOnDom,
-                              geoLayerToOMNumIndexPerStringSetLocal);
-
-    // In case photons are stopped on detection
-    // (i.e. absorbed by the DOM), we need to record
-    // them here (after all possible DOM intersections
-    // have been checked).
-
-    if (hitRecorded) {
-        saveHit(photon.posAndTime, photon.dirAndWlen, getWavelengthBias_dataShared, thisStepLength, photon.invGroupvel, photon.totalPathLength,
-                photon.numScatters, distanceTraveledInAbsorptionLengths, photonInitials.posAndTime, photonInitials.dirAndWlen,
-                step, hitOnString, hitOnDom, hitIndex, maxHitIndex, outputPhotons);
-    }
-    return hitRecorded;
-}
-
-#ifdef SAVE_ALL_PHOTONS
-#ifdef STOP_PHOTONS_ON_DETECTION
-#error The SAVE_ALL_PHOTONS and STOP_PHOTONS_ON_DETECTION options cannot be used at the same time.
-#endif
-#endif
-
-#ifdef USE_FABS_WORKAROUND
-__device__ __forceinline__ float my_fabs(const float a) { return (a < ZERO) ? (-a) : (a); }
-#else
-__device__ __forceinline__ float my_fabs(const float a) { return fabs(a); }
-#endif
-__device__ __forceinline__ float sqr(const float a) { return a * a; }
-
-__device__ __forceinline__ int findLayerForGivenZPos(float posZ)
-{
-    return int((posZ - (float)MEDIUM_LAYER_BOTTOM_POS) / (float)MEDIUM_LAYER_THICKNESS);
-}
-
-__device__ __forceinline__ float mediumLayerBoundary(int layer)
-{
-    return (float(layer) * ((float)MEDIUM_LAYER_THICKNESS)) + (float)MEDIUM_LAYER_BOTTOM_POS;
-}
-
-__device__ __forceinline__ void scatterDirectionByAngle(float cosa, float sina, float4 &direction, float randomNumber)
-{
-    // randomize direction of scattering (rotation around old direction axis)
-    const float b = 2.0f * PI * randomNumber;
-
-    const float cosb = cosf(b);
-    const float sinb = sinf(b);
-
-    // Rotate new direction into absolute frame of reference
-    const float sinth = sqrtf(max(ZERO, ONE - (direction).z * (direction).z));
-
-    if (sinth > 0.f) {  // Current direction not vertical, so rotate
-        const float4 oldDir = direction;
-
-        (direction).x = oldDir.x * cosa - ((oldDir.y * cosb + oldDir.z * oldDir.x * sinb) * sina) / sinth;
-        (direction).y = oldDir.y * cosa + ((oldDir.x * cosb - oldDir.z * oldDir.y * sinb) * sina) / sinth;
-        (direction).z = oldDir.z * cosa + sina * sinb * sinth;
-    } else {  // Current direction is vertical, so this is trivial
-        (direction).x = sina * cosb;
-        (direction).y = sina * sinb;
-        (direction).z = cosa * sign((direction).z);
-    }
-
+#include "settings.cuh"
+#include "dataStructCuda.cuh"
+#include "utils.cuh"
+#include "rng.cuh"
+#include "domGeoData.cuh"
+#include "wlenBiasSource.cuh"
+#include "zOffsetHandling.cuh"
+#include "wlenGeneration.cuh"
+// ------------------
+
+// calculates the step direction
+__device__ __forceinline__ float3 calculateStepDir(const I3CLSimStepCuda& step);
+
+/**
+ * @brief Creates a single photon to be propagated
+ * @param step the step to create the photon from
+ * @param stepDir step direction to create the photon ( calculated using calculateStepDir() )
+ * @param wlenLut look up table to generate wavelength from random numbers
+ * @param rng the rng to use for generating this photon, 4 rng values are computed
+ */
+__device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda& step, const float3& stepDir, const float* wlenLut, RngType& rng);
+
+/**
+ * @brief  propgates a single photon once
+ * @param ph the photon to propagate
+ * @param distancePropagated the distance the photon was propagated during this iteration
+ * @param rng the rng to use for generating this photon, 1 rng values is computed
+ * @param scatteringLength scattering length look up table, which can be in global or shared memory
+ * @param absorptionDust dust absorption look up table, which can be in global or shared memory
+ * @param absorptionTauDelta absorption Tau-Delta look up table, which can be in global or shared memory
+ * @param zOffsetLut lut containing zOffset values 
+ * @return true if the photon was absorbed
+ */
+__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RngType rng, const float* scatteringLength, const loat* absorptionDust, const float* absorptionTauDelta, const float* zOffsetLut);
+
+/**
+ * @brief moves a photon along its track by the propagated distance
+ * @param ph the photon to move
+ * @param distancePropagated the distance the photon was propagated this iteration
+ */
+__device__ __forceinline__  void updatePhotonTrack(I3CLPhoton& ph, float distancePropagated);
+
+/**
+ * @brief scatters a photon
+ * @param ph the photon to scatter
+ * @param rng the random number generator 
+ */
+__device__ __forceinline__  void scatterPhoton(I3CLPhoton& ph, RngType& rng);
+
+// helper functions and subfunctions
+// --------------------------------------------------------------------------------------
+namespace detail {
+    // helper functions to compute wavelength dependent properties
+    // -------------------
+
+    // for second argument "x" pass wlen*1e6f 
+    __device__ __forceinline__ float getPhaseRefIndex(float wlen, float x)
     {
-        const float recip_length = rsqrtf(sqr((direction).x) + sqr((direction).y) + sqr((direction).z));
+        constexpr float n0 = 1.5574900000e+00f;
+        constexpr float n1 = -1.5798800000e+00f;
+        constexpr float n2 = 3.9999300000e+00f;
+        constexpr float n3 = -4.6827100000e+00f;
+        constexpr float n4 = 2.0935400000e+00f;
 
-        (direction).x *= recip_length;
-        (direction).y *= recip_length;
-        (direction).z *= recip_length;
+        const float np = n0 + x * (n1 + x * (n2 + x * (n3 + x * n4)));
+        return np;
     }
 
-    // printf("direction after=(%f,%f,%f) len^2=%f\n",
-    //       (*direction).x, (*direction).y, (*direction).z,
-    //       (*direction).x*(*direction).x + (*direction).y*(*direction).y +
-    //       (*direction).z*(*direction).z);
-}
-
-__device__ __forceinline__ void createPhotonFromTrack(const I3CLSimStepCuda &step, const float4 &stepDir, RNG_ARGS,
-                                                      float4 &photonPosAndTime, float4 &photonDirAndWlen,
-                                                      float* _generateWavelength_0distYValuesShared, float* _generateWavelength_0distYCumulativeValuesShared)
-{
-    float shiftMultiplied = step.dirAndLengthAndBeta.z * RNG_CALL_UNIFORM_CO;
-    float inverseParticleSpeed = 1.f / (speedOfLight * step.dirAndLengthAndBeta.w);
-
-    // move along the step direction
-    photonPosAndTime = float4{
-        step.posAndTime.x + stepDir.x * shiftMultiplied, step.posAndTime.y + stepDir.y * shiftMultiplied,
-        step.posAndTime.z + stepDir.z * shiftMultiplied, step.posAndTime.w + inverseParticleSpeed * shiftMultiplied};
-
-    // determine the photon layer (clamp if necessary)
-    unsigned int layer = min(max(findLayerForGivenZPos((photonPosAndTime).z), 0), MEDIUM_LAYERS - 1);
-
-#ifndef NO_FLASHER
-    if (step.sourceType == 0) {
-#endif
-        // sourceType==0 is always Cherenkov light with the correct angle w.r.t. the
-        // particle/step
-
-        // our photon still needs a wavelength. create one!
-        const float wavelength = generateWavelength_0(RNG_ARGS_TO_CALL, _generateWavelength_0distYValuesShared,   _generateWavelength_0distYCumulativeValuesShared);
-
-        const float cosCherenkov = min(
-            ONE, 1.f / (step.dirAndLengthAndBeta.w * getPhaseRefIndex(layer, wavelength)));  // cos theta = 1/(beta*n)
-        const float sinCherenkov = sqrtf(ONE - cosCherenkov * cosCherenkov);
-        // determine the photon direction
-
-        // start with the track direction
-        (photonDirAndWlen).x = stepDir.x;
-        (photonDirAndWlen).y = stepDir.y;
-        (photonDirAndWlen).z = stepDir.z;
-        (photonDirAndWlen).w = wavelength;
-
-        // and now rotate to cherenkov emission direction
-        scatterDirectionByAngle(cosCherenkov, sinCherenkov, photonDirAndWlen, RNG_CALL_UNIFORM_CO);
-
-#ifndef NO_FLASHER
-    } else {
-        // steps >= 1 are flasher emissions, they do not need cherenkov rotation
-
-        const float wavelength = generateWavelength(uint(step.sourceType), RNG_ARGS_TO_CALL, _generateWavelength_0distYValuesShared,   _generateWavelength_0distYCumulativeValuesShared);
-
-        // use the step direction as the photon direction
-        (photonDirAndWlen).x = stepDir.x;
-        (photonDirAndWlen).y = stepDir.y;
-        (photonDirAndWlen).z = stepDir.z;
-        (photonDirAndWlen).w = wavelength;
+    // use this if "x" is not known already
+    __device__ __forceinline__ float getPhaseRefIndex(float wlen)
+    {
+        return getPhaseRefIndex(wlen, wlen*1e6f);
     }
-#endif
-}
 
-__device__ __forceinline__ float2 sphDirFromCar(float4 carDir)
-{
-    // Calculate Spherical coordinates from Cartesian
-    const float r_inv = rsqrtf(carDir.x * carDir.x + carDir.y * carDir.y + carDir.z * carDir.z);
+    __device__ __forceinline__ float getDispersion(float wlen)
+    {
+        constexpr float n1 = -1.5798800000e+00f;
+        constexpr float n2 = 3.9999300000e+00f;
+        constexpr float n3 = -4.6827100000e+00f;
+        constexpr float n4 = 2.0935400000e+00f;
 
-    float theta = 0.f;
-    if ((my_fabs(carDir.z * r_inv)) <= 1.f) {
-        theta = acos(carDir.z * r_inv);
-    } else {
-        if (carDir.z < 0.f) theta = CUDART_PI_F;
+        const float x = wlen * 1e6f;
+        const float dnp = (n1 + x * (2.f * n2 + x * (3.f * n3 + x * 4.f * n4))) * 1e6f;
+
+        return dnp;
     }
-    if (theta < 0.f) theta += 2.f * CUDART_PI_F;
 
-    float phi = atan2(carDir.y, carDir.x);
-    if (phi < 0.f) phi += 2.f * CUDART_PI_F;
+    // for the second argument, pass the result of getPhaseRefIndex() to avoid recalculation,
+    // for "x" pass wlen*1e6f
+    __device__ __forceinline__ float getGroupRefIndex(float wlen, float phaseRefIndex, float x)
+    {
+        constexpr float g0 = 1.2271060000e+00f;
+        constexpr float g1 = -9.5464800000e-01f;
+        constexpr float g2 = 1.4256800000e+00f;
+        constexpr float g3 = -7.1183200000e-01f;
+        constexpr float g4 = 0.f;
 
-    return float2{theta, phi};
-}
+        const float np_corr = g0 + x * (g1 + x * (g2 + x * (g3 + x * g4)));
 
-// Record a photon on a DOM
-__device__ __forceinline__ void saveHit(const float4 &photonPosAndTime, const float4 &photonDirAndWlen, const float* getWavelengthBias_dataShared,
-                                        const float thisStepLength, float inv_groupvel, float photonTotalPathLength,
-                                        uint32_t photonNumScatters, float distanceTraveledInAbsorptionLengths,
-                                        const float4 &photonStartPosAndTime, const float4 &photonStartDirAndWlen,
-                                        const I3CLSimStepCuda &step, unsigned short hitOnString,
-                                        unsigned short hitOnDom,
-                                        uint32_t *hitIndex,  // shared
-                                        uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons                                 
-#ifdef SAVE_PHOTON_HISTORY
-                                        ,
-                                        float4 *photonHistory, float4 *currentPhotonHistory
-#endif
-)
-{
-    // PRINTL
-    uint32_t myIndex = atomicAdd(&hitIndex[0], 1);
+        return phaseRefIndex * np_corr;
+    }
 
-    if (myIndex < maxHitIndex) {
-        // Emit photon position relative to the hit DOM
-#ifndef CABLE_RADIUS
-        float domPosX, domPosY, domPosZ;
-        geometryGetDomPosition(hitOnString, hitOnDom, domPosX, domPosY, domPosZ);
-#else
-        float domPosX, domPosY, domPosZ, cableOrientation;
-        geometryGetDomPosition(hitOnString, hitOnDom, domPosX, domPosY, domPosZ, &cableOrientation);
-#endif
-#ifdef PANCAKE_FACTOR
-        {
-            // undo pancaking by scaling the distance of closest approach to the
-            // DOM center
-            float px = photonPosAndTime.x - domPosX;
-            float py = photonPosAndTime.y - domPosY;
-            float pz = photonPosAndTime.z - domPosZ;
-            float parallel = px * photonDirAndWlen.x + py * photonDirAndWlen.y + pz * photonDirAndWlen.z;
-            float nx = px - parallel * photonDirAndWlen.x;
-            float ny = py - parallel * photonDirAndWlen.y;
-            float nz = pz - parallel * photonDirAndWlen.z;
-            domPosX += ((PANCAKE_FACTOR - ONE) / PANCAKE_FACTOR) * nx;
-            domPosY += ((PANCAKE_FACTOR - ONE) / PANCAKE_FACTOR) * ny;
-            domPosZ += ((PANCAKE_FACTOR - ONE) / PANCAKE_FACTOR) * nz;
+    // use if phaseRefIndex and x are not known already
+    __device__ __forceinline__ float getGroupRefIndex(float wlen)
+    {
+        const float x = wlen*1e6f;
+        return getGroupRefIndex(wlen,getPhaseRefIndex(wlen,x),x);
+    }
+
+    // scattering helper functions
+    // -------------------
+
+    // scattering by rotating the direction vector by a random amount
+    __device__ __forceinline__ void scatterDirectionByAngle(float cosa, float sina, float3 &direction, float randomNumber)
+    {
+        // randomize direction of scattering (rotation around old direction axis)
+        const float b = 2.0f * PI * randomNumber;
+
+        // Rotate new direction into absolute frame of reference
+        const float cosb = cosf(b);
+        const float sinb = sinf(b);
+        const float sinth = sqrtf(max(0.0f, 1.0f - sqr(direction.z)));
+
+        if (sinth > 0.f) {  // Current direction not vertical, so rotate
+            const float3 oldDir = direction;
+            direction.x = oldDir.x * cosa - ((oldDir.y * cosb + oldDir.z * oldDir.x * sinb) * sina) / sinth;
+            direction.y = oldDir.y * cosa + ((oldDir.x * cosb - oldDir.z * oldDir.y * sinb) * sina) / sinth;
+            direction.z = oldDir.z * cosa + sina * sinb * sinth;
+        } else {  // Current direction is vertical, so this is trivial
+            direction.x = sina * cosb;
+            direction.y = sina * sinb;
+            direction.z = cosa * copysignf(1.0f, direction.z);
         }
-#endif
-        I3CLSimPhotonCuda outphoton;
-        outphoton.posAndTime = float4{photonPosAndTime.x + thisStepLength * photonDirAndWlen.x - domPosX,
-                                      photonPosAndTime.y + thisStepLength * photonDirAndWlen.y - domPosY,
-                                      photonPosAndTime.z + thisStepLength * photonDirAndWlen.z - domPosZ,
-                                      photonPosAndTime.w + thisStepLength * inv_groupvel};
 
-        outphoton.dir = sphDirFromCar(photonDirAndWlen);
-        outphoton.wavelength = photonDirAndWlen.w;
+        direction = normalize(direction);
+    }
 
-        outphoton.cherenkovDist = photonTotalPathLength + thisStepLength;
-        outphoton.numScatters = photonNumScatters;
-        outphoton.weight = step.weight / getWavelengthBias(photonDirAndWlen.w, getWavelengthBias_dataShared);
-        outphoton.identifier = step.identifier;
+    // perform pre-scatter transformation on photon direction
+    __device__ __forceinline__ void transformDirectionPreScatter(float3& dir)
+    {
+        dir = float3{(9.9245941798e-01f * dir.x) + (5.5392208739e-02f * dir.y) + (0.f * dir.z),
+                    (5.5392208739e-02f * dir.x) + (9.7292513613e-01f * dir.y) + (0.f * dir.z),
+                    (0.f * dir.x) + (0.f * dir.y) + (1.0389389999e+00f * dir.z)};
+        dir = normalize(dir);
+    }
 
-        outphoton.stringID = short(hitOnString);
-        outphoton.omID = ushort(hitOnDom);
+    // perform post-scatter transformation on photon direction
+    __device__ __forceinline__ void transformDirectionPostScatter(float3& dir)
+    {
+        dir = float4{(1.0108098679e+00f * dir.x) + (-5.7549125949e-02f * dir.y) + (0.f * dir.z),
+                    (-5.7549125949e-02f * dir.x) + (1.0311047952e+00f * dir.y) + (0.f * dir.z),
+                    (0.f * dir.x) + (0.f * dir.y) + (9.6252041756e-01f * dir.z)};
 
-        outphoton.startPosAndTime = photonStartPosAndTime;
+            dir = normalize(dir);
+    }
 
-        outphoton.startDir = sphDirFromCar(photonStartDirAndWlen);
+    // compute first variant of the scattering cosine
+    __device__ __forceinline__ float makeScatteringCosAngle_mix1(float rrrr__)
+    {
+        // const float g = 9.0000000000e-01f;
+        // const float beta = (1.f-g)/(1.f+g);
+        const float beta = 5.2631578947e-02f;
 
-        outphoton.groupVelocity = 1.f / (inv_groupvel);
+        return clamp(2.f * powf((rrrr__), beta) - 1.f, -1.f, 1.f);
+    }
 
-        outphoton.distInAbsLens = distanceTraveledInAbsorptionLengths;
+    // compute second variant of the scattering cosine
+    __device__ __forceinline__ float makeScatteringCosAngle_mix2(float rrrr__)
+    {
+        const float g = 9.0000000000e-01f;
+        const float g2 = 8.1000000000e-01f;
 
-        outputPhotons[myIndex] = outphoton;
+        // a random number [-1;+1]
+        const float s = 2.f * (rrrr__)-1.f;
 
-#ifdef SAVE_PHOTON_HISTORY
-        for (uint32_t i = 0; i < NUM_PHOTONS_IN_HISTORY; ++i) {
-            photonHistory[myIndex * NUM_PHOTONS_IN_HISTORY + i] = currentPhotonHistory[i];
+        const float ii = ((1.f - g2) / (1.f + g * s));
+        return clamp((1.f + g2 - ii * ii) / (2.f * g), -1.f, 1.f);
+    }
+
+    // compute the scattering cosine by selecting between variant 1 and 2
+    __device__ __forceinline__ float makeScatteringCosAngle(float randomNumberCO)
+    {
+        if (randomNumberCO < 3.5000000000e-01f) {
+            return makeScatteringCosAngle_mix1(randomNumberCO / 3.5000000000e-01f);
+        } else {
+            return makeScatteringCosAngle_mix2((1.f - randomNumberCO) / 6.5000000000e-01f);
         }
-#endif
+    }
+
+    // propagation helper funtions
+    // -------------------
+
+    // compute the absorbtion length correction factor
+    __device__ __forceinline__ float getDirectionalAbsLenCorrFactor(float3 vec)
+    {
+        const float3 l = float3{8.5830136492e-01f, 1.0793942455e+00f, 1.0793942455e+00f};
+        const float3 rl = float3{1.1650919373e+00f, 9.2644555421e-01f, 9.2644555421e-01f};
+
+        const float3 n = float3{(-6.4278760969e-01f * vec.x) + (7.6604444312e-01f * vec.y),
+                                (-7.6604444312e-01f * vec.x) + (-6.4278760969e-01f * vec.y), vec.z};
+        const float3 s = n * n;
+
+        const float nB = dot(s, rl);
+        const float An = dot(s, l);
+
+        return 2.f / ((3.0179830457e+00f - nB) * An);
+    }
+
+    // compute scattering length in current layer from lut values
+    __device__ float __forceinline__ getScatteringLength(unsigned int layer, float wlen, const float* scatteringLengthLut)
+    {
+        const float alpha = 8.9860850573e-01f;
+        return 1.f / (scatteringLengthLut[layer] * powf(wlen * 2.5000000000e+06f, -alpha));
+    }
+
+    // compute absorption length in current layer from lut values
+    __device__ __forceinline__ float getAbsorptionLength(unsigned int layer, float wlen, const float* absorptionADustLut, const float* absorptionDeltaTauLut)
+    {
+        const float kappa = 1.0841068029e+00f;
+        const float A = 6.9540903320e+03f;
+        const float B = 6.6177543945e+03f;
+        const float D = 6.6208071540e+02f;
+        const float E = 0.f;
+
+        const float x = wlen / 1e-9f;
+
+        return 1.f / ((D * absorptionADustLut[layer] + E) * powf(x, -kappa) +
+                    A * expf(-B / x) * (1.f + 0.01f * absorptionDeltaTauLut[layer]));
     }
 }
 
-#endif  // PROPAGATIONKERNELFUNCTIUONS_CUH
+// function definitions for the major functions
+// --------------------------------------------------------------------------------------
+
+__device__ __forceinline__ float3 calculateStepDir(const I3CLSimStepCuda& step)
+{
+        const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)
+        return float3{rho * cosf(step.dirAndLengthAndBeta.y),  // rho*cos(phi)
+                         rho * sinf(step.dirAndLengthAndBeta.y),  // rho*sin(phi)
+                         cosf(step.dirAndLengthAndBeta.x)};        // cos(phi)
+}
+
+__device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda& step, const float3& stepDir, const float* wlenLut, RngType& rng)
+{
+    // float4 randomNumbers = float4{0.12454854,0.99568,0.4877858,0.24784564};
+    float4 randomNumbers = {rng.randUniformFloatCO(), rng.randUniformFloatCO(), rng.randUniformFloatCO(), rng.randUniformFloatOC()};
+
+    I3CLInitialPhoton ph;
+
+    // move along the step direction a random amount
+    const float shiftMultiplied = step.dirAndLengthAndBeta.z * randomNumbers.x;
+    const float inverseParticleSpeed = 1.f / (C_LIGHT * step.dirAndLengthAndBeta.w);
+    ph.pos = float3{step.posAndTime.x + stepDir.x * shiftMultiplied, step.posAndTime.y + stepDir.y * shiftMultiplied,
+                    step.posAndTime.z + stepDir.z * shiftMultiplied};
+    ph.time = step.posAndTime.w + inverseParticleSpeed * shiftMultiplied;
+
+    // generate a wavelength
+    ph.wlen = getWlen(randomNumbers.y,wlenLut);
+
+    // calculate phase and group ref index
+    const float x = ph.wlen * 1e6;
+    const float phaseRefIndex = getPhaseRefIndex(ph.wlen,x);
+    const float groupRefIndex = getGroupRefIndex(ph.wlen,phaseRefIndex,x);
+
+    const float cosCherenkov = min( 1.0f, 1.0f / (step.dirAndLengthAndBeta.w * phaseRefIndex));  // cos theta = 1/(beta*n)
+    const float sinCherenkov = sqrtf(1.0f - sqr(cosCherenkov));
+    
+    // determine the photon direction
+    // start with the track direction and rotate to cherenkov emission direction
+    ph.dir = stepDir;
+    scatterDirectionByAngle(cosCherenkov, sinCherenkov, ph.dir, randomNumbers.z);
+    
+    // calc inverse group velocity and set an initial absorption length
+    ph.invGroupvel = groupRefIndex * RECIP_C_LIGHT; // refIndex * (1/c_light) <=> 1 / (c_light / refIndex)
+    ph.absLength = -logf(randomNumbers.w);
+
+    return ph;
+}
+
+__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RngType rng, const float* scatteringLength, const loat* absorptionDust, const float* absorptionTauDelta, const float* zOffsetLut)
+{ 
+    const float effective_z = ph.pos.z - getZOffset(ph.pos, zOffsetLut);
+    const int currentPhotonLayer = min(max(findLayerForGivenZPos(effective_z), 0), MEDIUM_LAYERS - 1);
+    const float photon_dz = ph.dir.z;
+
+    // add a correction factor to the number of absorption lengths
+    // abs_lens_left before the photon is absorbed. This factor will be
+    // taken out after this propagation step. Usually the factor is 1
+    // and thus has no effect, but it is used in a direction-dependent
+    // way for our model of ice anisotropy.
+    const float abs_len_correction_factor = getDirectionalAbsLenCorrFactor(ph.dir);
+    ph.absLength *= abs_len_correction_factor;
+
+    // the "next" medium boundary (either top or bottom, depending on
+    // step direction)
+    float mediumBoundary = (photon_dz < 0.0f)
+                                ? (mediumLayerBoundary(currentPhotonLayer))
+                                : (mediumLayerBoundary(currentPhotonLayer) + (float)MEDIUM_LAYER_THICKNESS);
+
+     // track this thing to the next scattering point
+    float scaStepLeft = -logf(rng.randUniformFloatOC());
+
+    float currentScaLen = getScatteringLength(currentPhotonLayer, ph.wlen, scatteringLength);
+    float currentAbsLen = getAbsorptionLength(currentPhotonLayer, ph.wlen, absorptionDust, absorptionTauDelta);
+
+    float ais = (photon_dz * scaStepLeft - ((mediumBoundary - effective_z)) / currentScaLen) *
+                (1.0f / (float)MEDIUM_LAYER_THICKNESS);
+    float aia = (photon_dz * ph.absLength - ((mediumBoundary - effective_z)) / currentAbsLen) *
+                (1.0f / (float)MEDIUM_LAYER_THICKNESS);
+
+    
+    // // propagate through layers
+    int j = currentPhotonLayer;
+    if (photon_dz < 0) {
+        for (; (j > 0) && (ais < 0.0f) && (aia < 0.0f);
+                mediumBoundary -= (float)MEDIUM_LAYER_THICKNESS,
+                currentScaLen = getScatteringLength(j, ph.wlen, scatteringLength),
+                currentAbsLen = getAbsorptionLength(j, ph.wlen, absorptionDust, absorptionTauDelta), 
+                ais += 1.f / (currentScaLen),
+                aia += 1.f / (currentAbsLen))
+            --j;
+    } else {
+        for (; (j < MEDIUM_LAYERS - 1) && (ais > 0.0f) && (aia > 0.0f);
+                mediumBoundary += (float)MEDIUM_LAYER_THICKNESS,
+                currentScaLen = getScatteringLength(j, ph.wlen, scatteringLength),
+                currentAbsLen = getAbsorptionLength(j, ph.wlen, absorptionDust, absorptionTauDelta), 
+                ais -= 1.f / (currentScaLen),
+                aia -= 1.f / (currentAbsLen))
+            ++j;
+    }
+
+    float distanceToAbsorption;
+    if ((currentPhotonLayer == j) || ((fabs(photon_dz)) < EPSILON)) {
+        distancePropagated = scaStepLeft * currentScaLen;
+        distanceToAbsorption = ph.absLength * currentAbsLen;
+    } else {
+        const float recip_photon_dz = 1.f / (photon_dz);
+        distancePropagated =
+            (ais * ((float)MEDIUM_LAYER_THICKNESS) * currentScaLen + mediumBoundary - effective_z) *
+            recip_photon_dz;
+        distanceToAbsorption =
+            (aia * ((float)MEDIUM_LAYER_THICKNESS) * currentAbsLen + mediumBoundary - effective_z) *
+            recip_photon_dz;
+    }
+
+    // get overburden for distance i.e. check if photon is absorbed
+    if (distanceToAbsorption < distancePropagated) {
+        distancePropagated = distanceToAbsorption;
+        ph.absLength = 0.0f;
+        return true;
+    } else {
+        ph.absLength = (distanceToAbsorption - distancePropagated) / currentAbsLen;
+        
+        // hoist the correction factor back out of the absorption length
+        ph.absLength = ph.absLength / abs_len_correction_factor;
+        return false;
+    }
+}
+
+__device__ __forceinline__  void updatePhotonTrack(I3CLPhoton& ph, float distancePropagated)
+{
+        ph.pos += ph.dir * distancePropagated;
+        ph.time += ph.invGroupvel * distancePropagated;
+}
+
+__device__ __forceinline__  void scatterPhoton(I3CLPhoton& ph, RngType& rng)
+{
+     // optional direction transformation (for ice anisotropy)
+    detail::transformDirectionPreScatter(ph.dir);
+
+    // choose a scattering angle
+    const float cosScatAngle = detail::makeScatteringCosAngle(rng.randUniformFloatCO());
+    const float sinScatAngle = sqrt(1.0f - sqr(cosScatAngle));
+
+    // change the current direction by that angle
+    detail::scatterDirectionByAngle(cosScatAngle, sinScatAngle, ph.dir, rng.randUniformFloatCO());
+
+    // optional direction transformation (for ice anisotropy)
+    detail::transformDirectionPostScatter(ph.dir);
+}
+
+#endif

@@ -113,7 +113,7 @@ std::vector<float> generateWavelengthLut()
  * @param wlenLut pointer to the wavelength lut data (generated with generateWavelengthLut())
  * @return the generated wavelength
  */
-__host__ __device__ __forceinline__ float getWavelenth(float randomNumber, float* wlenLut)
+__host__ __device__ __forceinline__ float getWavelenth(float randomNumber, const float* wlenLut)
 {
     return wlenLut[int(randomNumber*WLEN_LUT_SIZE)];
 }
