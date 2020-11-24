@@ -32,7 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // includes
 // ------------------
-#include "settings.h"
+#include "settings.cuh"
 // ------------------
 
 namespace detail{

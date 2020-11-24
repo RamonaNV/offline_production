@@ -151,10 +151,6 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
                             const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
                             uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a))
 {
-#ifndef FUNCTION_getGroupVelocity_DOES_NOT_DEPEND_ON_LAYER
-#error This kernel only works with a constant group velocity (constant w.r.t. layers)
-#endif
-
     unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     __shared__ unsigned short geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];

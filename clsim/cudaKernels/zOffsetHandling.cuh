@@ -31,7 +31,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // includes
 // ------------------
-#include "settings.h"
+#include "settings.cuh"
 // ------------------
 
 namespace detail {
@@ -181,7 +181,7 @@ namespace detail {
         const float fraction_z_above = z_rescaled - float(k);
         const float fraction_z_below = 1.0f - fraction_z_above;
 
-        for (int j = 1; j < getTiltZShift_data_numDistances; j++) {
+        for (int j = 1; j < tiltshiftNumDistances; j++) {
             const float thisDist = tiltshiftDataFromOriginAlongTilt[j];
             if ((nr < thisDist) || (j == tiltshiftNumDistances - 1)) {
                 const float previousDist = tiltshiftDataFromOriginAlongTilt[j - 1];
@@ -219,7 +219,7 @@ std::vector<float> generateZOffsetLut()
         {
             float nr = ZOLUT_MIN_ENTRY_NR + ZOLUT_SPACING_NR * i;
             float z = ZOLUT_MIN_ENTRY_Z + ZOLUT_MAX_ENTRY_Z * j;
-            lut[i*ZOLUT_NUM_ENTRIES_Z + j] = pregenerateZOffset(nr,z);
+            lut[i*ZOLUT_NUM_ENTRIES_Z + j] = detail::pregenerateZOffset(nr,z);
         }
     return lut;
 }

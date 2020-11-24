@@ -40,6 +40,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "wlenBiasSource.cuh"
 #include "zOffsetHandling.cuh"
 #include "wlenGeneration.cuh"
+#include "scatteringAndAbsorbtionData.cuh"
 // ------------------
 
 // calculates the step direction
@@ -65,7 +66,7 @@ __device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda&
  * @param zOffsetLut lut containing zOffset values 
  * @return true if the photon was absorbed
  */
-__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RngType rng, const float* scatteringLength, const loat* absorptionDust, const float* absorptionTauDelta, const float* zOffsetLut);
+__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RngType rng, const float* scatteringLength, const float* absorptionDust, const float* absorptionTauDelta, const float* zOffsetLut);
 
 /**
  * @brief moves a photon along its track by the propagated distance
@@ -100,7 +101,7 @@ __device__ __forceinline__ bool checkForCollisionOld(const I3CLPhoton& photon, c
                                                   uint32_t *hitIndex, uint32_t maxHitIndex,
                                                   I3CLSimPhotonCuda *outputPhotons,  
                                                   const unsigned short *geoLayerToOMNumIndexPerStringSetLocal,
-                                                  const float* getWavelengthBias_dataShared)
+                                                  const float* getWavelengthBias_dataShared);
 
 // helper functions and subfunctions
 // --------------------------------------------------------------------------------------
@@ -202,11 +203,10 @@ namespace detail {
     // perform post-scatter transformation on photon direction
     __device__ __forceinline__ void transformDirectionPostScatter(float3& dir)
     {
-        dir = float4{(1.0108098679e+00f * dir.x) + (-5.7549125949e-02f * dir.y) + (0.f * dir.z),
+        dir = float3{(1.0108098679e+00f * dir.x) + (-5.7549125949e-02f * dir.y) + (0.f * dir.z),
                     (-5.7549125949e-02f * dir.x) + (1.0311047952e+00f * dir.y) + (0.f * dir.z),
                     (0.f * dir.x) + (0.f * dir.y) + (9.6252041756e-01f * dir.z)};
-
-            dir = normalize(dir);
+        dir = normalize(dir);
     }
 
     // compute first variant of the scattering cosine
@@ -281,6 +281,18 @@ namespace detail {
 
         return 1.f / ((D * absorptionADustLut[layer] + E) * powf(x, -kappa) +
                     A * expf(-B / x) * (1.f + 0.01f * absorptionDeltaTauLut[layer]));
+    }
+
+    // retruns the ice layer number for the z position
+    __device__ __forceinline__ int findLayerForGivenZPos(float posZ)
+    {
+        return int((posZ - (float)MEDIUM_LAYER_BOTTOM_POS) / (float)MEDIUM_LAYER_THICKNESS);
+    }
+
+    // returns the z value of the next ice layer boundary
+    __device__ __forceinline__ float mediumLayerBoundary(int layer)
+    {
+        return (float(layer) * ((float)MEDIUM_LAYER_THICKNESS)) + (float)MEDIUM_LAYER_BOTTOM_POS;
     }
 
     // collision detection helper functions
@@ -473,23 +485,23 @@ namespace detail {
         const float r_inv = rsqrtf(carDir.x * carDir.x + carDir.y * carDir.y + carDir.z * carDir.z);
 
         float theta = 0.f;
-        if ((my_fabs(carDir.z * r_inv)) <= 1.f) {
+        if ((fabs(carDir.z * r_inv)) <= 1.f) {
             theta = acos(carDir.z * r_inv);
         } else {
-            if (carDir.z < 0.f) theta = CUDART_PI_F;
+            if (carDir.z < 0.f) theta = PI;
         }
-        if (theta < 0.f) theta += 2.f * CUDART_PI_F;
+        if (theta < 0.f) theta += 2.f * PI;
 
         float phi = atan2(carDir.y, carDir.x);
-        if (phi < 0.f) phi += 2.f * CUDART_PI_F;
+        if (phi < 0.f) phi += 2.f * PI;
 
         return float2{theta, phi};
     }
 
     // stores a hit in outputPhotons as long as there is still room
-    __device__ __forceinline__ void saveHit( const I3CLPhoton& photon, const float traveledDistance,
+    __device__ __forceinline__ void saveHit( const I3CLPhoton& photon, float traveledDistance,
                                                 unsigned short hitOnString, unsigned short hitOnDom,
-                                                uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons)
+                                                uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons,
                                                 const float* getWavelengthBias_dataShared,
                                                 const I3CLSimStepCuda &step)
     {
@@ -509,7 +521,7 @@ namespace detail {
             outphoton.dir = sphDirFromCar(photon.dir);
             outphoton.wavelength = photon.wlen;
             outphoton.weight = step.weight / getWavelengthBias(photon.wlen, getWavelengthBias_dataShared);
-            outphoton.groupVelocity = 1.f / (inv_groupvel);
+            outphoton.groupVelocity = 1.f / (photon.invGroupvel);
             outphoton.identifier = step.identifier;
             outphoton.stringID = hitOnString;
             outphoton.omID = hitOnDom;
@@ -545,12 +557,12 @@ __device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda&
     ph.time = step.posAndTime.w + inverseParticleSpeed * shiftMultiplied;
 
     // generate a wavelength
-    ph.wlen = getWlen(randomNumbers.y,wlenLut);
+    ph.wlen = getWavelenth(randomNumbers.y,wlenLut);
 
     // calculate phase and group ref index
     const float x = ph.wlen * 1e6;
-    const float phaseRefIndex = getPhaseRefIndex(ph.wlen,x);
-    const float groupRefIndex = getGroupRefIndex(ph.wlen,phaseRefIndex,x);
+    const float phaseRefIndex = detail::getPhaseRefIndex(ph.wlen,x);
+    const float groupRefIndex = detail::getGroupRefIndex(ph.wlen,phaseRefIndex,x);
 
     const float cosCherenkov = min( 1.0f, 1.0f / (step.dirAndLengthAndBeta.w * phaseRefIndex));  // cos theta = 1/(beta*n)
     const float sinCherenkov = sqrtf(1.0f - sqr(cosCherenkov));
@@ -558,7 +570,7 @@ __device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda&
     // determine the photon direction
     // start with the track direction and rotate to cherenkov emission direction
     ph.dir = stepDir;
-    scatterDirectionByAngle(cosCherenkov, sinCherenkov, ph.dir, randomNumbers.z);
+    detail::scatterDirectionByAngle(cosCherenkov, sinCherenkov, ph.dir, randomNumbers.z);
     
     // calc inverse group velocity and set an initial absorption length
     ph.invGroupvel = groupRefIndex * RECIP_C_LIGHT; // refIndex * (1/c_light) <=> 1 / (c_light / refIndex)
@@ -567,10 +579,10 @@ __device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda&
     return ph;
 }
 
-__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RngType rng, const float* scatteringLength, const loat* absorptionDust, const float* absorptionTauDelta, const float* zOffsetLut)
+__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RngType rng, const float* scatteringLength, const float* absorptionDust, const float* absorptionTauDelta, const float* zOffsetLut)
 { 
     const float effective_z = ph.pos.z - getZOffset(ph.pos, zOffsetLut);
-    const int currentPhotonLayer = min(max(findLayerForGivenZPos(effective_z), 0), MEDIUM_LAYERS - 1);
+    const int currentPhotonLayer = min(max( detail::findLayerForGivenZPos(effective_z), 0), MEDIUM_LAYERS - 1);
     const float photon_dz = ph.dir.z;
 
     // add a correction factor to the number of absorption lengths
@@ -578,20 +590,20 @@ __device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropag
     // taken out after this propagation step. Usually the factor is 1
     // and thus has no effect, but it is used in a direction-dependent
     // way for our model of ice anisotropy.
-    const float abs_len_correction_factor = getDirectionalAbsLenCorrFactor(ph.dir);
+    const float abs_len_correction_factor = detail::getDirectionalAbsLenCorrFactor(ph.dir);
     ph.absLength *= abs_len_correction_factor;
 
     // the "next" medium boundary (either top or bottom, depending on
     // step direction)
     float mediumBoundary = (photon_dz < 0.0f)
-                                ? (mediumLayerBoundary(currentPhotonLayer))
-                                : (mediumLayerBoundary(currentPhotonLayer) + (float)MEDIUM_LAYER_THICKNESS);
+                                ? (detail::mediumLayerBoundary(currentPhotonLayer))
+                                : (detail::mediumLayerBoundary(currentPhotonLayer) + (float)MEDIUM_LAYER_THICKNESS);
 
      // track this thing to the next scattering point
     float scaStepLeft = -logf(rng.randUniformFloatOC());
 
-    float currentScaLen = getScatteringLength(currentPhotonLayer, ph.wlen, scatteringLength);
-    float currentAbsLen = getAbsorptionLength(currentPhotonLayer, ph.wlen, absorptionDust, absorptionTauDelta);
+    float currentScaLen = detail::getScatteringLength(currentPhotonLayer, ph.wlen, scatteringLength);
+    float currentAbsLen = detail::getAbsorptionLength(currentPhotonLayer, ph.wlen, absorptionDust, absorptionTauDelta);
 
     float ais = (photon_dz * scaStepLeft - ((mediumBoundary - effective_z)) / currentScaLen) *
                 (1.0f / (float)MEDIUM_LAYER_THICKNESS);
@@ -604,16 +616,16 @@ __device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropag
     if (photon_dz < 0) {
         for (; (j > 0) && (ais < 0.0f) && (aia < 0.0f);
                 mediumBoundary -= (float)MEDIUM_LAYER_THICKNESS,
-                currentScaLen = getScatteringLength(j, ph.wlen, scatteringLength),
-                currentAbsLen = getAbsorptionLength(j, ph.wlen, absorptionDust, absorptionTauDelta), 
+                currentScaLen = detail::getScatteringLength(j, ph.wlen, scatteringLength),
+                currentAbsLen = detail::getAbsorptionLength(j, ph.wlen, absorptionDust, absorptionTauDelta), 
                 ais += 1.f / (currentScaLen),
                 aia += 1.f / (currentAbsLen))
             --j;
     } else {
         for (; (j < MEDIUM_LAYERS - 1) && (ais > 0.0f) && (aia > 0.0f);
                 mediumBoundary += (float)MEDIUM_LAYER_THICKNESS,
-                currentScaLen = getScatteringLength(j, ph.wlen, scatteringLength),
-                currentAbsLen = getAbsorptionLength(j, ph.wlen, absorptionDust, absorptionTauDelta), 
+                currentScaLen = detail::getScatteringLength(j, ph.wlen, scatteringLength),
+                currentAbsLen = detail::getAbsorptionLength(j, ph.wlen, absorptionDust, absorptionTauDelta), 
                 ais -= 1.f / (currentScaLen),
                 aia -= 1.f / (currentAbsLen))
             ++j;
