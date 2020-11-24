@@ -49,52 +49,39 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // s.t. it corresponds to the default contstructor of I3CLSimStepToPhotonConverterOpenCL
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
-                                                                     I3CLSimPhotonCuda* __restrict__ outputPhotons, int* numHits,
-                                                                     const float* wlenLut, const float* zOffsetLut, 
-                                                                     const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
-                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a); 
-
-// maxNumbWOrkItems from  CL rndm arrays
-void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
-                   uint32_t** d_MWC_RNG_a)
-{
-    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a, maxNumWorkitems * sizeof(uint32_t)));
-    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_x, maxNumWorkitems * sizeof(uint64_t)));
-
-    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_a, MWC_RNG_a, maxNumWorkitems * sizeof(uint32_t), cudaMemcpyHostToDevice));
-    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_x, MWC_RNG_x, maxNumWorkitems * sizeof(uint64_t), cudaMemcpyHostToDevice));
-
-    cudaDeviceSynchronize();
-    printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
-}
+                                                                    uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
+                                                                    const float* wlenLut, const float* zOffsetLut, 
+                                                                    const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
+                                                                    uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a); 
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, const uint32_t maxHitIndex,
                           unsigned short* geoLayerToOMNumIndexPerStringSet, int ngeolayer,
                           I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
                           uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime)
 {
-    // set up congruental random number generator, reusing host arrays and randomService from
-    // I3CLSimStepToPhotonConverterOpenCL setup.
+    // setup the rng
     uint64_t* d_MWC_RNG_x;
     uint32_t* d_MWC_RNG_a;
-    init_RDM_CUDA(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
+    initMWCRng(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
 
     printf("nsteps total = %d but dividing into %d launches of max size %d \n", nsteps, 1, nsteps);
+
+    // upload "geo layer per string set" data 
     unsigned short* d_geolayer;
     CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer, ngeolayer * sizeof(unsigned short)));
     CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer * sizeof(unsigned short),
                               cudaMemcpyHostToDevice));
 
-    struct I3CLSimStepCuda* h_cudastep = (struct I3CLSimStepCuda*)malloc(nsteps * sizeof(struct I3CLSimStepCuda));
-
+    // convert and upload steps
+    I3CLSimStepCuda* h_cudastep = (I3CLSimStepCuda*)malloc(nsteps * sizeof(struct I3CLSimStepCuda));
     for (int i = 0; i < nsteps; i++) {
-        h_cudastep[i] = I3CLSimStep(in_steps[i]);
+        h_cudastep[i] = I3CLSimStepCuda(in_steps[i]);
     }
-
     I3CLSimStepCuda* d_cudastep;
     CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudastep, nsteps * sizeof(I3CLSimStepCuda)));
     CUDA_ERR_CHECK(cudaMemcpy(d_cudastep, h_cudastep, nsteps * sizeof(I3CLSimStepCuda), cudaMemcpyHostToDevice));
 
+    // allocate storage to store hits
     uint32_t* d_hitIndex;
     uint32_t h_hitIndex[1];
     h_hitIndex[0] = 0;
@@ -104,12 +91,28 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     I3CLSimPhotonCuda* d_cudaphotons;
     CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons, maxHitIndex * sizeof(I3CLSimPhotonCuda)));
 
+    // wlen lut
+    auto wlenLut = generateWavelengthLut();
+    float* d_wlenLut;
+    CUDA_ERR_CHECK(cudaMalloc((void**)&d_wlenLut, WLEN_LUT_SIZE * sizeof(float)));
+    CUDA_ERR_CHECK(cudaMemcpy(d_wlenLut, wlenLut.data(), WLEN_LUT_SIZE * sizeof(float), cudaMemcpyHostToDevice));
+
+    // zOffset lut
+    auto zOffsetLut = generateZOffsetLut();
+    float* d_zOffsetLut;
+    CUDA_ERR_CHECK(cudaMalloc((void**)&d_zOffsetLut, zOffsetLut.size() * sizeof(float)));
+    CUDA_ERR_CHECK(cudaMemcpy(d_zOffsetLut, zOffsetLut.data(), zOffsetLut.size() * sizeof(float), cudaMemcpyHostToDevice));
+
+    // compute block number and launch
     int numBlocks = (nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
     printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
 
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-    propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_hitIndex, maxHitIndex, d_geolayer, d_cudastep, nsteps,
-                                                  d_cudaphotons, d_MWC_RNG_x, d_MWC_RNG_a);
+    propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_cudastep, nsteps, 
+                                                  d_hitIndex, maxHitIndex, d_cudaphotons,
+                                                  d_wlenLut, d_zOffsetLut,
+                                                  d_geolayer,
+                                                  d_MWC_RNG_x, d_MWC_RNG_a);
 
     CUDA_ERR_CHECK(cudaDeviceSynchronize());
     std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
@@ -119,8 +122,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     int numberPhotons = h_hitIndex[0];
 
     if (numberPhotons > maxHitIndex) {
-        printf("Maximum number of photons exceeded, only receiving %" PRIu32 " of %" PRIu32 " photons", maxHitIndex,
-               numberPhotons);
+        printf("Maximum number of photons exceeded, only receiving %u of %u photons", maxHitIndex, numberPhotons);
         numberPhotons = maxHitIndex;
     }
 
@@ -146,81 +148,83 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
 }
 
 __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
-                            I3CLSimPhotonCuda* __restrict__ outputPhotons, int* numHits,
+                            uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
                             const float* wlenLut, const float* zOffsetLut, 
                             const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
-                            uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a))
+                            uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a)
 {
-    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
-
+    // copy some LUTs to shared memory for faster access
     __shared__ unsigned short geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
-    __shared__ float _generateWavelength_0distYValuesShared[_generateWavelength_0NUM_DIST_ENTRIES];
-    __shared__ float _generateWavelength_0distYCumulativeValuesShared[_generateWavelength_0NUM_DIST_ENTRIES];
-    __shared__ float getWavelengthBias_dataShared[_generateWavelength_0NUM_DIST_ENTRIES];
+    __shared__ float getWavelengthBias_dataShared[43];
+    __shared__ float sharedScatteringLength[171];
+    __shared__ float sharedAbsorptionADust[171];
+    __shared__ float sharedAbsorptionDeltaTau[171];
 
-    for (int ii = threadIdx.x; ii < GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; ii += blockDim.x) {
-        geoLayerToOMNumIndexPerStringSetLocal[ii] = geoLayerToOMNumIndexPerStringSet[ii];
+    for (int i = threadIdx.x; i < 171; i += blockDim.x) {
+        sharedScatteringLength[i] = scatteringLength_b400_LUT[i];
+        sharedAbsorptionADust[i] = absorptionLength_aDust400_LUT[i];
+        sharedAbsorptionDeltaTau[i] = absorptionLength_deltaTau_LUT[i];
     }
 
-    for (int ii = threadIdx.x; ii < _generateWavelength_0NUM_DIST_ENTRIES; ii += blockDim.x) {
-        _generateWavelength_0distYValuesShared[ii] = _generateWavelength_0distYValues[ii];
-        _generateWavelength_0distYCumulativeValuesShared[ii] = _generateWavelength_0distYCumulativeValues[ii];
-        getWavelengthBias_dataShared[ii] = getWavelengthBias_data[ii];
+    for (int i = threadIdx.x; i < GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; i += blockDim.x) {
+        geoLayerToOMNumIndexPerStringSetLocal[i] = geoLayerToOMNumIndexPerStringSet[i];
+    }
+
+    for (int i = threadIdx.x; i < 43; i += blockDim.x) {
+        getWavelengthBias_dataShared[i] = getWavelengthBias_data[i];
     }
     __syncthreads();
-    if (i >= nsteps) return;
 
-    // download MWC RNG state
-    uint64_t real_rnd_x = MWC_RNG_x[i];
-    uint32_t real_rnd_a = MWC_RNG_a[i];
-    uint64_t* rnd_x = &real_rnd_x;
-    uint32_t* rnd_a = &real_rnd_a;
+    // get thread id
+    int id = threadIdx.x + blockIdx.x * blockDim.x;
+    if(id > numSteps)
+        return;
 
-    const I3CLSimStepCuda step = inputSteps[i];
-    float4 stepDir;
-    {
-        const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)
-        stepDir = float4{rho * cosf(step.dirAndLengthAndBeta.y),  // rho*cos(phi)
-                         rho * sinf(step.dirAndLengthAndBeta.y),  // rho*sin(phi)
-                         cosf(step.dirAndLengthAndBeta.x),        // cos(phi)
-                         ZERO};
-    }
+    // initialize rng
+    RngType rng(rng_x[id],rng_a[id]);
 
+    // load step and calculate direction
+    const I3CLSimStepCuda step = steps[id];
+    const float3 stepDir = calculateStepDir(step);
+
+    // variables to store data about current photon
     uint32_t photonsLeftToPropagate = step.numPhotons;
     I3CLPhoton photon;
-    photon.absLength = 0;
     I3CLInitialPhoton photonInitial;
+    photon.absLength = 0.0f;
 
+    // loop until all photons are done
     while (photonsLeftToPropagate > 0) {
+
+        // if current photon is done, create a new one
         if (photon.absLength < EPSILON) {
-            photonInitial = createPhoton(step, stepDir,_generateWavelength_0distYValuesShared,_generateWavelength_0distYCumulativeValuesShared, RNG_ARGS_TO_CALL);
+            photonInitial = createPhoton(step, stepDir, wlenLut, rng);
             photon = I3CLPhoton(photonInitial);
         }
 
-        // this block is along the lines of the PPC kernel
-        float distancePropagated;
-        propPhoton(photon, distancePropagated, RNG_ARGS_TO_CALL);
-        bool collided = checkForCollision(photon, photonInitial, step, distancePropagated, 
+        // propagate through layers until scattered or absorbed
+        float distanceTraveled;
+        bool absorbed = propPhoton(photon, distanceTraveled, rng, sharedScatteringLength, sharedAbsorptionADust, sharedAbsorptionDeltaTau, zOffsetLut);
+        
+        // check for collision with DOMs, if collision has happened, the hit will be stored in outputPhotons
+        bool collided = checkForCollisionOld(photon, step, distanceTraveled, 
                                   hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal, getWavelengthBias_dataShared);
 
-        if (collided) {
-            // get rid of the photon if we detected it
-            photon.absLength = ZERO;
-        }
-
-        // absorb or scatter the photon
-        if (photon.absLength < EPSILON) {
-            // photon was absorbed.
-            // a new one will be generated at the begin of the loop.
+        // remove photon if it is collided or absorbed
+        // we get the next photon at the beginning of the loop
+        if (collided || absorbed) {
+            photon.absLength = 0.0f;
             --photonsLeftToPropagate;
-        } else {  // photon was NOT absorbed. scatter it and re-start the loop
-
-            updatePhotonTrack(photon, distancePropagated);
-            scatterPhoton(photon, RNG_ARGS_TO_CALL);
         }
-    }  // end while
+        else
+        {
+            // move the photon along its current direction for the distance it was propagated through the ice
+            // then scatter to find a new direction vector
+            updatePhotonTrack(photon, distanceTraveled);
+            scatterPhoton(photon, rng);
+        }
+    }
 
-    // upload MWC RNG state
-    MWC_RNG_x[i] = real_rnd_x;
-    MWC_RNG_a[i] = real_rnd_a;
+    // store rng state
+    rng_x[id] = rng.getState();
 }

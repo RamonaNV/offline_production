@@ -58,7 +58,7 @@ __device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda&
 /**
  * @brief  propgates a single photon once
  * @param ph the photon to propagate
- * @param distancePropagated the distance the photon was propagated during this iteration
+ * @param distanceTraveled the distance the photon was propagated during this iteration
  * @param rng the rng to use for generating this photon, 1 rng values is computed
  * @param scatteringLength scattering length look up table, which can be in global or shared memory
  * @param absorptionDust dust absorption look up table, which can be in global or shared memory
@@ -66,14 +66,14 @@ __device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda&
  * @param zOffsetLut lut containing zOffset values 
  * @return true if the photon was absorbed
  */
-__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RngType rng, const float* scatteringLength, const float* absorptionDust, const float* absorptionTauDelta, const float* zOffsetLut);
+__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distanceTraveled, RngType rng, const float* scatteringLength, const float* absorptionDust, const float* absorptionDeltaTau, const float* zOffsetLut);
 
 /**
  * @brief moves a photon along its track by the propagated distance
  * @param ph the photon to move
- * @param distancePropagated the distance the photon was propagated this iteration
+ * @param distanceTraveled the distance the photon was propagated this iteration
  */
-__device__ __forceinline__  void updatePhotonTrack(I3CLPhoton& ph, float distancePropagated);
+__device__ __forceinline__  void updatePhotonTrack(I3CLPhoton& ph, float distanceTraveled);
 
 /**
  * @brief scatters a photon
@@ -86,15 +86,6 @@ __device__ __forceinline__  void scatterPhoton(I3CLPhoton& ph, RngType& rng);
  * @brief perform collision check using the original clsim method,
  *          photons are stored in outputPhotons if a collision is detected
  * 
- * @param photon 
- * @param photonInitials 
- * @param step 
- * @param thisStepLength 
- * @param hitIndex 
- * @param maxHitIndex 
- * @param outputPhotons 
- * @param geoLayerToOMNumIndexPerStringSetLocal 
- * @return __device__ 
  */
 __device__ __forceinline__ bool checkForCollisionOld(const I3CLPhoton& photon, const I3CLSimStepCuda &step, 
                                                   float &traveledDistance,

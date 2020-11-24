@@ -2020,7 +2020,6 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
         printf(" -------------  done CL ------------- \n");
     }
 
-    printf(" 1 run with num threads per block CUDA =  %d,  CL = %d \n", NTHREADS_PER_BLOCK, workgroupSize_);
     printf("CUDA kernel    %f [ms] \n", totalCudaKernelTime);
     printf("CL   kernel    %f [ms] \n", totalCLKernelTime);
     printf(" ------------- ------------- \n");
