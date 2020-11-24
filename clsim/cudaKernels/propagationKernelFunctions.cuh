@@ -81,6 +81,27 @@ __device__ __forceinline__  void updatePhotonTrack(I3CLPhoton& ph, float distanc
  */
 __device__ __forceinline__  void scatterPhoton(I3CLPhoton& ph, RngType& rng);
 
+/**
+ * @brief perform collision check using the original clsim method,
+ *          photons are stored in outputPhotons if a collision is detected
+ * 
+ * @param photon 
+ * @param photonInitials 
+ * @param step 
+ * @param thisStepLength 
+ * @param hitIndex 
+ * @param maxHitIndex 
+ * @param outputPhotons 
+ * @param geoLayerToOMNumIndexPerStringSetLocal 
+ * @return __device__ 
+ */
+__device__ __forceinline__ bool checkForCollisionOld(const I3CLPhoton& photon, const I3CLSimStepCuda &step, 
+                                                  float &traveledDistance,
+                                                  uint32_t *hitIndex, uint32_t maxHitIndex,
+                                                  I3CLSimPhotonCuda *outputPhotons,  
+                                                  const unsigned short *geoLayerToOMNumIndexPerStringSetLocal,
+                                                  const float* getWavelengthBias_dataShared)
+
 // helper functions and subfunctions
 // --------------------------------------------------------------------------------------
 namespace detail {
@@ -261,6 +282,241 @@ namespace detail {
         return 1.f / ((D * absorptionADustLut[layer] + E) * powf(x, -kappa) +
                     A * expf(-B / x) * (1.f + 0.01f * absorptionDeltaTauLut[layer]));
     }
+
+    // collision detection helper functions
+    // --------------------
+
+    // checks collision between a particular photon and a string of doms
+    __device__ __forceinline__ void checkForCollision_OnStringOld(const unsigned short stringNum,
+                                                           const float photonDirLenXYSqr,
+                                                           const float3 &photonPos,
+                                                           const float3 &photonDir,
+                                                           float &thisStepLength, bool &hitRecorded,
+                                                           unsigned short &hitOnString, unsigned short &hitOnDom,
+                                                           const unsigned short *geoLayerToOMNumIndexPerStringSetLocal)
+    {
+        // find the string set for this string
+        unsigned char stringSet = geoStringInStringSet[stringNum];
+
+        {  // check intersection with string cylinder
+            // only use test if uhat lateral component is bigger than about 0.1 (NEED to
+            // check bigger than zero)
+            const float smin = sqr(((photonPos.x - float(geoStringPosX[stringNum])) * photonDir.y -
+                                    (photonPos.y - float(geoStringPosY[stringNum])) * photonDir.x)) /
+                            photonDirLenXYSqr;
+            // if (smin > sqr( float(geoStringRadius[stringNum]))) return;  //
+            // NOTE: smin == distance squared
+
+            if (smin > sqr(float(GEO_STRING_MAX_RADIUS))) return;  // NOTE: smin == distance squared
+        }
+
+        {  // check if photon is above or below the string (geoStringMaxZ and
+            // geoStringMinZ do not include the OM radius!)
+            if ((photonDir.z > 0.0f) && (photonPos.z > geoStringMaxZ[stringNum] + OM_RADIUS)) return;
+            if ((photonDir.z < 0.0f) && (photonPos.z < geoStringMinZ[stringNum] - OM_RADIUS)) return;
+        }
+
+        // this photon could potentially be hitting an om
+        // -> check them all
+
+        int lowLayerZ = int((photonPos.z - geoLayerStartZ[stringSet]) / geoLayerHeight[stringSet]);
+        int highLayerZ = int((photonPos.z + photonDir.z * (thisStepLength)-geoLayerStartZ[stringSet]) /
+                            geoLayerHeight[stringSet]);
+        if (highLayerZ < lowLayerZ) {
+            int tmp = lowLayerZ;
+            lowLayerZ = highLayerZ;
+            highLayerZ = tmp;
+        }
+        lowLayerZ = min(max(lowLayerZ, 0), geoLayerNum[stringSet] - 1);
+        highLayerZ = min(max(highLayerZ, 0), geoLayerNum[stringSet] - 1);
+
+        const unsigned short *geoLayerToOMNumIndex =
+            geoLayerToOMNumIndexPerStringSetLocal + (uint32_t(stringSet) * GEO_LAYER_STRINGSET_MAX_NUM_LAYERS) + lowLayerZ;
+
+        for (int layer_z = lowLayerZ; layer_z <= highLayerZ; ++layer_z, ++geoLayerToOMNumIndex) {
+            const unsigned short domNum = *geoLayerToOMNumIndex;
+            if (domNum == 0xFFFF) continue;  // empty layer for this string
+
+            float domPosX, domPosY, domPosZ;
+            geometryGetDomPosition(stringNum, domNum, domPosX, domPosY, domPosZ);
+
+            float urdot, discr;
+            {
+                const float4 drvec =
+                    float4{domPosX - photonPos.x, domPosY - photonPos.y, domPosZ - photonPos.z, 0.0f};
+                const float dr2 = dot(drvec, drvec);
+
+                urdot = dot(drvec, make_float4(photonDir,0));              // this assumes drvec.w==0
+                discr = sqr(urdot) - dr2 + OM_RADIUS * OM_RADIUS;  // (discr)^2
+            }
+
+            if (discr < 0.0f) continue;  // no intersection with this DOM
+            discr = sqrtf(discr);
+
+            // by construction: smin1 < smin2
+            {
+                // distance from current point along the track to second intersection
+                const float smin2 = urdot + discr;
+
+                if (smin2 < 0.0f) continue;  // implies smin1 < 0, so no intersection
+            }
+
+            // distance from current point along the track to first intersection
+            const float smin1 = urdot - discr;
+
+            // smin2 > 0 && smin1 < 0 means that there *is* an intersection, but we are
+            // starting inside the DOM. This allows photons starting inside a DOM to
+            // leave (necessary for flashers):
+            if (smin1 < 0.0f) continue;
+
+                // if we get here, there *is* an intersection with the DOM (there are two
+                // actually, one for the ray enetering the DOM and one when it leaves
+                // again). We are interested in the one where enters the ray enters the
+                // DOM.
+
+                // check if distance to intersection <= thisStepLength; if not then no
+                // detection
+            if (smin1 < thisStepLength)
+            {
+                // record a hit (for later, the actual recording is done
+                // in checkForCollision().)
+                thisStepLength = smin1;  // limit step length
+                hitOnString = stringNum;
+                hitOnDom = domNum;
+                hitRecorded = true;
+                // continue searching, maybe we hit a closer OM..
+                // (in that case, no hit will be saved for this one)
+            }
+        }  // end for loop layer_z
+    }
+
+    // calls checkForCollision_OnStringOld() for every string that a photon might collide with based on the x/y grid
+    __device__ __forceinline__ void checkForCollision_InCellOld(
+        const float photonDirLenXYSqr, const float3 &photonPos, const float3 &photonDir,
+        float &thisStepLength, bool &hitRecorded, unsigned short &hitOnString, unsigned short &hitOnDom,
+        const unsigned short *geoLayerToOMNumIndexPerStringSetLocal, unsigned short *this_geoCellIndex,
+        const float this_geoCellStartX, const float this_geoCellStartY, const float this_geoCellWidthX,
+        const float this_geoCellWidthY, const int this_geoCellNumX, const int this_geoCellNumY)
+    {
+        int lowCellX = int((photonPos.x - this_geoCellStartX) / this_geoCellWidthX);
+        int lowCellY = int((photonPos.y - this_geoCellStartY) / this_geoCellWidthY);
+
+        int highCellX =
+            int((photonPos.x + photonDir.x * (thisStepLength)-this_geoCellStartX) / this_geoCellWidthX);
+        int highCellY =
+            int((photonPos.y + photonDir.y * (thisStepLength)-this_geoCellStartY) / this_geoCellWidthY);
+
+        if (highCellX < lowCellX) {
+            int tmp = lowCellX;
+            lowCellX = highCellX;
+            highCellX = tmp;
+        }
+        if (highCellY < lowCellY) {
+            int tmp = lowCellY;
+            lowCellY = highCellY;
+            highCellY = tmp;
+        }
+
+        lowCellX = min(max(lowCellX, 0), this_geoCellNumX - 1);
+        lowCellY = min(max(lowCellY, 0), this_geoCellNumY - 1);
+        highCellX = min(max(highCellX, 0), this_geoCellNumX - 1);
+        highCellY = min(max(highCellY, 0), this_geoCellNumY - 1);
+
+        for (int cell_y = lowCellY; cell_y <= highCellY; ++cell_y) {
+            for (int cell_x = lowCellX; cell_x <= highCellX; ++cell_x) {
+                const unsigned short stringNum = this_geoCellIndex[cell_y * this_geoCellNumX + cell_x];
+                if (stringNum == 0xFFFF) continue;  // empty cell
+                checkForCollision_OnStringOld(stringNum, photonDirLenXYSqr, photonPos, photonDir, 
+                                        thisStepLength, hitRecorded, hitOnString, hitOnDom,
+                                        geoLayerToOMNumIndexPerStringSetLocal);
+            }
+        }
+    }
+
+
+    // calls checkForCollision_InCellOld() for every individual x/y grid that is defined (up to two!)
+    __device__ __forceinline__ void checkForCollision_InCellsOld(const float photonDirLenXYSqr, const float3 &photonPos,
+                                                          const float3 &photonDir,
+                                                          float &thisStepLength, bool &hitRecorded,
+                                                          unsigned short &hitOnString, unsigned short &hitOnDom,
+                                                          const unsigned short *geoLayerToOMNumIndexPerStringSetLocal)
+    {
+        // using macros and hard-coded names is
+        // not really the best thing to do here..
+        // replace with a loop sometime.
+    #define DO_CHECK(subdetectorNum)                                                                                 \
+        checkForCollision_InCellOld(photonDirLenXYSqr, photonPos, photonDir, thisStepLength, hitRecorded, \
+                                hitOnString, hitOnDom, geoLayerToOMNumIndexPerStringSetLocal,                       \
+                                                                                                                    \
+                                geoCellIndex_##subdetectorNum, GEO_CELL_START_X_##subdetectorNum,  \
+                                GEO_CELL_START_Y_##subdetectorNum, GEO_CELL_WIDTH_X_##subdetectorNum,               \
+                                GEO_CELL_WIDTH_Y_##subdetectorNum, GEO_CELL_NUM_X_##subdetectorNum,                 \
+                                GEO_CELL_NUM_Y_##subdetectorNum);
+
+        // argh..
+    #if GEO_CELL_NUM_SUBDETECTORS > 0
+        DO_CHECK(0);
+    #endif
+
+    #if GEO_CELL_NUM_SUBDETECTORS > 1
+        DO_CHECK(1);
+    #endif
+    #undef DO_CHECK
+
+        // TODO: add additional defines for future geometry or bettwe, use different collision detection algorithm 
+    }
+
+    // calculate spherical coordinates from cartesian coordinates to store hit point
+    __device__ __forceinline__ float2 sphDirFromCar(float3 carDir)
+    {
+        // Calculate Spherical coordinates from Cartesian
+        const float r_inv = rsqrtf(carDir.x * carDir.x + carDir.y * carDir.y + carDir.z * carDir.z);
+
+        float theta = 0.f;
+        if ((my_fabs(carDir.z * r_inv)) <= 1.f) {
+            theta = acos(carDir.z * r_inv);
+        } else {
+            if (carDir.z < 0.f) theta = CUDART_PI_F;
+        }
+        if (theta < 0.f) theta += 2.f * CUDART_PI_F;
+
+        float phi = atan2(carDir.y, carDir.x);
+        if (phi < 0.f) phi += 2.f * CUDART_PI_F;
+
+        return float2{theta, phi};
+    }
+
+    // stores a hit in outputPhotons as long as there is still room
+    __device__ __forceinline__ void saveHit( const I3CLPhoton& photon, const float traveledDistance,
+                                                unsigned short hitOnString, unsigned short hitOnDom,
+                                                uint32_t *hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda *outputPhotons)
+                                                const float* getWavelengthBias_dataShared,
+                                                const I3CLSimStepCuda &step)
+    {
+        uint32_t myIndex = atomicAdd(hitIndex, 1);
+
+        if (myIndex < maxHitIndex) {
+            // Emit photon position relative to the hit DOM
+
+            float domPosX, domPosY, domPosZ;
+            geometryGetDomPosition(hitOnString, hitOnDom, domPosX, domPosY, domPosZ);
+
+            I3CLSimPhotonCuda outphoton;
+            outphoton.posAndTime = float4{photon.pos.x + traveledDistance * photon.pos.x - domPosX,
+                                        photon.pos.y + traveledDistance * photon.pos.y - domPosY,
+                                        photon.pos.z + traveledDistance * photon.pos.z - domPosZ,
+                                        photon.time + traveledDistance * photon.invGroupvel};
+            outphoton.dir = sphDirFromCar(photon.dir);
+            outphoton.wavelength = photon.wlen;
+            outphoton.weight = step.weight / getWavelengthBias(photon.wlen, getWavelengthBias_dataShared);
+            outphoton.groupVelocity = 1.f / (inv_groupvel);
+            outphoton.identifier = step.identifier;
+            outphoton.stringID = hitOnString;
+            outphoton.omID = hitOnDom;
+
+            outputPhotons[myIndex] = outphoton;
+        }
+    }
 }
 
 // function definitions for the major functions
@@ -412,5 +668,31 @@ __device__ __forceinline__  void scatterPhoton(I3CLPhoton& ph, RngType& rng)
     // optional direction transformation (for ice anisotropy)
     detail::transformDirectionPostScatter(ph.dir);
 }
+
+__device__ __forceinline__ bool checkForCollisionOld(const I3CLPhoton& photon, const I3CLSimStepCuda &step, 
+                                                  float &traveledDistance,
+                                                  uint32_t *hitIndex, uint32_t maxHitIndex,
+                                                  I3CLSimPhotonCuda *outputPhotons,  
+                                                  const unsigned short *geoLayerToOMNumIndexPerStringSetLocal,
+                                                  const float* getWavelengthBias_dataShared)
+{
+    const float photonDirLenXYSqr = sqr(photon.dir.x) + sqr(photon.dir.y); 
+    if (photonDirLenXYSqr <= 0.0f) return false; // is this really correct? what if we are inbetween doms and move straight down 
+
+    bool hitRecorded = false;
+    unsigned short hitOnString;
+    unsigned short hitOnDom;
+
+    detail::checkForCollision_InCellsOld(photonDirLenXYSqr, photon.pos, photon.dir,
+                              traveledDistance, hitRecorded, hitOnString, hitOnDom,
+                              geoLayerToOMNumIndexPerStringSetLocal);
+
+    // record the photons, i.e. store the hit in the outputPhotons array
+    if (hitRecorded) {
+        detail::saveHit(photon, traveledDistance, hitOnString, hitOnDom, hitIndex, maxHitIndex, outputPhotons, getWavelengthBias_dataShared, step);
+    }
+    return hitRecorded;
+}
+
 
 #endif
