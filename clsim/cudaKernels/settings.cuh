@@ -24,6 +24,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     contains settings for the new optimizations
 */
 
+#ifndef SETTINGS_CUH
+#define SETTINGS_CUH
+
 // cuda launch params
 constexpr int NTHREADS_PER_BLOCK = 512;
 
@@ -42,3 +45,5 @@ constexpr int ZOLUT_NUM_ENTRIES_Z = 256;
 constexpr float ZOLUT_MIN_ENTRY_Z = -800;
 constexpr float ZOLUT_MAX_ENTRY_Z = 800;
 constexpr float ZOLUT_SPACING_Z = (ZOLUT_MAX_ENTRY_Z - ZOLUT_MIN_ENTRY_Z) / ZOLUT_NUM_ENTRIES_Z;
+
+#endif

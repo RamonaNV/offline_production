@@ -20,36 +20,39 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#include <propagationKernelSource.cuh>
-#include <propagationKernelFunctions.cuh>
+/* 
+    implements main simulation kernel as well as host code to launch it
+*/
 
-cudaError_t gl_err;
+// includes
+// ------------------
+#include "propagationKernelSource.cuh"
 
-#define CUDA_ERR_CHECK(e)              \
-    if (cudaError_t(e) != cudaSuccess) \
-        printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(e)), __LINE__);
-#define CUDA_CHECK_CALL                     \
-    gl_err = cudaGetLastError();            \
-    if (cudaError_t(gl_err) != cudaSuccess) \
-        printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(gl_err)), __LINE__ - 1);
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+#include <iostream>
+#include <chrono>
+
+#include "settings.cuh"
+#include "dataStructCuda.cuh"
+#include "utils.cuh"
+#include "rng.cuh"
+#include "mediumPropertiesSource.cuh"
+#include "geometrySource.cuh"
+#include "wlenBiasSource.cuh"
+#include "wlenGeneration.cuh"
+// ------------------
 
 // remark: ignored tabulate version, removed ifdef TABULATE
 // also removed ifdef DOUBLEPRECISION.
 // SAVE_PHOTON_HISTORY  and SAVE_ALL_PHOTONS are not define for now, i.e. commented out these snippets,
 // s.t. it corresponds to the default contstructor of I3CLSimStepToPhotonConverterOpenCL
 
-__global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel(
-    uint32_t* hitIndex,          // deviceBuffer_CurrentNumOutputPhotons
-    const uint32_t maxHitIndex,  // maxNumOutputPhotons_
-    const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet,
-    const I3CLSimStepCuda* __restrict__ inputSteps,  // deviceBuffer_InputSteps
-    int nsteps,
-    I3CLSimPhotonCuda* __restrict__ outputPhotons,  // deviceBuffer_OutputPhotons
-
-#ifdef SAVE_PHOTON_HISTORY
-    float4* photonHistory,
-#endif
-    uint64_t* __restrict__ MWC_RNG_x, uint32_t* __restrict__ MWC_RNG_a);
+__global__ __launch_bounds__(NTHREADS_PER_BLOCK, 4) void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
+                                                                     I3CLSimPhotonCuda* __restrict__ outputPhotons, int* numHits,
+                                                                     const float* wlenLut, const float* zOffsetLut, 
+                                                                     const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
+                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a); 
 
 // maxNumbWOrkItems from  CL rndm arrays
 void init_RDM_CUDA(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,

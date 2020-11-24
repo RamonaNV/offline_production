@@ -24,11 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef PROPAGATIONKERNELSOURCE_CUH
 #define PROPAGATIONKERNELSOURCE_CUH
 
-#include <cuda.h>
-#include <cuda_runtime_api.h>
-#include <iostream>
-#include <opencl/mwcrng_init.h>
-#include <dataStructCuda.cuh>
+#include <I3CLSimPhoton.h>
+#include <I3CLSimStep.h>
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, uint32_t maxHitIndex,
                           unsigned short* geoLayerToOMNumIndexPerStringSet, int ngeolayer,
