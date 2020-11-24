@@ -505,9 +505,9 @@ namespace detail {
             geometryGetDomPosition(hitOnString, hitOnDom, domPosX, domPosY, domPosZ);
 
             I3CLSimPhotonCuda outphoton;
-            outphoton.posAndTime = float4{photon.pos.x + traveledDistance * photon.pos.x - domPosX,
-                                        photon.pos.y + traveledDistance * photon.pos.y - domPosY,
-                                        photon.pos.z + traveledDistance * photon.pos.z - domPosZ,
+            outphoton.posAndTime = float4{photon.pos.x + traveledDistance * photon.dir.x - domPosX,
+                                        photon.pos.y + traveledDistance * photon.dir.y - domPosY,
+                                        photon.pos.z + traveledDistance * photon.dir.z - domPosZ,
                                         photon.time + traveledDistance * photon.invGroupvel};
             outphoton.dir = sphDirFromCar(photon.dir);
             outphoton.wavelength = photon.wlen;
