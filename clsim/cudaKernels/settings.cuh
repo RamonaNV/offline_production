@@ -1,7 +1,6 @@
-
 /*The MIT License (MIT)
 
-Copyright (c) 2020, Ramona Hohl, rhohl@nvidia.com
+Copyright (c) 2020, Hendrik Schwanekaml, hschwanekamp@nvidia.com
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -15,24 +14,31 @@ copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+FOR A PARTICULAR PURPOSE AND NONINFRINGSEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#ifndef PROPAGATIONKERNELSOURCE_CUH
-#define PROPAGATIONKERNELSOURCE_CUH
+/* 
+    contains settings for the new optimizations
+*/
 
-#include <cuda.h>
-#include <cuda_runtime_api.h>
-#include <iostream>
-#include <opencl/mwcrng_init.h>
-#include <dataStructCuda.cuh>
+// cuda launch params
+constexpr int NTHREADS_PER_BLOCK = 512;
 
-void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, uint32_t maxHitIndex,
-                          unsigned short* geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-                          I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
-                          uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime);
+// wlen lut
+constexpr int WLEN_LUT_SIZE = 1024;
 
-#endif  // PROPAGATIONKERNELSOURCE_CUH
+// z offset lut
+constexpr inline float calcNR(float x, float y) {return -7.0710678119e-01f * x + -7.0710678119e-01f * y;}
+
+constexpr int ZOLUT_NUM_ENTRIES_NR = 128;
+constexpr float ZOLUT_MIN_ENTRY_NR = calcNR(800,800);
+constexpr float ZOLUT_MAX_ENTRY_NR = calcNR(-800,-800);
+constexpr float ZOLUT_SPACING_NR =  (ZOLUT_MAX_ENTRY_NR - ZOLUT_MIN_ENTRY_NR) / ZOLUT_NUM_ENTRIES_NR;
+
+constexpr int ZOLUT_NUM_ENTRIES_Z = 256; 
+constexpr float ZOLUT_MIN_ENTRY_Z = -800;
+constexpr float ZOLUT_MAX_ENTRY_Z = 800;
+constexpr float ZOLUT_SPACING_Z = (ZOLUT_MAX_ENTRY_Z - ZOLUT_MIN_ENTRY_Z) / ZOLUT_NUM_ENTRIES_Z;

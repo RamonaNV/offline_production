@@ -20,106 +20,79 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+/* 
+    defines all datastructures used in the cuda clsim code
+*/
+
 #ifndef DATASTRUCCUDA_CUH
 #define DATASTRUCCUDA_CUH
 
+// includes
+// ------------------
 #include <I3CLSimPhoton.h>
 #include <I3CLSimStep.h>
-struct I3CLSimStepCuda {
-    float4 posAndTime;           // x,y,z,time                      // 4x  4byte float
-    float4 dirAndLengthAndBeta;  // theta,phi,length,beta    // 4x 4byte float
-    uint32_t numPhotons;         //    4byte unsigned
-    float weight;                //    4byte float
-    uint32_t identifier;         //    4byte unsigned
-    unsigned char sourceType;    //     1 byte unsigned
-                                 // total: 45 bytes
+// ------------------
 
+/**
+ * @brief Structure holds one simulation "step" to send it from host to device.
+ *          Algorithmically this is a work package containing information to create a 
+ *          numbermultiple photons. 
+ *          Pyhsically, it represents a part of the neutinos path, which is assumed 
+ *          to result in  photons with similar properties. 
+ */
+struct __align__(16) I3CLSimStepCuda {
+    float4 posAndTime;           // x,y,z,time             
+    float4 dirAndLengthAndBeta;  // theta,phi,length,beta   
+    uint32_t numPhotons;         // number of photons created from this step
+    uint32_t identifier;
+    float weight;                        
+
+    // default constructor, zero everything
     __host__ I3CLSimStepCuda()
         : posAndTime{0, 0, 0, 0},
           dirAndLengthAndBeta{0, 0, 0, 0},
           numPhotons(0),
-          weight(0),
           identifier(0),
-          sourceType(0){};
+          weight(0)
+    {}
 
-    __host__ I3CLSimStepCuda &operator=(const I3CLSimStep &i3step)
-    {
-        posAndTime = float4{i3step.GetPosX(), i3step.GetPosY(), i3step.GetPosZ(), i3step.GetTime()};
-        dirAndLengthAndBeta = float4{i3step.GetDirTheta(), i3step.GetDirPhi(), i3step.GetLength(), i3step.GetBeta()};
-        numPhotons = i3step.numPhotons;
-        weight = i3step.weight;
-        identifier = i3step.identifier;
-        sourceType = i3step.sourceType;
-
-        return *this;
-    }
+    // creates step from the old opencl step structure
+    __host__ explicit I3CLSimStepCuda(const I3CLSimStep &i3step)
+        : posAndTime({i3step.GetPosX(), i3step.GetPosY(), i3step.GetPosZ(), i3step.GetTime()}),
+          dirAndLengthAndBeta({i3step.GetDirTheta(), i3step.GetDirPhi(), i3step.GetLength(), i3step.GetBeta()}),
+          numPhotons(i3step.numPhotons),
+          identifier(i3step.identifier),
+          weight(i3step.weight)
+    {}
 };
 
-// holds the initial conditions of a photon
-struct I3CLInitialPhoton {
-    float4 posAndTime;
-    float4 dirAndWlen;
-    float invGroupvel;
-    float absLength;
-};
-
-// holds photon while it is propagated through the ice
-struct I3CLPhoton {
-    I3CLPhoton() = default;
-    __host__ __device__ explicit I3CLPhoton(const I3CLInitialPhoton &initial)  // creates photon from initial conditions
-        : posAndTime(initial.posAndTime),
-          dirAndWlen(initial.dirAndWlen),
-          invGroupvel(initial.invGroupvel),
-          absLength(initial.absLength),
-          numScatters(0),
-          totalPathLength(0.0f)
-    {
-    }
-
-    float4 posAndTime;
-    float4 dirAndWlen;
-    float invGroupvel;
-    float absLength;
-    int numScatters;
-    float totalPathLength;
-};
-
-struct I3CLSimPhotonCuda {
-    float4 posAndTime;       // x,y,z,time                      // 4x 32bit float
-    float2 dir;              // theta,phi                                // 2x 32bit float
-    float wavelength;        // photon wavelength                  //    32bit float
-    float cherenkovDist;     // Cherenkov distance travelled    //    32bit float
-    uint32_t numScatters;    // number of scatters                 //    32bit unsigned
-    float weight;            //    32bit float
-    uint32_t identifier;     //    32bit unsigned
-    short stringID;          //    16bit signed
-    ushort omID;             //    16bit unsigned
-    float4 startPosAndTime;  // 4x 32bit float
-    float2 startDir;         // 2x 32bit float
-    float groupVelocity;     //    32bit float
-    float distInAbsLens;     //    32bit float
-                             // total: 20x 32bit float = 80 bytes
-
+// holds photon when it is written to device memory to be downloaded onto the host
+struct __align__(16) I3CLSimPhotonCuda {
+    float4 posAndTime;       // x,y,z,time                      
+    float2 dir;              // theta,phi                                
+    float wavelength;        // photon wavelength                  
+    float weight;            
+    float groupVelocity;     
+    uint32_t identifier;     
+    int stringID;          
+    int omID;             
+    
     __host__ __device__ I3CLSimPhotonCuda() : posAndTime{0, 0, 0, 0} {}
 
+    // load from the original opencl struct
     __host__ I3CLSimPhotonCuda(const I3CLSimPhoton &i3photon)
         : posAndTime{i3photon.GetPosX(), i3photon.GetPosY(), i3photon.GetPosZ(), i3photon.GetTime()},
           dir{i3photon.GetDirTheta(), i3photon.GetDirPhi()},
           wavelength(i3photon.GetWavelength()),
-          cherenkovDist(i3photon.GetCherenkovDist()),
-          numScatters(i3photon.GetNumScatters()),
           weight(i3photon.weight),
           identifier(i3photon.GetID()),
           stringID(i3photon.GetStringID()),
           omID(i3photon.GetOMID()),
-          startPosAndTime{i3photon.GetStartPosX(), i3photon.GetStartPosY(), i3photon.GetStartPosZ(),
-                          i3photon.GetStartTime()},
-          startDir{i3photon.GetStartDirTheta(), i3photon.GetStartDirPhi()},
-          groupVelocity(i3photon.GetGroupVelocity()),
-          distInAbsLens(i3photon.GetDistInAbsLens())
+          groupVelocity(i3photon.GetGroupVelocity())
     {
     }
 
+    // convert to the original opengl struct
     __host__ I3CLSimPhoton getI3CLSimPhoton()
     {
         I3CLSimPhoton i3photon;
@@ -128,28 +101,58 @@ struct I3CLSimPhotonCuda {
         i3photon.SetPosZ(posAndTime.z);
         i3photon.SetTime(posAndTime.w);
 
-        i3photon.SetStartPosX(startPosAndTime.x);
-        i3photon.SetStartPosY(startPosAndTime.y);
-        i3photon.SetStartPosZ(startPosAndTime.z);
-        i3photon.SetStartTime(startPosAndTime.w);
+        i3photon.SetStartPosX(0);
+        i3photon.SetStartPosY(0);
+        i3photon.SetStartPosZ(0);
+        i3photon.SetStartTime(0);
 
         i3photon.SetDirTheta(dir.x);
         i3photon.SetDirPhi(dir.y);
-        i3photon.SetStartDirTheta(startDir.x);
-        i3photon.SetStartDirPhi(startDir.y);
+        i3photon.SetStartDirTheta(0);
+        i3photon.SetStartDirPhi(0);
 
         i3photon.SetWavelength(wavelength);
-        i3photon.SetCherenkovDist(cherenkovDist);
-        i3photon.SetNumScatters(numScatters);
+        i3photon.SetCherenkovDist(0);
+        i3photon.SetNumScatters(0);
         i3photon.SetWeight(weight);
         i3photon.SetID(identifier);
         i3photon.SetStringID(stringID);
         i3photon.SetOMID(omID);
-        i3photon.SetGroupVelocity(groupVelocity);
-        i3photon.SetDistInAbsLens(distInAbsLens);
+        i3photon.SetGroupVelocity(0);
+        i3photon.SetDistInAbsLens(0);
 
         return i3photon;
     }
+};
+
+// holds the initial conditions of a photon in device code
+struct I3CLInitialPhoton {
+    float3 pos;
+    float time;
+    float3 dir;
+    float wlen;
+    float invGroupvel;
+    float absLength;
+};
+
+// holds photon while it is propagated through the ice
+struct I3CLPhoton {
+    I3CLPhoton() = default;
+    __host__ __device__ explicit I3CLPhoton(const I3CLInitialPhoton &initial)  // creates photon from initial conditions
+        : pos(initial.pos),
+          time(initial.time),
+          dir(initial.dir),
+          wlen(initial.wlen),
+          invGroupvel(initial.invGroupvel),
+          absLength(initial.absLength)
+    {}
+
+    float3 pos;
+    float time;
+    float3 dir;
+    float wlen;
+    float invGroupvel;
+    float absLength;
 };
 
 #endif  // DATASTRUCCUDA_CUH
