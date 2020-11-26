@@ -39,11 +39,11 @@ constexpr inline float calcNR(float x, float y) {return -7.0710678119e-01f * x +
 constexpr int ZOLUT_NUM_ENTRIES_NR = 128;
 constexpr float ZOLUT_MIN_ENTRY_NR = calcNR(800,800);
 constexpr float ZOLUT_MAX_ENTRY_NR = calcNR(-800,-800);
-constexpr float ZOLUT_SPACING_NR =  (ZOLUT_MAX_ENTRY_NR - ZOLUT_MIN_ENTRY_NR) / ZOLUT_NUM_ENTRIES_NR;
+constexpr float ZOLUT_SPACING_NR =  (ZOLUT_MAX_ENTRY_NR - ZOLUT_MIN_ENTRY_NR) / float(ZOLUT_NUM_ENTRIES_NR);
 
 constexpr int ZOLUT_NUM_ENTRIES_Z = 256; 
 constexpr float ZOLUT_MIN_ENTRY_Z = -800;
 constexpr float ZOLUT_MAX_ENTRY_Z = 800;
-constexpr float ZOLUT_SPACING_Z = (ZOLUT_MAX_ENTRY_Z - ZOLUT_MIN_ENTRY_Z) / ZOLUT_NUM_ENTRIES_Z;
+constexpr float ZOLUT_SPACING_Z = (ZOLUT_MAX_ENTRY_Z - ZOLUT_MIN_ENTRY_Z) / float(ZOLUT_NUM_ENTRIES_Z);
 
 #endif

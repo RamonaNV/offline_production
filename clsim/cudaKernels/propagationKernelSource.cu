@@ -43,6 +43,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "scatteringAndAbsorbtionData.cuh"
 // ------------------
 
+#include "reference.cuh"
+
 // remark: ignored tabulate version, removed ifdef TABULATE
 // also removed ifdef DOUBLEPRECISION.
 // SAVE_PHOTON_HISTORY  and SAVE_ALL_PHOTONS are not define for now, i.e. commented out these snippets,
@@ -199,6 +201,7 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         // if current photon is done, create a new one
         if (photon.absLength < EPSILON) {
             photonInitial = createPhoton(step, stepDir, wlenLut, rng);
+            // photonInitial = I3CLInitialPhoton(ref::createPhoton(step,make_float4(stepDir,0),rng));
             photon = I3CLPhoton(photonInitial);
         }
 
@@ -206,9 +209,16 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         float distanceTraveled;
         bool absorbed = propPhoton(photon, distanceTraveled, rng, sharedScatteringLength, sharedAbsorptionADust, sharedAbsorptionDeltaTau, zOffsetLut);
         
+        // ref::I3CLPhoton refp(photon);
+        // bool absorbed = ref::propPhoton(refp, distanceTraveled, rng);
+        // photon = ::I3CLPhoton(refp);
+
         // check for collision with DOMs, if collision has happened, the hit will be stored in outputPhotons
         bool collided = checkForCollisionOld(photon, step, distanceTraveled, 
                                   hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal, getWavelengthBias_dataShared);
+
+        // bool collided = ref::checkForCollision(ref::I3CLPhoton(photon), ref::I3CLInitialPhoton(photonInitial), step, distanceTraveled,
+                                                // hitIndex, maxHitIndex, outputPhotons, geoLayerToOMNumIndexPerStringSetLocal, getWavelengthBias_dataShared);
 
         // remove photon if it is collided or absorbed
         // we get the next photon at the beginning of the loop

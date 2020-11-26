@@ -66,7 +66,7 @@ __device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda&
  * @param zOffsetLut lut containing zOffset values 
  * @return true if the photon was absorbed
  */
-__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distanceTraveled, RngType rng, const float* scatteringLength, const float* absorptionDust, const float* absorptionDeltaTau, const float* zOffsetLut);
+__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distanceTraveled, RngType& rng, const float* scatteringLength, const float* absorptionDust, const float* absorptionDeltaTau, const float* zOffsetLut);
 
 /**
  * @brief moves a photon along its track by the propagated distance
@@ -525,6 +525,8 @@ namespace detail {
 // function definitions for the major functions
 // --------------------------------------------------------------------------------------
 
+#include "reference.cuh"
+
 __device__ __forceinline__ float3 calculateStepDir(const I3CLSimStepCuda& step)
 {
         const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)
@@ -570,9 +572,9 @@ __device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda&
     return ph;
 }
 
-__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RngType rng, const float* scatteringLength, const float* absorptionDust, const float* absorptionTauDelta, const float* zOffsetLut)
+__device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropagated, RngType& rng, const float* scatteringLength, const float* absorptionDust, const float* absorptionTauDelta, const float* zOffsetLut)
 { 
-    const float effective_z = ph.pos.z - getZOffset(ph.pos, zOffsetLut);
+    const float effective_z = ph.pos.z - getZOffset(ph.pos, zOffsetLut); //ref::getTiltZShift(make_float4(ph.pos,0)); 
     const int currentPhotonLayer = min(max( detail::findLayerForGivenZPos(effective_z), 0), MEDIUM_LAYERS - 1);
     const float photon_dz = ph.dir.z;
 

@@ -218,7 +218,7 @@ std::vector<float> generateZOffsetLut()
         for(int j=0; j<ZOLUT_NUM_ENTRIES_Z; j++)
         {
             float nr = ZOLUT_MIN_ENTRY_NR + ZOLUT_SPACING_NR * i;
-            float z = ZOLUT_MIN_ENTRY_Z + ZOLUT_MAX_ENTRY_Z * j;
+            float z = ZOLUT_MIN_ENTRY_Z + ZOLUT_SPACING_Z * j;
             lut[i*ZOLUT_NUM_ENTRIES_Z + j] = detail::pregenerateZOffset(nr,z);
         }
     return lut;
