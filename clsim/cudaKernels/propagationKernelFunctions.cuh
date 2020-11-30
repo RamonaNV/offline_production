@@ -603,25 +603,15 @@ __device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropag
                 (1.0f / (float)MEDIUM_LAYER_THICKNESS);
 
     
-    // // propagate through layers
+    float dir = copysign(1.0f,photon_dz);
     int j = currentPhotonLayer;
-    if (photon_dz < 0) {
-        for (; (j > 0) && (ais < 0.0f) && (aia < 0.0f);
-                mediumBoundary -= (float)MEDIUM_LAYER_THICKNESS,
-                currentScaLen = detail::getScatteringLength(j, ph.wlen, scatteringLength),
-                currentAbsLen = detail::getAbsorptionLength(j, ph.wlen, absorptionDust, absorptionTauDelta), 
-                ais += 1.f / (currentScaLen),
-                aia += 1.f / (currentAbsLen))
-            --j;
-    } else {
-        for (; (j < MEDIUM_LAYERS - 1) && (ais > 0.0f) && (aia > 0.0f);
-                mediumBoundary += (float)MEDIUM_LAYER_THICKNESS,
-                currentScaLen = detail::getScatteringLength(j, ph.wlen, scatteringLength),
-                currentAbsLen = detail::getAbsorptionLength(j, ph.wlen, absorptionDust, absorptionTauDelta), 
-                ais -= 1.f / (currentScaLen),
-                aia -= 1.f / (currentAbsLen))
-            ++j;
-    }
+    for (; (j > 0) && (j < MEDIUM_LAYERS - 1) && (ais*dir > 0.0f) && (aia*dir > 0.0f);
+            mediumBoundary += dir* (float)MEDIUM_LAYER_THICKNESS,
+            currentScaLen = detail::getScatteringLength(j, ph.wlen, scatteringLength),
+            currentAbsLen = detail::getAbsorptionLength(j, ph.wlen, absorptionDust, absorptionTauDelta), 
+            ais -= dir / (currentScaLen),
+            aia -= dir / (currentAbsLen))
+        --j;
 
     float distanceToAbsorption;
     if ((currentPhotonLayer == j) || ((fabs(photon_dz)) < EPSILON)) {
