@@ -31,6 +31,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // ------------------
 #include <cuda.h>
 #include <cuda_runtime_api.h>
+#include <cooperative_groups.h>
+namespace cg = cooperative_groups;
 
 #include "settings.cuh"
 #include "dataStructCuda.cuh"
@@ -581,8 +583,16 @@ __device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropag
                                 ? (detail::mediumLayerBoundary(currentPhotonLayer))
                                 : (detail::mediumLayerBoundary(currentPhotonLayer) + (float)MEDIUM_LAYER_THICKNESS);
 
-     // track this thing to the next scattering point
-    float scaStepLeft = -logf(rng.randUniformFloatOC());
+    // track this thing to the next scattering point
+    float scaStepLeft;
+    #ifdef BLOCK_RANDOM_NUMBERS_PROPAGATION
+        cg::coalesced_group active = cg::coalesced_threads();
+        if(active.thread_rank()==0)
+            scaStepLeft = -logf(rng.randUniformFloatOC());
+        scaStepLeft = active.shfl(scaStepLeft,0);
+    #else
+        scaStepLeft = -logf(rng.randUniformFloatOC());
+    #endif
 
     float currentScaLen = detail::getScatteringLength(currentPhotonLayer, ph.wlen, scatteringLength);
     float currentAbsLen = detail::getAbsorptionLength(currentPhotonLayer, ph.wlen, absorptionDust, absorptionTauDelta);
@@ -652,12 +662,28 @@ __device__ __forceinline__  void scatterPhoton(I3CLPhoton& ph, RngType& rng)
      // optional direction transformation (for ice anisotropy)
     detail::transformDirectionPreScatter(ph.dir);
 
+    float r1;
+    float r2;
+    #ifdef BLOCK_RANDOM_NUMBERS_PROPAGATION
+        cg::coalesced_group active = cg::coalesced_threads();
+        if(active.thread_rank()==0)
+        {
+            r1 = rng.randUniformFloatCO();
+            r2 = rng.randUniformFloatCO();
+        }
+        r1 = active.shfl(r1,0);
+        r2 = active.shfl(r2,0);
+    #else
+        r1 = rng.randUniformFloatCO();
+        r2 = rng.randUniformFloatCO();
+    #endif
+
     // choose a scattering angle
-    const float cosScatAngle = detail::makeScatteringCosAngle(rng.randUniformFloatCO());
+    const float cosScatAngle = detail::makeScatteringCosAngle(r1);
     const float sinScatAngle = sqrt(1.0f - sqr(cosScatAngle));
 
     // change the current direction by that angle
-    detail::scatterDirectionByAngle(cosScatAngle, sinScatAngle, ph.dir, rng.randUniformFloatCO());
+    detail::scatterDirectionByAngle(cosScatAngle, sinScatAngle, ph.dir, r2);
 
     // optional direction transformation (for ice anisotropy)
     detail::transformDirectionPostScatter(ph.dir);

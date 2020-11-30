@@ -46,4 +46,8 @@ constexpr float ZOLUT_MIN_ENTRY_Z = -800;
 constexpr float ZOLUT_MAX_ENTRY_Z = 800;
 constexpr float ZOLUT_SPACING_Z = (ZOLUT_MAX_ENTRY_Z - ZOLUT_MIN_ENTRY_Z) / float(ZOLUT_NUM_ENTRIES_Z);
 
+// blocked random numbers
+// #define BLOCK_RANDOM_NUMBERS_SCATTERING
+// #define BLOCK_RANDOM_NUMBERS_PROPAGATION
+
 #endif
