@@ -200,36 +200,25 @@ namespace detail {
         dir = normalize(dir);
     }
 
-    // compute first variant of the scattering cosine
-    __device__ __forceinline__ float makeScatteringCosAngle_mix1(float rrrr__)
-    {
-        // const float g = 9.0000000000e-01f;
-        // const float beta = (1.f-g)/(1.f+g);
-        const float beta = 5.2631578947e-02f;
-
-        return clamp(2.f * powf((rrrr__), beta) - 1.f, -1.f, 1.f);
-    }
-
-    // compute second variant of the scattering cosine
-    __device__ __forceinline__ float makeScatteringCosAngle_mix2(float rrrr__)
-    {
-        const float g = 9.0000000000e-01f;
-        const float g2 = 8.1000000000e-01f;
-
-        // a random number [-1;+1]
-        const float s = 2.f * (rrrr__)-1.f;
-
-        const float ii = ((1.f - g2) / (1.f + g * s));
-        return clamp((1.f + g2 - ii * ii) / (2.f * g), -1.f, 1.f);
-    }
-
     // compute the scattering cosine by selecting between variant 1 and 2
     __device__ __forceinline__ float makeScatteringCosAngle(float randomNumberCO)
     {
         if (randomNumberCO < 3.5000000000e-01f) {
-            return makeScatteringCosAngle_mix1(randomNumberCO / 3.5000000000e-01f);
+            // const float g = 9.0000000000e-01f;
+            // const float beta = (1.f-g)/(1.f+g);
+            randomNumberCO = randomNumberCO / 3.5000000000e-01f;
+            const float beta = 5.2631578947e-02f;
+            return clamp(2.f * powf((randomNumberCO), beta) - 1.f, -1.f, 1.f);
         } else {
-            return makeScatteringCosAngle_mix2((1.f - randomNumberCO) / 6.5000000000e-01f);
+            randomNumberCO = (1.f - randomNumberCO) / 6.5000000000e-01f;
+            const float g = 9.0000000000e-01f;
+            const float g2 = 8.1000000000e-01f;
+
+            // a random number [-1;+1]
+            const float s = 2.f * (randomNumberCO)-1.f;
+
+            const float ii = ((1.f - g2) / (1.f + g * s));
+            return clamp((1.f + g2 - ii * ii) / (2.f * g), -1.f, 1.f);
         }
     }
 
