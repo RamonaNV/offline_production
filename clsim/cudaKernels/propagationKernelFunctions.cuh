@@ -55,7 +55,7 @@ __device__ __forceinline__ float3 calculateStepDir(const I3CLSimStepCuda& step);
  * @param wlenLut look up table to generate wavelength from random numbers
  * @param rng the rng to use for generating this photon, 4 rng values are computed
  */
-__device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda& step, const float3& stepDir, const float* wlenLut, RngType& rng);
+__device__ __forceinline__ I3CLPhoton createPhoton(const I3CLSimStepCuda& step, const float3& stepDir, const float* wlenLut, RngType& rng);
 
 /**
  * @brief  propgates a single photon once
@@ -526,12 +526,12 @@ __device__ __forceinline__ float3 calculateStepDir(const I3CLSimStepCuda& step)
                          cosf(step.dirAndLengthAndBeta.x)};        // cos(phi)
 }
 
-__device__ __forceinline__ I3CLInitialPhoton createPhoton(const I3CLSimStepCuda& step, const float3& stepDir, const float* wlenLut, RngType& rng)
+__device__ __forceinline__ I3CLPhoton createPhoton(const I3CLSimStepCuda& step, const float3& stepDir, const float* wlenLut, RngType& rng)
 {
     // float4 randomNumbers = float4{0.12454854,0.99568,0.4877858,0.24784564};
     float4 randomNumbers = {rng.randUniformFloatCO(), rng.randUniformFloatCO(), rng.randUniformFloatCO(), rng.randUniformFloatOC()};
 
-    I3CLInitialPhoton ph;
+    I3CLPhoton ph;
 
     // move along the step direction a random amount
     const float shiftMultiplied = step.dirAndLengthAndBeta.z * randomNumbers.x;

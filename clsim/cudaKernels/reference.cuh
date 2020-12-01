@@ -116,7 +116,7 @@ struct I3CLInitialPhoton {
 
     I3CLInitialPhoton() = default;
 
-    __host__ __device__ explicit I3CLInitialPhoton(const ::I3CLInitialPhoton& p)
+    __host__ __device__ explicit I3CLInitialPhoton(const ::I3CLPhoton& p)
     {
         posAndTime = float4{p.pos.x, p.pos.y, p.pos.z, p.time };
         dirAndWlen = float4{p.dir.x, p.dir.y, p.dir.z, p.wlen};
@@ -124,9 +124,9 @@ struct I3CLInitialPhoton {
         absLength = p.absLength;
     }
 
-    __host__ __device__ explicit operator ::I3CLInitialPhoton()
+    __host__ __device__ explicit operator ::I3CLPhoton()
     {
-        ::I3CLInitialPhoton p;
+        ::I3CLPhoton p;
         p.pos = float3{posAndTime.x, posAndTime.y, posAndTime.z};
         p.time = posAndTime.w;
         p.dir = float3{dirAndWlen.x, dirAndWlen.y, dirAndWlen.z};

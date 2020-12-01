@@ -125,27 +125,9 @@ struct __align__(16) I3CLSimPhotonCuda {
     }
 };
 
-// holds the initial conditions of a photon in device code
-struct I3CLInitialPhoton {
-    float3 pos;
-    float time;
-    float3 dir;
-    float wlen;
-    float invGroupvel;
-    float absLength;
-};
-
 // holds photon while it is propagated through the ice
 struct I3CLPhoton {
     I3CLPhoton() = default;
-    __host__ __device__ explicit I3CLPhoton(const I3CLInitialPhoton &initial)  // creates photon from initial conditions
-        : pos(initial.pos),
-          time(initial.time),
-          dir(initial.dir),
-          wlen(initial.wlen),
-          invGroupvel(initial.invGroupvel),
-          absLength(initial.absLength)
-    {}
 
     float3 pos;
     float time;
