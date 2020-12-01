@@ -1755,7 +1755,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
     I3CLSimStepSeriesConstPtr steps;
     const bool shuffleSteps = false;
     const bool shuffleStepsTo32 = false;
-    int resizingNrStepsby2PowerMinus = 2;
+    int resizingNrStepsby2PowerMinus = 0;
     
     const uint32_t zeroCounterBufferSource = 0;
     VECTOR_CLASS<cl::Event> bufferWriteEvents(2);

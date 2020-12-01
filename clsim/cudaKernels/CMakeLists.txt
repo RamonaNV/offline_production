@@ -1,5 +1,5 @@
 find_package(CUDAToolkit REQUIRED)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  -arch=sm_75 --keep  -use_fast_math --expt-relaxed-constexpr --ptxas-options -v --resource-usage")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_75,code=sm_75 -gencode arch=compute_80,code=sm_80 --keep  -use_fast_math --expt-relaxed-constexpr --ptxas-options -v --resource-usage")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  -lineinfo") # source code information for profiling
 
 add_library(thiscudalib SHARED
