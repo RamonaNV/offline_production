@@ -516,8 +516,6 @@ namespace detail {
 // function definitions for the major functions
 // --------------------------------------------------------------------------------------
 
-#include "reference.cuh"
-
 __device__ __forceinline__ float3 calculateStepDir(const I3CLSimStepCuda& step)
 {
         const float rho = sinf(step.dirAndLengthAndBeta.x);       // sin(theta)

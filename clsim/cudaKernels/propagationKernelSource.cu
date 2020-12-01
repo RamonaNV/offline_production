@@ -43,8 +43,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "scatteringAndAbsorbtionData.cuh"
 // ------------------
 
-#include "reference.cuh"
-
 // remark: ignored tabulate version, removed ifdef TABULATE
 // also removed ifdef DOUBLEPRECISION.
 // SAVE_PHOTON_HISTORY  and SAVE_ALL_PHOTONS are not define for now, i.e. commented out these snippets,
