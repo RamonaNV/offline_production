@@ -30,10 +30,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
-#include <cooperative_groups.h>
-#include <cooperative_groups/memcpy_async.h>
-namespace cg = cooperative_groups;
-
 #include <iostream>
 #include <chrono>
 
@@ -157,12 +153,12 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
                             const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
                             uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a)
 {
-     // copy some LUTs to shared memory for faster access
-    cg::thread_block block = cg::this_thread_block();
-
     #ifdef SHARED_WLEN
         __shared__ float sharedWlenLut[WLEN_LUT_SIZE];
-        cg::memcpy_async(block, sharedWlenLut, wlenLut, sizeof(float)*WLEN_LUT_SIZE);
+        // cg::memcpy_async(block, sharedWlenLut, wlenLut, sizeof(float)*WLEN_LUT_SIZE);
+        for (int i = threadIdx.x; i < WLEN_LUT_SIZE; i += blockDim.x) {
+            sharedWlenLut[i] = wlenLut[i];
+        }
         const float* wlenLutPointer = sharedWlenLut;
     #else
         const float* wlenLutPointer = wlenLut;
@@ -172,9 +168,16 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         __shared__ float sharedScatteringLength[171];
         __shared__ float sharedAbsorptionADust[171];
         __shared__ float sharedAbsorptionDeltaTau[171];
-        cg::memcpy_async(block, sharedScatteringLength, scatteringLength_b400_LUT, sizeof(float)*171);
-        cg::memcpy_async(block, sharedAbsorptionADust, absorptionLength_aDust400_LUT, sizeof(float)*171);
-        cg::memcpy_async(block, sharedAbsorptionDeltaTau, absorptionLength_deltaTau_LUT, sizeof(float)*171);
+
+        for (int i = threadIdx.x; i < 171; i += blockDim.x) {
+            sharedScatteringLength[i] = scatteringLength_b400_LUT[i];
+            sharedAbsorptionADust[i] = absorptionLength_aDust400_LUT[i];
+            sharedAbsorptionDeltaTau[i] = absorptionLength_deltaTau_LUT[i];
+        }
+
+        // cg::memcpy_async(block, sharedScatteringLength, scatteringLength_b400_LUT, sizeof(float)*171);
+        // cg::memcpy_async(block, sharedAbsorptionADust, absorptionLength_aDust400_LUT, sizeof(float)*171);
+        // cg::memcpy_async(block, sharedAbsorptionDeltaTau, absorptionLength_deltaTau_LUT, sizeof(float)*171);
         const float* scatteringLutPointer = sharedScatteringLength;
         const float* absorbtionLutPointer = sharedAbsorptionADust;
         const float* absorbtionDeltaTauLutPointer = sharedAbsorptionDeltaTau;
@@ -186,7 +189,10 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
 
     #ifdef SHARED_WLEN_BIAS
         __shared__ float getWavelengthBias_dataShared[43];
-        cg::memcpy_async(block, getWavelengthBias_dataShared, getWavelengthBias_data, sizeof(float)*43);
+        // cg::memcpy_async(block, getWavelengthBias_dataShared, getWavelengthBias_data, sizeof(float)*43);
+        for (int i = threadIdx.x; i < 43; i += blockDim.x) {
+            getWavelengthBias_dataShared[i] = getWavelengthBias_data[i];
+        }
         const float* wlenBiasLutPointer = getWavelengthBias_dataShared;
     #else
         const float* wlenBiasLutPointer = getWavelengthBias_data;
@@ -194,7 +200,10 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
 
     #ifdef SHARED_NUM_INDEX_STRING_SET
         __shared__ unsigned short geoLayerToOMNumIndexPerStringSetLocal[GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE];
-        cg::memcpy_async(block, geoLayerToOMNumIndexPerStringSetLocal, geoLayerToOMNumIndexPerStringSet, sizeof(unsigned short)*GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE);
+        for (int i = threadIdx.x; i < GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; i += blockDim.x) {
+            geoLayerToOMNumIndexPerStringSetLocal[i] = geoLayerToOMNumIndexPerStringSet[i];
+        }
+        // cg::memcpy_async(block, geoLayerToOMNumIndexPerStringSetLocal, geoLayerToOMNumIndexPerStringSet, sizeof(unsigned short)*GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE);
         const unsigned short* numIndexStringSetPointer = geoLayerToOMNumIndexPerStringSetLocal;
     #else
         const unsigned short* numIndexStringSetPointer = geoLayerToOMNumIndexPerStringSet;
@@ -203,8 +212,14 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
     #ifdef SHARED_COLLISION_GRID_DATA
         __shared__ unsigned short geoCellIndex0shared[GEO_CELL_NUM_X_0 * GEO_CELL_NUM_Y_0];
         __shared__ unsigned short geoCellIndex1shared[GEO_CELL_NUM_X_1 * GEO_CELL_NUM_Y_1];
-        cg::memcpy_async(block, geoCellIndex0shared, geoCellIndex_0, sizeof(unsigned short)*GEO_CELL_NUM_X_0 * GEO_CELL_NUM_Y_0);
-        cg::memcpy_async(block, geoCellIndex1shared, geoCellIndex_1, sizeof(unsigned short)*GEO_CELL_NUM_X_1 * GEO_CELL_NUM_Y_1);
+        for (int i = threadIdx.x; i < GEO_CELL_NUM_X_0 * GEO_CELL_NUM_Y_0; i += blockDim.x) {
+            geoCellIndex0shared[i] = geoCellIndex0shared[i];
+        }
+        for (int i = threadIdx.x; i < GEO_CELL_NUM_X_1 * GEO_CELL_NUM_Y_1; i += blockDim.x) {
+            geoCellIndex1shared[i] = geoCellIndex1shared[i];
+        }
+        // cg::memcpy_async(block, geoCellIndex0shared, geoCellIndex_0, sizeof(unsigned short)*GEO_CELL_NUM_X_0 * GEO_CELL_NUM_Y_0);
+        // cg::memcpy_async(block, geoCellIndex1shared, geoCellIndex_1, sizeof(unsigned short)*GEO_CELL_NUM_X_1 * GEO_CELL_NUM_Y_1);
         const unsigned short* geoCellIndex0Pointer = geoCellIndex0shared;
         const unsigned short* geoCellIndex1Pointer = geoCellIndex1shared;
     #else
@@ -217,10 +232,21 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         __shared__ unsigned short geoLayerNumShared[GEO_LAYER_STRINGSET_NUM];
         __shared__ float geoLayerStartZShared[GEO_LAYER_STRINGSET_NUM];
         __shared__ float geoLayerHeightShared[GEO_LAYER_STRINGSET_NUM];
-        cg::memcpy_async(block, geoStringInSetShared, geoStringInStringSet, sizeof(unsigned char)*NUM_STRINGS);
-        cg::memcpy_async(block, geoLayerNumShared, geoLayerNum, sizeof(unsigned short)*GEO_LAYER_STRINGSET_NUM);
-        cg::memcpy_async(block, geoLayerStartZShared, geoLayerStartZ, sizeof(float)*GEO_LAYER_STRINGSET_NUM);
-        cg::memcpy_async(block, geoLayerHeightShared, geoLayerHeight, sizeof(float)*GEO_LAYER_STRINGSET_NUM);
+
+        for (int i = threadIdx.x; i < NUM_STRINGS; i += blockDim.x) {
+            geoStringInSetShared[i] = geoStringInStringSet[i];
+        }
+
+        for (int i = threadIdx.x; i < GEO_LAYER_STRINGSET_NUM; i += blockDim.x) {
+            geoLayerNumShared[i] = geoLayerNum[i];
+            geoLayerStartZShared[i] = geoLayerStartZ[i];
+            geoLayerHeightShared[i] = geoLayerHeight[i];
+        }
+
+        // cg::memcpy_async(block, geoStringInSetShared, geoStringInStringSet, sizeof(unsigned char)*NUM_STRINGS);
+        // cg::memcpy_async(block, geoLayerNumShared, geoLayerNum, sizeof(unsigned short)*GEO_LAYER_STRINGSET_NUM);
+        // cg::memcpy_async(block, geoLayerStartZShared, geoLayerStartZ, sizeof(float)*GEO_LAYER_STRINGSET_NUM);
+        // cg::memcpy_async(block, geoLayerHeightShared, geoLayerHeight, sizeof(float)*GEO_LAYER_STRINGSET_NUM);
         const unsigned char* geoStringInSetPointer = geoStringInSetShared;
         const unsigned short* geoLayerNumPointer = geoLayerNumShared;
         const float* geoLayerStartZPointer = geoLayerStartZShared;
@@ -232,7 +258,7 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         const float* geoLayerHeightPointer = geoLayerHeight;
     #endif
 
-    cg::wait(block);
+    __syncthreads();
 
     // get thread id
     int id = threadIdx.x + blockIdx.x * blockDim.x;
