@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // cuda launch params
 constexpr int NTHREADS_PER_BLOCK = 512;
+constexpr int NBLOCKS_PER_SM = 4;
 
 // wlen lut
 constexpr int WLEN_LUT_SIZE = 1024;
@@ -45,6 +46,17 @@ constexpr int ZOLUT_NUM_ENTRIES_Z = 256;
 constexpr float ZOLUT_MIN_ENTRY_Z = -800;
 constexpr float ZOLUT_MAX_ENTRY_Z = 800;
 constexpr float ZOLUT_SPACING_Z = (ZOLUT_MAX_ENTRY_Z - ZOLUT_MIN_ENTRY_Z) / float(ZOLUT_NUM_ENTRIES_Z);
+
+constexpr int ZOLUT_SIZE = ZOLUT_NUM_ENTRIES_NR * ZOLUT_NUM_ENTRIES_Z;
+
+// shared memory usage for look up tables
+// #define SHARED_WLEN
+// #define SHARED_ZOFFSET
+// #define SHARED_ICE_PROPERTIES 
+// #define SHARED_WLEN_BIAS
+// #define SHARED_NUM_INDEX_STRING_SET
+// #define SHARED_COLLISION_GRID_DATA
+// #define SHARED_STRING_DATA
 
 // blocked random numbers
 // #define BLOCK_RANDOM_NUMBERS_SCATTERING
