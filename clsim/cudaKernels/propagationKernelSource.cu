@@ -168,14 +168,6 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         const float* wlenLutPointer = wlenLut;
     #endif
 
-    #ifdef SHARED_ZOFFSET
-        __shared__ float sharedZOffsetLut[ZOLUT_SIZE];
-        cg::memcpy_async(block, sharedZOffsetLut, zOffsetLut, sizeof(float)*ZOLUT_SIZE);
-        const float* zOffsetLutPointer = sharedZOffsetLut;
-    #else
-        const float* zOffsetLutPointer = zOffsetLut;
-    #endif
-
     #ifdef SHARED_ICE_PROPERTIES
         __shared__ float sharedScatteringLength[171];
         __shared__ float sharedAbsorptionADust[171];
@@ -269,7 +261,7 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
 
         // propagate through layers until scattered or absorbed
         float distanceTraveled;
-        bool absorbed = propPhoton(photon, distanceTraveled, rng, scatteringLutPointer, absorbtionLutPointer, absorbtionDeltaTauLutPointer, zOffsetLutPointer);
+        bool absorbed = propPhoton(photon, distanceTraveled, rng, scatteringLutPointer, absorbtionLutPointer, absorbtionDeltaTauLutPointer, zOffsetLut);
 
         // check for collision with DOMs, if collision has happened, the hit will be stored in outputPhotons
         bool collided = checkForCollisionOld(photon, step, distanceTraveled, 

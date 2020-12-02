@@ -50,13 +50,12 @@ constexpr float ZOLUT_SPACING_Z = (ZOLUT_MAX_ENTRY_Z - ZOLUT_MIN_ENTRY_Z) / floa
 constexpr int ZOLUT_SIZE = ZOLUT_NUM_ENTRIES_NR * ZOLUT_NUM_ENTRIES_Z;
 
 // shared memory usage for look up tables
-// #define SHARED_WLEN
-// #define SHARED_ZOFFSET
-// #define SHARED_ICE_PROPERTIES 
-// #define SHARED_WLEN_BIAS
-// #define SHARED_NUM_INDEX_STRING_SET
-// #define SHARED_COLLISION_GRID_DATA
-// #define SHARED_STRING_DATA
+#define SHARED_WLEN
+#define SHARED_ICE_PROPERTIES 
+#define SHARED_WLEN_BIAS
+#define SHARED_NUM_INDEX_STRING_SET
+#define SHARED_COLLISION_GRID_DATA
+#define SHARED_STRING_DATA
 
 // blocked random numbers
 // #define BLOCK_RANDOM_NUMBERS_SCATTERING
