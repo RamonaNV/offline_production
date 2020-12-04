@@ -205,10 +205,10 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         __shared__ unsigned short geoCellIndex0shared[GEO_CELL_NUM_X_0 * GEO_CELL_NUM_Y_0];
         __shared__ unsigned short geoCellIndex1shared[GEO_CELL_NUM_X_1 * GEO_CELL_NUM_Y_1];
         for (int i = threadIdx.x; i < GEO_CELL_NUM_X_0 * GEO_CELL_NUM_Y_0; i += blockDim.x) {
-            geoCellIndex0shared[i] = geoCellIndex0shared[i];
+            geoCellIndex0shared[i] = geoCellIndex_0[i];
         }
         for (int i = threadIdx.x; i < GEO_CELL_NUM_X_1 * GEO_CELL_NUM_Y_1; i += blockDim.x) {
-            geoCellIndex1shared[i] = geoCellIndex1shared[i];
+            geoCellIndex1shared[i] = geoCellIndex_1[i];
         }
         const unsigned short* geoCellIndex0Pointer = geoCellIndex0shared;
         const unsigned short* geoCellIndex1Pointer = geoCellIndex1shared;
