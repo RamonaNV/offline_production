@@ -291,7 +291,11 @@ namespace detail {
                                                            const unsigned char* geoStringInSet, 
                                                            const unsigned short* geoLayerNumLocal, 
                                                            const float* geoLayerStartZLocal, 
-                                                           const float* geoLayerHeightLocal)
+                                                           const float* geoLayerHeightLocal,
+                                                           const float* geoStringPosXPointer, 
+                                                           const float* geoStringPosYPointer, 
+                                                           const float* geoStringMinZPointer, 
+                                                           const float* geoStringMaxZPointer)
     {
         // find the string set for this string
         unsigned char stringSet = geoStringInSet[stringNum];
@@ -299,8 +303,8 @@ namespace detail {
         {  // check intersection with string cylinder
             // only use test if uhat lateral component is bigger than about 0.1 (NEED to
             // check bigger than zero)
-            const float smin = sqr(((photonPos.x - float(geoStringPosX[stringNum])) * photonDir.y -
-                                    (photonPos.y - float(geoStringPosY[stringNum])) * photonDir.x)) /
+            const float smin = sqr(((photonPos.x - float(geoStringPosXPointer[stringNum])) * photonDir.y -
+                                    (photonPos.y - float(geoStringPosYPointer[stringNum])) * photonDir.x)) /
                             photonDirLenXYSqr;
             // if (smin > sqr( float(geoStringRadius[stringNum]))) return;  //
             // NOTE: smin == distance squared
@@ -310,8 +314,8 @@ namespace detail {
 
         {  // check if photon is above or below the string (geoStringMaxZ and
             // geoStringMinZ do not include the OM radius!)
-            if ((photonDir.z > 0.0f) && (photonPos.z > geoStringMaxZ[stringNum] + OM_RADIUS)) return;
-            if ((photonDir.z < 0.0f) && (photonPos.z < geoStringMinZ[stringNum] - OM_RADIUS)) return;
+            if ((photonDir.z > 0.0f) && (photonPos.z > geoStringMaxZPointer[stringNum] + OM_RADIUS)) return;
+            if ((photonDir.z < 0.0f) && (photonPos.z < geoStringMinZPointer[stringNum] - OM_RADIUS)) return;
         }
 
         // this photon could potentially be hitting an om
@@ -398,7 +402,11 @@ namespace detail {
         const unsigned char* geoStringInSet, 
         const unsigned short* geoLayerNumLocal, 
         const float* geoLayerStartZLocal, 
-        const float* geoLayerHeightLocal)
+        const float* geoLayerHeightLocal,
+        const float* geoStringPosXPointer, 
+        const float* geoStringPosYPointer,
+        const float* geoStringMinZPointer, 
+        const float* geoStringMaxZPointer)
     {
         int lowCellX = int((photonPos.x - this_geoCellStartX) / this_geoCellWidthX);
         int lowCellY = int((photonPos.y - this_geoCellStartY) / this_geoCellWidthY);
@@ -431,7 +439,8 @@ namespace detail {
                 checkForCollision_OnStringOld(stringNum, photonDirLenXYSqr, photonPos, photonDir, 
                                         thisStepLength, hitRecorded, hitOnString, hitOnDom,
                                         geoLayerToOMNumIndexPerStringSetLocal, 
-                                        geoStringInSet, geoLayerNumLocal, geoLayerStartZLocal, geoLayerHeightLocal);
+                                        geoStringInSet, geoLayerNumLocal, geoLayerStartZLocal, geoLayerHeightLocal,
+                                        geoStringPosXPointer, geoStringPosYPointer, geoStringMinZPointer, geoStringMaxZPointer);
             }
         }
     }
@@ -448,7 +457,11 @@ namespace detail {
                                                           const unsigned char* geoStringInSet, 
                                                           const unsigned short* geoLayerNumLocal, 
                                                           const float* geoLayerStartZLocal, 
-                                                          const float* geoLayerHeightLocal)
+                                                          const float* geoLayerHeightLocal,
+                                                          const float* geoStringPosXPointer, 
+                                                          const float* geoStringPosYPointer,
+                                                          const float* geoStringMinZPointer, 
+                                                          const float* geoStringMaxZPointer)
     {
         // using macros and hard-coded names is
         // not really the best thing to do here..
@@ -461,7 +474,8 @@ namespace detail {
                                 GEO_CELL_START_Y_##subdetectorNum, GEO_CELL_WIDTH_X_##subdetectorNum,               \
                                 GEO_CELL_WIDTH_Y_##subdetectorNum, GEO_CELL_NUM_X_##subdetectorNum,                 \
                                 GEO_CELL_NUM_Y_##subdetectorNum,                                                    \
-                                geoStringInSet, geoLayerNumLocal, geoLayerStartZLocal, geoLayerHeightLocal);        
+                                geoStringInSet, geoLayerNumLocal, geoLayerStartZLocal, geoLayerHeightLocal,         \
+                                geoStringPosXPointer, geoStringPosYPointer, geoStringMinZPointer, geoStringMaxZPointer);        
 
         // argh..
     #if GEO_CELL_NUM_SUBDETECTORS > 0
@@ -704,7 +718,11 @@ __device__ __forceinline__ bool checkForCollisionOld(const I3CLPhoton& photon, c
                                                   const unsigned char* geoStringInSet, 
                                                   const unsigned short* geoLayerNumLocal, 
                                                   const float* geoLayerStartZLocal, 
-                                                  const float* geoLayerHeightLocal)
+                                                  const float* geoLayerHeightLocal,
+                                                  const float* geoStringPosXPointer, 
+                                                  const float* geoStringPosYPointer,  
+                                                  const float* geoStringMinZPointer, 
+                                                  const float* geoStringMaxZPointer)
 {
     const float photonDirLenXYSqr = sqr(photon.dir.x) + sqr(photon.dir.y); 
     if (photonDirLenXYSqr <= 0.0f) return false; // is this really correct? what if we are inbetween doms and move straight down 
@@ -716,7 +734,8 @@ __device__ __forceinline__ bool checkForCollisionOld(const I3CLPhoton& photon, c
     detail::checkForCollision_InCellsOld(photonDirLenXYSqr, photon.pos, photon.dir,
                               traveledDistance, hitRecorded, hitOnString, hitOnDom,
                               geoLayerToOMNumIndexPerStringSetLocal, geoCellIndex0, geoCellIndex1, geoStringInSet, 
-                              geoLayerNumLocal, geoLayerStartZLocal, geoLayerHeightLocal);
+                              geoLayerNumLocal, geoLayerStartZLocal, geoLayerHeightLocal,
+                              geoStringPosXPointer, geoStringPosYPointer, geoStringMinZPointer, geoStringMaxZPointer);
 
     // record the photons, i.e. store the hit in the outputPhotons array
     if (hitRecorded) {

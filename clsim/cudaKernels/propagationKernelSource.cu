@@ -155,7 +155,6 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
 {
     #ifdef SHARED_WLEN
         __shared__ float sharedWlenLut[WLEN_LUT_SIZE];
-        // cg::memcpy_async(block, sharedWlenLut, wlenLut, sizeof(float)*WLEN_LUT_SIZE);
         for (int i = threadIdx.x; i < WLEN_LUT_SIZE; i += blockDim.x) {
             sharedWlenLut[i] = wlenLut[i];
         }
@@ -168,16 +167,11 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         __shared__ float sharedScatteringLength[171];
         __shared__ float sharedAbsorptionADust[171];
         __shared__ float sharedAbsorptionDeltaTau[171];
-
         for (int i = threadIdx.x; i < 171; i += blockDim.x) {
             sharedScatteringLength[i] = scatteringLength_b400_LUT[i];
             sharedAbsorptionADust[i] = absorptionLength_aDust400_LUT[i];
             sharedAbsorptionDeltaTau[i] = absorptionLength_deltaTau_LUT[i];
         }
-
-        // cg::memcpy_async(block, sharedScatteringLength, scatteringLength_b400_LUT, sizeof(float)*171);
-        // cg::memcpy_async(block, sharedAbsorptionADust, absorptionLength_aDust400_LUT, sizeof(float)*171);
-        // cg::memcpy_async(block, sharedAbsorptionDeltaTau, absorptionLength_deltaTau_LUT, sizeof(float)*171);
         const float* scatteringLutPointer = sharedScatteringLength;
         const float* absorbtionLutPointer = sharedAbsorptionADust;
         const float* absorbtionDeltaTauLutPointer = sharedAbsorptionDeltaTau;
@@ -189,7 +183,6 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
 
     #ifdef SHARED_WLEN_BIAS
         __shared__ float getWavelengthBias_dataShared[43];
-        // cg::memcpy_async(block, getWavelengthBias_dataShared, getWavelengthBias_data, sizeof(float)*43);
         for (int i = threadIdx.x; i < 43; i += blockDim.x) {
             getWavelengthBias_dataShared[i] = getWavelengthBias_data[i];
         }
@@ -203,7 +196,6 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         for (int i = threadIdx.x; i < GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE; i += blockDim.x) {
             geoLayerToOMNumIndexPerStringSetLocal[i] = geoLayerToOMNumIndexPerStringSet[i];
         }
-        // cg::memcpy_async(block, geoLayerToOMNumIndexPerStringSetLocal, geoLayerToOMNumIndexPerStringSet, sizeof(unsigned short)*GEO_geoLayerToOMNumIndexPerStringSet_BUFFER_SIZE);
         const unsigned short* numIndexStringSetPointer = geoLayerToOMNumIndexPerStringSetLocal;
     #else
         const unsigned short* numIndexStringSetPointer = geoLayerToOMNumIndexPerStringSet;
@@ -218,8 +210,6 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         for (int i = threadIdx.x; i < GEO_CELL_NUM_X_1 * GEO_CELL_NUM_Y_1; i += blockDim.x) {
             geoCellIndex1shared[i] = geoCellIndex1shared[i];
         }
-        // cg::memcpy_async(block, geoCellIndex0shared, geoCellIndex_0, sizeof(unsigned short)*GEO_CELL_NUM_X_0 * GEO_CELL_NUM_Y_0);
-        // cg::memcpy_async(block, geoCellIndex1shared, geoCellIndex_1, sizeof(unsigned short)*GEO_CELL_NUM_X_1 * GEO_CELL_NUM_Y_1);
         const unsigned short* geoCellIndex0Pointer = geoCellIndex0shared;
         const unsigned short* geoCellIndex1Pointer = geoCellIndex1shared;
     #else
@@ -232,21 +222,14 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         __shared__ unsigned short geoLayerNumShared[GEO_LAYER_STRINGSET_NUM];
         __shared__ float geoLayerStartZShared[GEO_LAYER_STRINGSET_NUM];
         __shared__ float geoLayerHeightShared[GEO_LAYER_STRINGSET_NUM];
-
         for (int i = threadIdx.x; i < NUM_STRINGS; i += blockDim.x) {
             geoStringInSetShared[i] = geoStringInStringSet[i];
         }
-
         for (int i = threadIdx.x; i < GEO_LAYER_STRINGSET_NUM; i += blockDim.x) {
             geoLayerNumShared[i] = geoLayerNum[i];
             geoLayerStartZShared[i] = geoLayerStartZ[i];
             geoLayerHeightShared[i] = geoLayerHeight[i];
         }
-
-        // cg::memcpy_async(block, geoStringInSetShared, geoStringInStringSet, sizeof(unsigned char)*NUM_STRINGS);
-        // cg::memcpy_async(block, geoLayerNumShared, geoLayerNum, sizeof(unsigned short)*GEO_LAYER_STRINGSET_NUM);
-        // cg::memcpy_async(block, geoLayerStartZShared, geoLayerStartZ, sizeof(float)*GEO_LAYER_STRINGSET_NUM);
-        // cg::memcpy_async(block, geoLayerHeightShared, geoLayerHeight, sizeof(float)*GEO_LAYER_STRINGSET_NUM);
         const unsigned char* geoStringInSetPointer = geoStringInSetShared;
         const unsigned short* geoLayerNumPointer = geoLayerNumShared;
         const float* geoLayerStartZPointer = geoLayerStartZShared;
@@ -256,6 +239,28 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         const unsigned short* geoLayerNumPointer = geoLayerNum;
         const float* geoLayerStartZPointer = geoLayerStartZ;
         const float* geoLayerHeightPointer = geoLayerHeight;
+    #endif
+
+    #ifdef SHARED_STRING_POSITIONS
+        __shared__ float geoStringPosXShared[NUM_STRINGS];
+        __shared__ float geoStringPosYShared[NUM_STRINGS];
+        __shared__ float geoStringMinZShared[NUM_STRINGS];
+        __shared__ float geoStringMaxZShared[NUM_STRINGS];
+        for (int i = threadIdx.x; i < NUM_STRINGS; i += blockDim.x) {
+            geoStringPosXShared[i] = geoStringPosX[i];
+            geoStringPosYShared[i] = geoStringPosY[i];
+            geoStringMinZShared[i] = geoStringMinZ[i];
+            geoStringMaxZShared[i] = geoStringMaxZ[i];
+        }
+        const float* geoStringPosXPointer = geoStringPosXShared;
+        const float* geoStringPosYPointer = geoStringPosYShared;
+        const float* geoStringMinZPointer = geoStringMinZShared;
+        const float* geoStringMaxZPointer = geoStringMaxZShared;
+    #else
+        const float* geoStringPosXPointer = geoStringPosX;
+        const float* geoStringPosYPointer = geoStringPosY;
+        const float* geoStringMinZPointer = geoStringMinZ;
+        const float* geoStringMaxZPointer = geoStringMaxZ;
     #endif
 
     __syncthreads();
@@ -292,7 +297,8 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
         // check for collision with DOMs, if collision has happened, the hit will be stored in outputPhotons
         bool collided = checkForCollisionOld(photon, step, distanceTraveled, 
                                   hitIndex, maxHitIndex, outputPhotons, numIndexStringSetPointer, wlenBiasLutPointer, 
-                                  geoCellIndex0Pointer, geoCellIndex1Pointer, geoStringInSetPointer, geoLayerNumPointer, geoLayerStartZPointer, geoLayerHeightPointer);
+                                  geoCellIndex0Pointer, geoCellIndex1Pointer, geoStringInSetPointer, geoLayerNumPointer, geoLayerStartZPointer, geoLayerHeightPointer,
+                                  geoStringPosXPointer, geoStringPosYPointer, geoStringMinZPointer, geoStringMaxZPointer);
 
         // remove photon if it is collided or absorbed
         // we get the next photon at the beginning of the loop
