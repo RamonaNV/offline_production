@@ -32,6 +32,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // ------------------
 #include <cuda.h>
 #include <cuda_runtime_api.h>
+#include <cfenv>
 // ------------------
 
 /**
@@ -94,6 +95,36 @@ void inline initMWCRng(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_R
 
     cudaDeviceSynchronize();
     printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
+}
+
+// initializes the rng and allows to use more threads than prime numbers
+void inline initMWCRng_jobqueue(int numRngPrimes, int requestedThreads, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
+                   uint32_t** d_MWC_RNG_a)
+{
+    printf("RNG setup. Available primes: %i. Requested threads %i \n", numRngPrimes, requestedThreads);
+
+    // prime numbers
+    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a, numRngPrimes * sizeof(uint32_t)));
+    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_a, MWC_RNG_a, numRngPrimes * sizeof(uint32_t), cudaMemcpyHostToDevice));
+
+    // seeds
+    std::vector<uint64_t> seeds(requestedThreads);
+    uint64_t x = MWC_RNG_x[0];
+    int roundMode = std::fegetround();
+    std::fesetround(FE_TOWARDZERO);
+    for(int i = 0; i < requestedThreads; i++)
+    {
+        seeds[i]=0;
+        while( (seeds[i]==0) | (((uint32_t)(seeds[i]>>32))>=(MWC_RNG_a[i%numRngPrimes]-1)) | (((uint32_t)seeds[i])>=0xfffffffful))
+        {
+            x = (x & 0xffffffffull) * (MWC_RNG_a[0]) + (x >> 32);
+            seeds[i] = x;
+        }
+    }
+    std::fesetround(roundMode);
+
+    CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_x, requestedThreads * sizeof(uint64_t)));
+    CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_x, seeds.data(), requestedThreads * sizeof(uint64_t), cudaMemcpyHostToDevice));
 }
 
 // define a shorthand for the rng that is actually used in the code

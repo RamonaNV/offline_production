@@ -31,6 +31,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 constexpr int NTHREADS_PER_BLOCK = 512;
 constexpr int NBLOCKS_PER_SM = 4;
 
+// enable load balancing
+// #define USE_JOBQUEUE
+
 // wlen lut
 constexpr int WLEN_LUT_SIZE = 1024;
 
