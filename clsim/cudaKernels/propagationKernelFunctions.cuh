@@ -617,7 +617,7 @@ __device__ __forceinline__ bool propPhoton(I3CLPhoton& ph, float& distancePropag
         cg::coalesced_group active = cg::coalesced_threads();
         if(active.thread_rank()==0)
             scaStepLeft = -logf(rng.randUniformFloatOC());
-        scaStepLeft = active.shfl(scaStepLeft,0);
+        scaStepLeft = active.shfl(scaStepLeft, 0);
     #else
         scaStepLeft = -logf(rng.randUniformFloatOC());
     #endif

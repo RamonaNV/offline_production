@@ -63,6 +63,8 @@
 #define __CL_ENABLE_EXCEPTIONS
 #include "clsim/cl.hpp"
 
+#include "cudaBenchmarkSettings.h"
+
 using namespace I3CLSimHelper;
 
 const bool I3CLSimStepToPhotonConverterOpenCL::default_useNativeMath = true;
@@ -1891,9 +1893,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
 
 
     // ----------------------- CUDA PART -------------------------
-    const bool runCudaOnly = true; // only run cuda and not opencl (to speed up big runs)  
-    const bool returnPhotonsCUDA = true || runCudaOnly;  // return CUDA phtoons instead of CL phtotons (always true when only cuda is executed)
-    I3CLSimPhotonSeriesPtr photons(new I3CLSimPhotonSeries);
+   I3CLSimPhotonSeriesPtr photons(new I3CLSimPhotonSeries);
 
     float totalCudaKernelTime = 0;
     float totalCLKernelTime = 0;
