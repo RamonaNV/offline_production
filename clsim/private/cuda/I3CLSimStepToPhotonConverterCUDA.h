@@ -16,16 +16,16 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
  *
- * $Id: I3CLSimStepToPhotonConverterOpenCL.h 177703 2019-12-05 20:04:47Z jvansanten $
+ * $Id: I3CLSimStepToPhotonConverterCUDA.h 177703 2019-12-05 20:04:47Z jvansanten $
  *
- * @file I3CLSimStepToPhotonConverterOpenCL.h
+ * @file I3CLSimStepToPhotonConverterCUDA.h
  * @version $Revision: 177703 $
  * @date $Date: 2019-12-05 13:04:47 -0700 (Thu, 05 Dec 2019) $
  * @author Claudio Kopper
  */
 
-#ifndef I3CLSIMSTEPTOPHOTONCONVERTEROPENCL_H_INCLUDED
-#define I3CLSIMSTEPTOPHOTONCONVERTEROPENCL_H_INCLUDED
+#ifndef I3CLSIMSTEPTOPHOTONCONVERTERCUDA_H_INCLUDED
+#define I3CLSIMSTEPTOPHOTONCONVERTERCUDA_H_INCLUDED
 
 #include "clsim/I3CLSimStepToPhotonConverter.h"
 
@@ -59,14 +59,14 @@ namespace cl {
  * @brief Creates photons from a given list of steps and propagates
  * them to a DOM using an OpenCL-enabled algorithm
  */
-struct I3CLSimStepToPhotonConverterOpenCL : public I3CLSimStepToPhotonConverter
+struct I3CLSimStepToPhotonConverterCUDA : public I3CLSimStepToPhotonConverter
 {
 public:
     static const bool default_useNativeMath;
     
-    I3CLSimStepToPhotonConverterOpenCL(I3RandomServicePtr randomService,
+    I3CLSimStepToPhotonConverterCUDA(I3RandomServicePtr randomService,
                                        bool useNativeMath=default_useNativeMath);
-    virtual ~I3CLSimStepToPhotonConverterOpenCL();
+    virtual ~I3CLSimStepToPhotonConverterCUDA();
 
     /**
      * Sets the workgroup size. A value of 0 
@@ -380,13 +380,25 @@ public:
     inline uint64_t GetNumKernelCalls() const {boost::unique_lock<boost::mutex> guard(statistics_.mutex); return statistics_.total_kernel_calls;}
     inline uint64_t GetTotalNumPhotonsGenerated() const {boost::unique_lock<boost::mutex> guard(statistics_.mutex); return statistics_.total_num_photons_generated;}
     inline uint64_t GetTotalNumPhotonsAtDOMs() const {boost::unique_lock<boost::mutex> guard(statistics_.mutex); return statistics_.total_num_photons_atDOMs;}
-    
+        
+    void runCLCUDA(boost::this_thread::disable_interruption &di,
+                                                                        const boost::posix_time::ptime &last_timestamp,
+                                                                        bool &shouldBreak,
+                                                                        unsigned int bufferIndex,
+                                                                        uint32_t &out_stepsIdentifier,
+                                                                        uint64_t &out_totalNumberOfPhotons,
+                                                                        std::size_t &out_numberOfInputSteps,
+                                                                        bool blocking=true);
+    void CLCUDAThread(boost::this_thread::disable_interruption &di);
+
+
 private:
     typedef std::pair<uint32_t, I3CLSimStepSeriesConstPtr> ToOpenCLPair_t;
 
     // sets up OpenCL
     void SetupQueueAndKernel(const cl::Platform& platform, const cl::Device &device);
-
+    
+    void checksizes(const int numBuffers=1);
     
     void OpenCLThread();
     void OpenCLThread_impl(boost::this_thread::disable_interruption &di);
@@ -531,9 +543,9 @@ private:
     // Size of output photon storage (maximum amount of photons per step bunch)
     uint32_t maxNumOutputPhotons_;
     
-    SET_LOGGER("I3CLSimStepToPhotonConverterOpenCL");
+    SET_LOGGER("I3CLSimStepToPhotonConverterCUDA");
 };
 
-I3_POINTER_TYPEDEFS(I3CLSimStepToPhotonConverterOpenCL);
+I3_POINTER_TYPEDEFS(I3CLSimStepToPhotonConverterCUDA);
 
-#endif //I3CLSIMSTEPTOPHOTONCONVERTEROPENCL_H_INCLUDED
+#endif //I3CLSIMSTEPTOPHOTONCONVERTERCUDA_H_INCLUDED

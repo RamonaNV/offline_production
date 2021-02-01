@@ -44,7 +44,7 @@ parser.add_argument('--oversize', default=1, type=int)
 parser.add_argument('--energy', default=1e3, type=float)
 parser.add_argument('-o', '--output-file', default=None)
 parser.add_argument('-r', '--repeat',default=1, type=int)
-
+parser.add_argument('--opencl', dest='cuda', default=True, action="store_false")
 
 args = parser.parse_args()
 
@@ -61,11 +61,9 @@ for i in range(0,args.repeat):
 	rng = phys_services.I3GSLRandomService(0)
 
 	from icecube.ppc import MakeCLSimPropagator
-	
 
-	clsimer = clsim.traysegments.common.setupPropagators(rng, DetectorParams, UseCPUs=not args.use_gpus)[0]
+	clsimer = clsim.traysegments.common.setupPropagators(rng, DetectorParams, UseCPUs=not args.use_gpus, UseCUDA=args.cuda)[0]
 
-	
 	#pprint('---> clsim granularity %d, bunch size %d' % (clsimer.workgroupSize, clsimer.maxNumWorkitems))
 
 	try:

@@ -62,6 +62,9 @@ namespace bp = boost::python;
     (I3CLSimStepToPhotonConverter)                  \
     (I3CLSimServer)
 
+#define REGISTER_THESE_THINGS_CUDA                  \
+    (I3CLSimStepToPhotonConverterCUDA)
+
 #define I3_REGISTRATION_FN_DECL(r, data, t) void BOOST_PP_CAT(register_,t)();
 #define I3_REGISTER(r, data, t) BOOST_PP_CAT(register_,t)();
 
@@ -72,6 +75,10 @@ BOOST_PP_SEQ_FOR_EACH(I3_REGISTRATION_FN_DECL, ~, REGISTER_THESE_THINGS_TOO)
 
 #ifdef HAS_ZMQ
 BOOST_PP_SEQ_FOR_EACH(I3_REGISTRATION_FN_DECL, ~, REGISTER_THESE_THINGS_ZMQ)
+#endif
+
+#ifdef HAS_CUDA
+BOOST_PP_SEQ_FOR_EACH(I3_REGISTRATION_FN_DECL, ~, REGISTER_THESE_THINGS_CUDA)
 #endif
 
 #ifdef BUILD_CLSIM_TABULATOR
@@ -100,6 +107,10 @@ BOOST_PYTHON_MODULE(clsim)
 
 #ifdef HAS_ZMQ
 BOOST_PP_SEQ_FOR_EACH(I3_REGISTER, ~, REGISTER_THESE_THINGS_ZMQ)
+#endif
+
+#ifdef HAS_CUDA
+BOOST_PP_SEQ_FOR_EACH(I3_REGISTER, ~, REGISTER_THESE_THINGS_CUDA)
 #endif
 
 #ifdef BUILD_CLSIM_TABULATOR

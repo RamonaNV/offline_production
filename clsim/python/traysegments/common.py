@@ -325,7 +325,8 @@ def setupPropagators(RandomService,
                      DoNotParallelize=False,
                      OverrideApproximateNumberOfWorkItems=None,
                      EnableDoubleBuffering=False,
-                     DoublePrecision=False
+                     DoublePrecision=False,
+                     UseCUDA=False,
                      ):
     """
     Create a collection of photon propagators suitable for use with I3CLSimServer
@@ -345,12 +346,27 @@ def setupPropagators(RandomService,
         UseOnlyDeviceNumber=UseOnlyDeviceNumber
     )
     
-    def create_converter(device):
-        return clsim.initializeOpenCL(device, RandomService, geometry,
-            mediumProperties, wavelengthGenerationBias, clsim.I3CLSimRandomValuePtrSeries(wavelengthGenerators),
-            pancakeFactor=DetectorParams['DOMPancakeFactor'],
-            enableDoubleBuffering=EnableDoubleBuffering,
-            doublePrecision=DoublePrecision
-            )
+    def create_converter(device, use_cuda=False):
+        if use_cuda:
+            # implementation taken from I3CLSimModuleHelper::initializeOpenCL()
+            converter = clsim.I3CLSimStepToPhotonConverterCUDA(RandomService, True)
+            converter.SetDevice(device)
+            converter.SetWlenGenerators(clsim.I3CLSimRandomValuePtrSeries(wavelengthGenerators))
+            converter.SetWlenBias(wavelengthGenerationBias)
+            converter.SetMediumProperties(mediumProperties)
+            converter.SetGeometry(geometry)
+            converter.SetEnableDoubleBuffering(EnableDoubleBuffering)
+            converter.SetDoublePrecision(EnableDoubleBuffering)
+            converter.SetDOMPancakeFactor(DetectorParams['DOMPancakeFactor'])
+            converter.Compile()
+            converter.Initialize()
+            return converter
+        else:
+            return clsim.initializeOpenCL(device, RandomService, geometry,
+                mediumProperties, wavelengthGenerationBias, clsim.I3CLSimRandomValuePtrSeries(wavelengthGenerators),
+                pancakeFactor=DetectorParams['DOMPancakeFactor'],
+                enableDoubleBuffering=EnableDoubleBuffering,
+                doublePrecision=DoublePrecision
+                )
         
-    return [create_converter(device) for device in openCLDevices]
+    return [create_converter(device, UseCUDA) for device in openCLDevices]
