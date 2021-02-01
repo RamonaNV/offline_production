@@ -340,6 +340,8 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
     rng_x[id] = rng.getState();
 }
 
+// thread_block_tile::meta_group_rank() requires CUDA 11
+#if CUDA_VERSION >= 11000
 /**
  * @brief Generates photons for one "step" and simulates propagation through the ice.
  * @param group the group of threads used to process one step (eg one warp)
@@ -623,3 +625,4 @@ __global__ void propKernelJobqueue(I3CLSimStepCuda* __restrict__ steps, int numS
     // store rng state
     rng_x[threadId] = rng.getState();
 }
+#endif // CUDA_VERSION >= 11000
