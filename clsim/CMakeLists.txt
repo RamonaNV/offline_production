@@ -50,6 +50,8 @@ if (APPLE AND (CMAKE_SYSTEM_VERSION VERSION_LESS "11.0.0"))
   set(OPENCL_FOUND False)
 endif (APPLE AND (CMAKE_SYSTEM_VERSION VERSION_LESS "11.0.0"))
 
+# FIXME: stub; make conditional on CUDA detection (>= 11.0)
+set (BUILD_CLSIM_CUDA YES)
 
 # The IceTray project definition
 if (BUILD_CLSIM_DATACLASSES_ONLY)
@@ -68,16 +70,6 @@ else (BUILD_CLSIM_DATACLASSES_ONLY)
     DOCS_DIR resources/docs
   )
 endif (BUILD_CLSIM_DATACLASSES_ONLY)
-
-
-
-
-enable_language(CUDA)
-
-
-
-
-
 
 SET(LIB_${PROJECT_NAME}_SOURCEFILES
   # private/clsim
@@ -297,7 +289,23 @@ if(NOT BUILD_CLSIM_DATACLASSES_ONLY)
   endif()
 endif()
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cudaKernels)
+if (BUILD_CLSIM_CUDA)
+  enable_language(CUDA)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cudaKernels)
+  add_definitions(-DHAS_CUDA)
+  list(APPEND LIB_${PROJECT_NAME}_LIBRARIES
+    thiscudalib
+  )
+  list(APPEND LIB_${PROJECT_NAME}_SOURCEFILES
+    private/cuda/I3CLSimStepToPhotonConverterCUDA.cxx
+  )
+  list(APPEND LIB_${PROJECT_NAME}_PYBINDINGS_SOURCEFILES
+    private/pybindings/I3CLSimStepToPhotonConverterCUDA.cxx
+  )
+  colormsg(GREEN "+-- CUDA support")
+else()
+  colormsg(RED "+-- CUDA support disabled")
+endif()
 
 # check for Geant4
 if (GEANT4_FOUND AND OPENCL_FOUND AND NOT DISABLE_GEANT4_IN_CLSIM)
@@ -326,14 +334,6 @@ elseif (GEANT4_FOUND AND OPENCL_FOUND AND DISABLE_GEANT4_IN_CLSIM)
 else (GEANT4_FOUND AND OPENCL_FOUND AND NOT DISABLE_GEANT4_IN_CLSIM)
     colormsg(RED   "+-- Geant4 or OpenCL is not installed on your system. clsim will fail if it is not used with parameterizations.")
 endif (GEANT4_FOUND AND OPENCL_FOUND AND NOT DISABLE_GEANT4_IN_CLSIM)
-
- 
-
-list(APPEND LIB_${PROJECT_NAME}_LIBRARIES
- 
-  thiscudalib
-
-  )
 
 # the clsim library definition
 i3_add_library(${PROJECT_NAME}
