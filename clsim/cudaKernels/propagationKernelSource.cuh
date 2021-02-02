@@ -30,4 +30,23 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
                           I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
                           uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime);
 
+struct KernelBuffers;
+
+class Kernel {
+public:
+    Kernel(
+        int device,
+        size_t maxNumWorkItems,
+        size_t maxNumOutputPhotons,
+        const std::vector<uint64_t> &x,
+        const std::vector<uint32_t> &a
+    );
+    ~Kernel();
+    void uploadSteps(const std::vector<I3CLSimStep> &steps);
+    void execute();
+    std::vector<I3CLSimPhoton> downloadPhotons();
+private:
+    std::unique_ptr<KernelBuffers> impl;
+};
+
 #endif  // PROPAGATIONKERNELSOURCE_CUH

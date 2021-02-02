@@ -58,6 +58,120 @@ __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernel
                                                                     const float* wlenLut, const float* zOffsetLut,
                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a, int numPrimes); 
 
+struct KernelBuffers {
+    float* wlenLut;
+    float* zOffsetLut;
+    uint64_t *MWC_RNG_x;
+    uint32_t *MWC_RNG_a;
+    I3CLSimStepCuda* inputSteps;
+    uint32_t numInputSteps;
+    I3CLSimPhotonCuda* outputPhotons;
+    uint32_t *numOutputPhotons;
+    uint32_t maxHitIndex;
+    cudaStream_t stream;
+    KernelBuffers(
+        size_t maxNumWorkItems, size_t maxNumOutputPhotons,
+        const std::vector<uint64_t> &x, const std::vector<uint32_t> &a
+    ) : wlenLut(nullptr), zOffsetLut(nullptr), MWC_RNG_x(nullptr), MWC_RNG_a(nullptr), inputSteps(nullptr), numInputSteps(0), outputPhotons(nullptr), numOutputPhotons(nullptr), maxHitIndex(maxNumOutputPhotons) {
+        {
+            auto wlen = generateWavelengthLut();
+            CUDA_ERR_THROW(cudaMalloc((void**)&wlenLut, wlen.size()*sizeof(float)));
+            CUDA_ERR_THROW(cudaMemcpy(wlenLut, wlen.data(), wlen.size() * sizeof(float), cudaMemcpyHostToDevice));
+        }
+        {
+            auto zOffset = generateZOffsetLut();
+            CUDA_ERR_THROW(cudaMalloc((void**)&zOffsetLut, zOffset.size() * sizeof(float)));
+            CUDA_ERR_THROW(cudaMemcpy(zOffsetLut, zOffset.data(), zOffset.size() * sizeof(float), cudaMemcpyHostToDevice));
+        }
+        {
+            // FIXME: add jobqueue support back
+            initMWCRng(x.size(), x.data(), a.data(), &MWC_RNG_x, &MWC_RNG_a);
+        }
+        CUDA_ERR_THROW(cudaMalloc((void**)&inputSteps, maxNumWorkItems * sizeof(I3CLSimStepCuda)));
+        CUDA_ERR_THROW(cudaMalloc((void**)&outputPhotons, maxNumOutputPhotons * sizeof(I3CLSimPhotonCuda)));
+        CUDA_ERR_THROW(cudaMalloc((void**)&numOutputPhotons, sizeof(uint32_t)));
+        CUDA_ERR_THROW(cudaStreamCreate(&stream));
+    }
+
+    ~KernelBuffers() {
+        if (wlenLut != nullptr)
+            cudaFree(wlenLut);
+        if (zOffsetLut != nullptr)
+            cudaFree(zOffsetLut);
+        if (MWC_RNG_x != nullptr)
+            cudaFree(MWC_RNG_x);
+        if (MWC_RNG_a != nullptr)
+            cudaFree(MWC_RNG_a);
+        if (inputSteps != nullptr)
+            cudaFree(inputSteps);
+        if (outputPhotons != nullptr)
+            cudaFree(outputPhotons);
+        if (numOutputPhotons != nullptr)
+            cudaFree(numOutputPhotons);
+        cudaStreamDestroy(stream);
+    }
+
+// hide from device compilation trajectory (I3CLSimStep contains unsupported vector types)
+#ifndef __CUDA_ARCH__
+    void uploadSteps(const std::vector<I3CLSimStep> &steps) {
+        std::vector<I3CLSimStepCuda> cudaSteps(steps.size());
+        for (int i = 0; i < steps.size(); i++) {
+            cudaSteps[i] = I3CLSimStepCuda(steps[i]);
+        }
+        CUDA_ERR_THROW(cudaMemcpyAsync(inputSteps, cudaSteps.data(), cudaSteps.size() * sizeof(I3CLSimStepCuda), cudaMemcpyHostToDevice, stream));
+        CUDA_ERR_THROW(cudaStreamSynchronize(stream));
+        numInputSteps = cudaSteps.size();
+    }
+    std::vector<I3CLSimPhoton> downloadPhotons() {
+        uint32_t numberPhotons;
+        CUDA_ERR_THROW(cudaMemcpyAsync(&numberPhotons, numOutputPhotons, 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
+        CUDA_ERR_THROW(cudaStreamSynchronize(stream));
+        std::vector<I3CLSimPhotonCuda> cudaPhotons(numberPhotons);
+        std::vector<I3CLSimPhoton> photons(numberPhotons);
+        CUDA_ERR_THROW(cudaMemcpyAsync(cudaPhotons.data(), outputPhotons, numberPhotons * sizeof(I3CLSimPhotonCuda), cudaMemcpyDeviceToHost, stream));
+        CUDA_ERR_THROW(cudaStreamSynchronize(stream));
+        for (int i = 0; i < numberPhotons; i++) {
+            photons[i] = cudaPhotons[i].getI3CLSimPhoton();
+        }
+        return photons;
+    }
+#endif
+};
+
+Kernel::Kernel(
+    int device,
+    size_t maxNumWorkItems,
+    size_t maxNumOutputPhotons,
+    const std::vector<uint64_t> &x,
+    const std::vector<uint32_t> &a
+) : impl(new KernelBuffers(maxNumWorkItems, maxNumOutputPhotons, x, a))
+{
+    CUDA_ERR_THROW(cudaSetDevice(device));
+}
+
+// dtor here, where KernelBuffers is complete
+Kernel::~Kernel() {}
+
+#ifndef __CUDA_ARCH__
+void Kernel::uploadSteps(const std::vector<I3CLSimStep> &steps) { impl->uploadSteps(steps); }
+std::vector<I3CLSimPhoton> Kernel::downloadPhotons() { return impl->downloadPhotons(); }
+void Kernel::execute() {
+#ifdef USE_JOBQUEUE
+    propKernelJobqueue<<<numBlocks, NTHREADS_PER_BLOCK, 0, impl->stream >>>(impl->inputSteps, impl->numInputSteps,
+                                                impl->numOutputPhotons, impl->maxHitIndex, impl->outputPhotons,
+                                                impl->wlenLut, impl->zOffsetLut,
+                                                impl->MWC_RNG_x, impl->MWC_RNG_a, sizeRNG);
+#else
+    int numBlocks = (impl->numInputSteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
+    propKernel<<<numBlocks, NTHREADS_PER_BLOCK, 0, impl->stream >>>(impl->inputSteps, impl->numInputSteps,
+                                                impl->numOutputPhotons, impl->maxHitIndex, impl->outputPhotons,
+                                                impl->wlenLut, impl->zOffsetLut,
+                                                impl->MWC_RNG_x, impl->MWC_RNG_a);
+#endif
+    CUDA_ERR_THROW(cudaStreamSynchronize(impl->stream));
+}
+#endif
+
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, const uint32_t maxHitIndex,
                           I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
                           uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime)

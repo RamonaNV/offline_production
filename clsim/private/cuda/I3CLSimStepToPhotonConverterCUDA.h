@@ -260,22 +260,12 @@ public:
     inline uint64_t GetNumKernelCalls() const {boost::unique_lock<boost::mutex> guard(statistics_.mutex); return statistics_.total_kernel_calls;}
     inline uint64_t GetTotalNumPhotonsGenerated() const {boost::unique_lock<boost::mutex> guard(statistics_.mutex); return statistics_.total_num_photons_generated;}
     inline uint64_t GetTotalNumPhotonsAtDOMs() const {boost::unique_lock<boost::mutex> guard(statistics_.mutex); return statistics_.total_num_photons_atDOMs;}
-        
-    void runCLCUDA(boost::this_thread::disable_interruption &di,
-                                                                        const boost::posix_time::ptime &last_timestamp,
-                                                                        bool &shouldBreak,
-                                                                        unsigned int bufferIndex,
-                                                                        uint32_t &out_stepsIdentifier,
-                                                                        uint64_t &out_totalNumberOfPhotons,
-                                                                        std::size_t &out_numberOfInputSteps,
-                                                                        bool blocking=true);
-    void CLCUDAThread(boost::this_thread::disable_interruption &di);
-
 
 private:
     typedef std::pair<uint32_t, I3CLSimStepSeriesConstPtr> ToOpenCLPair_t;
 
     void OpenCLThread();
+    void ThreadyThread(boost::this_thread::disable_interruption &);
 
     // Keep a running mean using Welford's online algorithm
     // See: https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
