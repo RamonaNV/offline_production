@@ -301,6 +301,7 @@ if (BUILD_CLSIM_CUDA)
   )
   list(APPEND LIB_${PROJECT_NAME}_PYBINDINGS_SOURCEFILES
     private/pybindings/I3CLSimStepToPhotonConverterCUDA.cxx
+    private/pybindings/I3CLSimCUDADevice.cxx
   )
   colormsg(GREEN "+-- CUDA support")
 else()

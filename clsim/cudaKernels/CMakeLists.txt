@@ -26,6 +26,7 @@ set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  -lineinfo") # source code information
 
 add_library(thiscudalib SHARED
   propagationKernelSource.cu
+  I3CLSimCUDADevice.cu
   )
 
 target_link_libraries(thiscudalib

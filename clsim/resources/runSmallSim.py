@@ -44,9 +44,14 @@ parser.add_argument('--oversize', default=1, type=int)
 parser.add_argument('--energy', default=1e3, type=float)
 parser.add_argument('-o', '--output-file', default=None)
 parser.add_argument('-r', '--repeat',default=1, type=int)
+parser.add_argument('-v', '--verbose', default=False, action='store_true')
 parser.add_argument('--opencl', dest='cuda', default=True, action="store_false")
 
 args = parser.parse_args()
+
+if args.verbose:
+        icetray.logging.set_level_for_unit("I3CLSimStepToPhotonConverterOpenCL", "DEBUG")
+        icetray.logging.set_level_for_unit("I3CLSimStepToPhotonConverterCUDA", "DEBUG")
 
 for i in range(0,args.repeat):
 

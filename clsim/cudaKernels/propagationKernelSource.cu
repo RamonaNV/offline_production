@@ -50,18 +50,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                                                                     uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
-                                                                    const float* wlenLut, const float* zOffsetLut, 
-                                                                    const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
+                                                                    const float* wlenLut, const float* zOffsetLut,
                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a); 
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernelJobqueue(I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                                                                     uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
-                                                                    const float* wlenLut, const float* zOffsetLut, 
-                                                                    const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
+                                                                    const float* wlenLut, const float* zOffsetLut,
                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a, int numPrimes); 
 
 void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, const uint32_t maxHitIndex,
-                          unsigned short* geoLayerToOMNumIndexPerStringSet, int ngeolayer,
                           I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
                           uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime)
 {
@@ -76,12 +73,6 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
          int numBlocks = (nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
         initMWCRng(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
     #endif
-
-    // upload "geo layer per string set" data 
-    unsigned short* d_geolayer;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer, ngeolayer * sizeof(unsigned short)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer * sizeof(unsigned short),
-                              cudaMemcpyHostToDevice));
 
     // convert and upload steps
     I3CLSimStepCuda* h_cudastep = (I3CLSimStepCuda*)malloc(nsteps * sizeof(struct I3CLSimStepCuda));
@@ -119,21 +110,16 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
     std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
 
     #ifdef USE_JOBQUEUE
-        propKernelJobqueue<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_cudastep, nsteps, 
+        propKernelJobqueue<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_cudastep, nsteps,
                                                     d_hitIndex, maxHitIndex, d_cudaphotons,
                                                     d_wlenLut, d_zOffsetLut,
-                                                    d_geolayer,
                                                     d_MWC_RNG_x, d_MWC_RNG_a, sizeRNG);
     #else
-        propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_cudastep, nsteps, 
+        propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_cudastep, nsteps,
                                                     d_hitIndex, maxHitIndex, d_cudaphotons,
                                                     d_wlenLut, d_zOffsetLut,
-                                                    d_geolayer,
                                                     d_MWC_RNG_x, d_MWC_RNG_a);
     #endif
-
-
-
 
     CUDA_ERR_CHECK(cudaDeviceSynchronize());
     std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
@@ -160,18 +146,16 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, 
 
     free(h_cudastep);
     free(h_cudaphotons);
-    cudaFree(d_cudaphotons);
-    cudaFree(d_cudastep);
-    cudaFree(d_geolayer);
-    cudaFree(d_MWC_RNG_a);
-    cudaFree(d_MWC_RNG_x);
+    CUDA_ERR_CHECK(cudaFree(d_cudaphotons));
+    CUDA_ERR_CHECK(cudaFree(d_cudastep));
+    CUDA_ERR_CHECK(cudaFree(d_MWC_RNG_a));
+    CUDA_ERR_CHECK(cudaFree(d_MWC_RNG_x));
     printf("photon hits = %i from %i steps \n", numberPhotons, nsteps);
 }
 
 __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                             uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
-                            const float* wlenLut, const float* zOffsetLut, 
-                            const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
+                            const float* wlenLut, const float* zOffsetLut,
                             uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a)
 {
     #ifdef SHARED_WLEN
@@ -478,7 +462,6 @@ __device__ __forceinline__  void propGroup(cg::thread_block_tile<32> group, cons
 __global__ void propKernelJobqueue(I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                             uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
                             const float* wlenLut, const float* zOffsetLut, 
-                            const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
                             uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a, int numPrimes)
 {
     #ifdef SHARED_WLEN
