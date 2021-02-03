@@ -531,6 +531,8 @@ void I3CLSimStepToPhotonConverterCUDA::ThreadyThread(boost::this_thread::disable
     }
     openCLStarted_cond_.notify_all();
 
+    std::chrono::high_resolution_clock::time_point previous_finish_time;
+
     while (true) {
         try {
             boost::this_thread::restore_interruption ri(di);
@@ -544,7 +546,7 @@ void I3CLSimStepToPhotonConverterCUDA::ThreadyThread(boost::this_thread::disable
         i3_assert(steps);
         kernel.uploadSteps(*steps);
         log_debug_stream("Uploaded " << steps->size() << " steps");
-        kernel.execute();
+        size_t kernel_duration_in_nanoseconds = kernel.execute();
         auto photons = kernel.downloadPhotons();
         log_debug_stream("Got " << photons.size() << " photons");
 
@@ -554,6 +556,32 @@ void I3CLSimStepToPhotonConverterCUDA::ThreadyThread(boost::this_thread::disable
         } catch (boost::thread_interrupted &i) {
             break;
         }
+
+#ifdef DUMP_STATISTICS
+        // allow first invocation to absorb startup time
+        auto now = std::chrono::high_resolution_clock::now();
+        if (previous_finish_time == std::chrono::high_resolution_clock::time_point()) {
+            previous_finish_time = now;
+            continue;
+        }
+        size_t host_duration_in_nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now-previous_finish_time).count();
+        previous_finish_time = now;
+
+        uint64_t totalNumberOfPhotons=0;
+        for (const auto &step : *steps) {
+            totalNumberOfPhotons += step.numPhotons;
+        }
+        {
+           boost::unique_lock<boost::mutex> guard(statistics_.mutex);
+
+           statistics_.device_duration.update(kernel_duration_in_nanoseconds);
+           statistics_.host_duration.update(host_duration_in_nanoseconds);
+           statistics_.total_device_duration += kernel_duration_in_nanoseconds;
+           statistics_.total_host_duration += host_duration_in_nanoseconds;
+           statistics_.total_kernel_calls++;
+           statistics_.total_num_photons_generated += totalNumberOfPhotons; 
+        }
+#endif
     }
 }
 

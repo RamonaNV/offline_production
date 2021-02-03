@@ -253,7 +253,11 @@ Kernel::~Kernel() {}
 #ifndef __CUDA_ARCH__
 void Kernel::uploadSteps(const std::vector<I3CLSimStep> &steps) { impl->uploadSteps(steps); }
 std::vector<I3CLSimPhoton> Kernel::downloadPhotons() { return impl->downloadPhotons(); }
-void Kernel::execute() {
+size_t Kernel::execute() {
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start, impl->stream);
 #ifdef USE_JOBQUEUE
     propKernelJobqueue<<<numBlocks, NTHREADS_PER_BLOCK, 0, impl->stream >>>(impl->inputSteps, impl->numInputSteps,
                                                 impl->numOutputPhotons, impl->maxHitIndex, impl->outputPhotons,
@@ -268,7 +272,15 @@ void Kernel::execute() {
                                                 impl->absorptionLength_deltaTau_LUT,
                                                 impl->MWC_RNG_x, impl->MWC_RNG_a);
 #endif
-    CUDA_ERR_THROW(cudaStreamSynchronize(impl->stream));
+    cudaEventRecord(stop, impl->stream);
+    CUDA_ERR_THROW(cudaEventSynchronize(stop));
+
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    return size_t(floor(milliseconds*1e6f));
 }
 #endif
 
