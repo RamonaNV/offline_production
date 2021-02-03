@@ -283,10 +283,12 @@ I3CLSimPhotonToMCPEConverterForDOMs::Convert(const ModuleKey &mkey, const I3Comp
         double hitProbability = photon.GetWeight();
 
         const double photonAngle = std::acos(photonCosAngle);
-        log_warn("Photon (lambda=%fnm, angle=%fdeg, dist=%fm) has weight %g, 1/weight %g",
+        log_warn("Photon (lambda=%fnm, angle=%fdeg, dist=%fm, module=(%d,%d)) has weight %g, 1/weight %g",
                  photon.GetWavelength()/I3Units::nanometer,
                  photonAngle/I3Units::deg,
                  distFromDOMCenter/I3Units::m,
+                 mkey.GetString(),
+                 mkey.GetOM(),
                  hitProbability,
                  1./hitProbability);
 
