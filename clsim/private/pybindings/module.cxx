@@ -63,7 +63,8 @@ namespace bp = boost::python;
     (I3CLSimServer)
 
 #define REGISTER_THESE_THINGS_CUDA                  \
-    (I3CLSimStepToPhotonConverterCUDA)
+    (I3CLSimStepToPhotonConverterCUDA)              \
+    (I3CLSimCUDADevice)
 
 #define I3_REGISTRATION_FN_DECL(r, data, t) void BOOST_PP_CAT(register_,t)();
 #define I3_REGISTER(r, data, t) BOOST_PP_CAT(register_,t)();

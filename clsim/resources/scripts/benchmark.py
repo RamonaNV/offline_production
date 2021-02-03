@@ -22,6 +22,8 @@ parser.add_argument("--energy", default=1e3, type=float,
                   dest="ENERGY", help="Particle energy in GeV")
 parser.add_argument("--type", default="EMinus",
                   dest="PARTICLE_TYPE", help="Particle type")
+parser.add_argument("--propagate-muons", default=False, action="store_true",
+                  dest="PROPAGATE_MUONS", help="Include muon propagation in process")
 parser.add_argument("--icemodel", default=expandvars("$I3_BUILD/ice-models/resources/models/spice_lea"),
                   dest="ICEMODEL", help="A clsim ice model file/directory (ice models *will* affect performance metrics, always compare using the same model!)")
 parser.add_argument("--unweighted-photons", action="store_true",
@@ -37,8 +39,11 @@ group.add_argument("-g", "--gcd-file",
 
 parser.add_argument("-d", "--device", type=int, default=None,
                   dest="DEVICE", help="device number")
-parser.add_argument("--use-cpu",  action="store_true", default=False,
+group = parser.add_mutually_exclusive_group()
+group.add_argument("--use-cpu",  action="store_true", default=False,
                   dest="USECPU", help="simulate using CPU instead of GPU")
+group.add_argument("--use-cuda",  action="store_true", default=False,
+                  dest="CUDA", help="use CUDA kernel instead of OpenCL")
 
 # parse cmd line args, bail out if anything is not understood
 options = parser.parse_args()
@@ -57,6 +62,7 @@ if options.MINIMALGCD:
 
 
 from I3Tray import *
+import json
 import os
 import sys
 import math
@@ -64,12 +70,8 @@ import numpy
 
 from icecube import icetray, dataclasses, dataio, phys_services, sim_services, simclasses, clsim
 
-icetray.logging.rotating_files('logtrace')
-
-
-#icetray.I3Logger.global_logger.set_levelicetray.I3LogLevel.LOG_INFO)
-#icetray.I3Logger.global_logger.set_level(icetray.I3LogLevel.LOG_WARN)
-icetray.I3Logger.global_logger.set_level(icetray.I3LogLevel.LOG_TRACE)
+# icetray.I3Logger.global_logger.set_level(icetray.I3LogLevel.LOG_INFO)
+icetray.I3Logger.global_logger.set_level(icetray.I3LogLevel.LOG_WARN)
 
 radius = 120.*I3Units.m
 
@@ -324,6 +326,8 @@ tray.AddSegment(clsim.I3CLSimMakeHits, "makeCLSimHits",
     UseGPUs=not options.USECPU,
     UseCPUs=options.USECPU,
     UseOnlyDeviceNumber=options.DEVICE,
+    UseCUDA=options.CUDA,
+    UseI3PropagatorService=options.PROPAGATE_MUONS,
     IceModelLocation=options.ICEMODEL,
     DOMOversizeFactor=options.OVERSIZE,
     UnWeightedPhotons=options.unweighted_photons,
@@ -341,7 +345,6 @@ walltime_in_execute = ((datetime.now() - t0).total_seconds())*1e9
 del tray
 
 if options.JSONFILE:
-    import json
     with open(options.JSONFILE, 'w') as f:
         json.dump(dict(summary), f, indent=1)
 
@@ -357,6 +360,8 @@ ncalls = get('NumKernelCalls', sum)
 
 if ncalls == 0:
     sys.stderr.write("Not enough kernel calls to estimate performance! Trying increasing the number of events.\n")
+    sys.stderr.write("Summary:\n")
+    json.dump(dict(summary), sys.stderr, indent=1)
     sys.exit(1)
 
 total_host_time = get('TotalHostTime', sum)

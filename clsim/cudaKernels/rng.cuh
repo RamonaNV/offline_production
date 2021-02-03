@@ -78,13 +78,13 @@ private:
  * @param d_MWC_RNG_x memory for states on device will be allocated here
  * @param d_MWC_RNG_a memory for primes on device will be allocated here
  */
-void inline initMWCRng(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
+void inline initMWCRng(int maxNumWorkitems, const uint64_t* MWC_RNG_x, const uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
                    uint32_t** d_MWC_RNG_a);
 
 // function definitions
 // ------------------------------------
 
-void inline initMWCRng(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
+void inline initMWCRng(int maxNumWorkitems, const uint64_t* MWC_RNG_x, const uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
                    uint32_t** d_MWC_RNG_a)
 {
     CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a, maxNumWorkitems * sizeof(uint32_t)));
@@ -98,7 +98,7 @@ void inline initMWCRng(int maxNumWorkitems, uint64_t* MWC_RNG_x, uint32_t* MWC_R
 }
 
 // initializes the rng and allows to use more threads than prime numbers
-void inline initMWCRng_jobqueue(int numRngPrimes, int requestedThreads, uint64_t* MWC_RNG_x, uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
+void inline initMWCRng_jobqueue(int numRngPrimes, int requestedThreads, const uint64_t* MWC_RNG_x, const uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
                    uint32_t** d_MWC_RNG_a)
 {
     printf("RNG setup. Available primes: %i. Requested threads %i \n", numRngPrimes, requestedThreads);

@@ -51,6 +51,7 @@ def I3CLSimMakePhotons(tray, name,
                        UseCPUs=False,
                        UseGPUs=True,
                        UseOnlyDeviceNumber=None,
+                       UseCUDA=False,
                        MCTreeName="I3MCTree",
                        OutputMCTreeName=None,
                        FlasherInfoVectName=None,
@@ -118,6 +119,8 @@ def I3CLSimMakePhotons(tray, name,
         Use only a single device number, even if there is more than
         one device found matching the required description. The numbering
         starts at 0.
+    :param UseCUDA:
+        Use CUDA implementation of photon propagator instead of OpenCL.
     :param MCTreeName:
         The name of the I3MCTree containing the particles to propagate.
     :param OutputMCTreeName:
@@ -286,14 +289,6 @@ def I3CLSimMakePhotons(tray, name,
         IgnoreSubdetectors=IgnoreSubdetectors,
     )
 
-    openCLDevices = configureOpenCLDevices(
-        UseGPUs=UseGPUs,
-        UseCPUs=UseCPUs,
-        OverrideApproximateNumberOfWorkItems=OverrideApproximateNumberOfWorkItems,
-        DoNotParallelize=DoNotParallelize,
-        UseOnlyDeviceNumber=UseOnlyDeviceNumber
-	)
-
     converters = setupPropagators(RandomService, clsimParams,
         UseGPUs=UseGPUs,
         UseCPUs=UseCPUs,
@@ -301,7 +296,8 @@ def I3CLSimMakePhotons(tray, name,
         DoNotParallelize=DoNotParallelize,
         UseOnlyDeviceNumber=UseOnlyDeviceNumber,
         EnableDoubleBuffering=EnableDoubleBuffering,
-        DoublePrecision=DoublePrecision
+        DoublePrecision=DoublePrecision,
+        UseCUDA=UseCUDA,
     )
     # bind to a random port on localhost
     server = clsim.I3CLSimServer('tcp://127.0.0.1:*', clsim.I3CLSimStepToPhotonConverterSeries(converters))

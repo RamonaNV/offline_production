@@ -41,6 +41,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     if (cudaError_t(e) != cudaSuccess) \
         printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(e)), __LINE__);
 
+#define CUDA_ERR_THROW(e)              \
+    if (cudaError_t(e) != cudaSuccess) \
+        throw std::runtime_error(cudaGetErrorName(cudaError_t(e)));
+
 // chack last cuda error
 #define CUDA_CHECK_LAST_ERROR()  \
     {                    \

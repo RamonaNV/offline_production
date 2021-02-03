@@ -337,19 +337,14 @@ def setupPropagators(RandomService,
     mediumProperties = DetectorParams['MediumProperties']
     wavelengthGenerationBias = DetectorParams['WavelengthGenerationBias']
     wavelengthGenerators = DetectorParams['WavelengthGenerators']
-    
-    openCLDevices = configureOpenCLDevices(
-        UseGPUs=UseGPUs,
-        UseCPUs=UseCPUs,
-        OverrideApproximateNumberOfWorkItems=OverrideApproximateNumberOfWorkItems,
-        DoNotParallelize=DoNotParallelize,
-        UseOnlyDeviceNumber=UseOnlyDeviceNumber
-    )
-    
-    def create_converter(device, use_cuda=False):
-        if use_cuda:
-            # implementation taken from I3CLSimModuleHelper::initializeOpenCL()
-            converter = clsim.I3CLSimStepToPhotonConverterCUDA(RandomService, True)
+
+    if UseCUDA:
+        try:
+            StepToPhotonConverter = clsim.I3CLSimStepToPhotonConverterCUDA
+        except AttributeError:
+            raise ValueError("CUDA requested, but clsim was built without CUDA support")
+        def create_converter(device):
+            converter = StepToPhotonConverter(RandomService, True)
             converter.SetDevice(device)
             converter.SetWlenGenerators(clsim.I3CLSimRandomValuePtrSeries(wavelengthGenerators))
             converter.SetWlenBias(wavelengthGenerationBias)
@@ -358,15 +353,22 @@ def setupPropagators(RandomService,
             converter.SetEnableDoubleBuffering(EnableDoubleBuffering)
             converter.SetDoublePrecision(EnableDoubleBuffering)
             converter.SetDOMPancakeFactor(DetectorParams['DOMPancakeFactor'])
-            converter.Compile()
             converter.Initialize()
             return converter
-        else:
+        return [create_converter(d) for d in clsim.I3CLSimCUDADevice.GetAllDevices()]
+    else:
+        openCLDevices = configureOpenCLDevices(
+            UseGPUs=UseGPUs,
+            UseCPUs=UseCPUs,
+            OverrideApproximateNumberOfWorkItems=OverrideApproximateNumberOfWorkItems,
+            DoNotParallelize=DoNotParallelize,
+            UseOnlyDeviceNumber=UseOnlyDeviceNumber
+        )
+        def create_converter(device, use_cuda=False):
             return clsim.initializeOpenCL(device, RandomService, geometry,
                 mediumProperties, wavelengthGenerationBias, clsim.I3CLSimRandomValuePtrSeries(wavelengthGenerators),
                 pancakeFactor=DetectorParams['DOMPancakeFactor'],
                 enableDoubleBuffering=EnableDoubleBuffering,
                 doublePrecision=DoublePrecision
                 )
-        
-    return [create_converter(device, UseCUDA) for device in openCLDevices]
+        return [create_converter(device, UseCUDA) for device in openCLDevices]

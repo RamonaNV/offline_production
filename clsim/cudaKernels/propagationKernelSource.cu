@@ -50,128 +50,227 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                                                                     uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
-                                                                    const float* wlenLut, const float* zOffsetLut, 
-                                                                    const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
+                                                                    const float* wlenLut, const float* wlenBias, const float* zOffsetLut,
+                                                                    const float* scatteringLength_b400_LUT, const float* absorptionLength_aDust400_LUT,
+                                                                    const float* absorptionLength_deltaTau_LUT,
                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a); 
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernelJobqueue(I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                                                                     uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
-                                                                    const float* wlenLut, const float* zOffsetLut, 
-                                                                    const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
+                                                                    const float* wlenLut, const float* zOffsetLut,
                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a, int numPrimes); 
 
-void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, const uint32_t maxHitIndex,
-                          unsigned short* geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-                          I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
-                          uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime)
+template <typename T, typename P>
+void vectorToDevice(T** ptr, const std::vector<P> &data)
 {
-    // setup the rng
-    uint64_t* d_MWC_RNG_x;
-    uint32_t* d_MWC_RNG_a;
-    #ifdef USE_JOBQUEUE
-        int numBlocks = (nsteps*32 + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK; // run 32 threads per step
-        int numThreads = numBlocks * NTHREADS_PER_BLOCK;
-        initMWCRng_jobqueue(sizeRNG, numThreads, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
-    #else
-         int numBlocks = (nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
-        initMWCRng(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
-    #endif
-
-    // upload "geo layer per string set" data 
-    unsigned short* d_geolayer;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_geolayer, ngeolayer * sizeof(unsigned short)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_geolayer, geoLayerToOMNumIndexPerStringSet, ngeolayer * sizeof(unsigned short),
-                              cudaMemcpyHostToDevice));
-
-    // convert and upload steps
-    I3CLSimStepCuda* h_cudastep = (I3CLSimStepCuda*)malloc(nsteps * sizeof(struct I3CLSimStepCuda));
-    for (int i = 0; i < nsteps; i++) {
-        h_cudastep[i] = I3CLSimStepCuda(in_steps[i]);
-    }
-    I3CLSimStepCuda* d_cudastep;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudastep, nsteps * sizeof(I3CLSimStepCuda)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_cudastep, h_cudastep, nsteps * sizeof(I3CLSimStepCuda), cudaMemcpyHostToDevice));
-
-    // allocate storage to store hits
-    uint32_t* d_hitIndex;
-    uint32_t h_hitIndex[1];
-    h_hitIndex[0] = 0;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_hitIndex, 1 * sizeof(uint32_t)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_hitIndex, h_hitIndex, 1 * sizeof(uint32_t), cudaMemcpyHostToDevice));
-
-    I3CLSimPhotonCuda* d_cudaphotons;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons, maxHitIndex * sizeof(I3CLSimPhotonCuda)));
-
-    // wlen lut
-    auto wlenLut = generateWavelengthLut();
-    float* d_wlenLut;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_wlenLut, WLEN_LUT_SIZE * sizeof(float)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_wlenLut, wlenLut.data(), WLEN_LUT_SIZE * sizeof(float), cudaMemcpyHostToDevice));
-
-    // zOffset lut
-    auto zOffsetLut = generateZOffsetLut();
-    float* d_zOffsetLut;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_zOffsetLut, zOffsetLut.size() * sizeof(float)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_zOffsetLut, zOffsetLut.data(), zOffsetLut.size() * sizeof(float), cudaMemcpyHostToDevice));
-
-    // launch
-    printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
-    std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-
-    #ifdef USE_JOBQUEUE
-        propKernelJobqueue<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_cudastep, nsteps, 
-                                                    d_hitIndex, maxHitIndex, d_cudaphotons,
-                                                    d_wlenLut, d_zOffsetLut,
-                                                    d_geolayer,
-                                                    d_MWC_RNG_x, d_MWC_RNG_a, sizeRNG);
-    #else
-        propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_cudastep, nsteps, 
-                                                    d_hitIndex, maxHitIndex, d_cudaphotons,
-                                                    d_wlenLut, d_zOffsetLut,
-                                                    d_geolayer,
-                                                    d_MWC_RNG_x, d_MWC_RNG_a);
-    #endif
-
-
-
-
-    CUDA_ERR_CHECK(cudaDeviceSynchronize());
-    std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
-    totalCudaKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
-
-    CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
-    int numberPhotons = h_hitIndex[0];
-
-    if (numberPhotons > maxHitIndex) {
-        printf("Maximum number of photons exceeded, only receiving %u of %u photons", maxHitIndex, numberPhotons);
-        numberPhotons = maxHitIndex;
-    }
-
-    // copy (max fo maxHitIndex) photons to host.
-    struct I3CLSimPhotonCuda* h_cudaphotons =
-        (struct I3CLSimPhotonCuda*)malloc(numberPhotons * sizeof(struct I3CLSimPhotonCuda));
-    CUDA_ERR_CHECK(
-        cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons * sizeof(I3CLSimPhotonCuda), cudaMemcpyDeviceToHost));
-
-    outphotons.resize(numberPhotons);
-    for (int i = 0; i < numberPhotons; i++) {
-        outphotons[i] = h_cudaphotons[i].getI3CLSimPhoton();
-    }
-
-    free(h_cudastep);
-    free(h_cudaphotons);
-    cudaFree(d_cudaphotons);
-    cudaFree(d_cudastep);
-    cudaFree(d_geolayer);
-    cudaFree(d_MWC_RNG_a);
-    cudaFree(d_MWC_RNG_x);
-    printf("photon hits = %i from %i steps \n", numberPhotons, nsteps);
+    std::vector<T> vec(data.begin(), data.end());
+    CUDA_ERR_THROW(cudaMalloc((void**)ptr, vec.size()*sizeof(T)));
+    CUDA_ERR_THROW(cudaMemcpy(*ptr, vec.data(), vec.size() * sizeof(T), cudaMemcpyHostToDevice));
 }
+
+struct KernelBuffers {
+    float* wlenLut;
+    float* wlenBias;
+    float* zOffsetLut;
+    float* scatteringLength_b400_LUT;
+    float* absorptionLength_aDust400_LUT;
+    float* absorptionLength_deltaTau_LUT;
+    uint64_t *MWC_RNG_x;
+    uint32_t *MWC_RNG_a;
+    I3CLSimStepCuda* inputSteps;
+    uint32_t numInputSteps;
+    I3CLSimPhotonCuda* outputPhotons;
+    uint32_t *numOutputPhotons;
+    uint32_t maxHitIndex;
+    cudaStream_t stream;
+    KernelBuffers(
+        size_t maxNumWorkItems, size_t maxNumOutputPhotons,
+        const std::vector<double> &wavelengths,
+        const std::vector<double> &wavelengthBias,
+        const std::vector<double> &wavelengthPMF,
+        const std::vector<double> &wavelengthCDF,
+        const std::vector<double> &scatteringLength_b400,
+        const std::vector<double> &absorptionLength_aDust400,
+        const std::vector<double> &absorptionLength_deltaTau,
+        const std::vector<uint64_t> &x, const std::vector<uint32_t> &a
+    ) :
+        wlenLut(nullptr),
+        wlenBias(nullptr),
+        zOffsetLut(nullptr),
+        scatteringLength_b400_LUT(nullptr),
+        absorptionLength_aDust400_LUT(nullptr),
+        absorptionLength_deltaTau_LUT(nullptr),
+        MWC_RNG_x(nullptr),
+        MWC_RNG_a(nullptr),
+        inputSteps(nullptr),
+        numInputSteps(0),
+        outputPhotons(nullptr),
+        numOutputPhotons(nullptr),
+        maxHitIndex(maxNumOutputPhotons)
+    {
+        {
+            if (wavelengths.size() != 43) {
+                throw std::runtime_error("Wavelength table must have exactly 43 entries");
+            }
+            if (wavelengths[0] != 2.6e-7) {
+                throw std::runtime_error("Wavelength table must start at 260 nm");
+            }
+            if (fabs(wavelengths[1]-wavelengths[0]-1e-8) > 1e-12) {
+                throw std::runtime_error("Wavelength step must but 10 nm");
+            }
+
+            auto wlen = generateWavelengthLut(wavelengthPMF.data(), wavelengthCDF.data());
+            CUDA_ERR_THROW(cudaMalloc((void**)&wlenLut, wlen.size()*sizeof(float)));
+            CUDA_ERR_THROW(cudaMemcpy(wlenLut, wlen.data(), wlen.size() * sizeof(float), cudaMemcpyHostToDevice));
+
+            std::vector<float> bias(wavelengthBias.begin(), wavelengthBias.end());
+            CUDA_ERR_THROW(cudaMalloc((void**)&wlenBias, bias.size()*sizeof(float)));
+            CUDA_ERR_THROW(cudaMemcpy(wlenBias, bias.data(), bias.size() * sizeof(float), cudaMemcpyHostToDevice));
+        }
+        {
+            if (scatteringLength_b400.size() != 171) {
+                throw std::runtime_error("b400 must have 171 entries");
+            }
+            if (absorptionLength_aDust400.size() != 171) {
+                throw std::runtime_error("b400 must have 171 entries");
+            }
+            if (absorptionLength_deltaTau.size() != 171) {
+                throw std::runtime_error("b400 must have 171 entries");
+            }
+            vectorToDevice(&scatteringLength_b400_LUT, scatteringLength_b400);
+            vectorToDevice(&absorptionLength_aDust400_LUT, absorptionLength_aDust400);
+            vectorToDevice(&absorptionLength_deltaTau_LUT, absorptionLength_deltaTau);
+        }
+        {
+            auto zOffset = generateZOffsetLut();
+            CUDA_ERR_THROW(cudaMalloc((void**)&zOffsetLut, zOffset.size() * sizeof(float)));
+            CUDA_ERR_THROW(cudaMemcpy(zOffsetLut, zOffset.data(), zOffset.size() * sizeof(float), cudaMemcpyHostToDevice));
+        }
+        {
+            // FIXME: add jobqueue support back
+            initMWCRng(x.size(), x.data(), a.data(), &MWC_RNG_x, &MWC_RNG_a);
+        }
+        CUDA_ERR_THROW(cudaMalloc((void**)&inputSteps, maxNumWorkItems * sizeof(I3CLSimStepCuda)));
+        CUDA_ERR_THROW(cudaMalloc((void**)&outputPhotons, maxNumOutputPhotons * sizeof(I3CLSimPhotonCuda)));
+        CUDA_ERR_THROW(cudaMalloc((void**)&numOutputPhotons, sizeof(uint32_t)));
+        CUDA_ERR_THROW(cudaStreamCreate(&stream));
+    }
+
+    ~KernelBuffers() {
+        if (wlenLut != nullptr)
+            cudaFree(wlenLut);
+        if (wlenBias != nullptr)
+            cudaFree(wlenBias);
+        if (zOffsetLut != nullptr)
+            cudaFree(zOffsetLut);
+        if (scatteringLength_b400_LUT != nullptr)
+            cudaFree(scatteringLength_b400_LUT);
+        if (absorptionLength_aDust400_LUT != nullptr)
+            cudaFree(absorptionLength_aDust400_LUT);
+        if (absorptionLength_deltaTau_LUT != nullptr)
+            cudaFree(absorptionLength_deltaTau_LUT);
+        if (MWC_RNG_x != nullptr)
+            cudaFree(MWC_RNG_x);
+        if (MWC_RNG_a != nullptr)
+            cudaFree(MWC_RNG_a);
+        if (inputSteps != nullptr)
+            cudaFree(inputSteps);
+        if (outputPhotons != nullptr)
+            cudaFree(outputPhotons);
+        if (numOutputPhotons != nullptr)
+            cudaFree(numOutputPhotons);
+        cudaStreamDestroy(stream);
+    }
+
+// hide from device compilation trajectory (I3CLSimStep contains unsupported vector types)
+#ifndef __CUDA_ARCH__
+    void uploadSteps(const std::vector<I3CLSimStep> &steps) {
+        std::vector<I3CLSimStepCuda> cudaSteps(steps.size());
+        for (int i = 0; i < steps.size(); i++) {
+            cudaSteps[i] = I3CLSimStepCuda(steps[i]);
+        }
+        CUDA_ERR_THROW(cudaMemcpyAsync(inputSteps, cudaSteps.data(), cudaSteps.size() * sizeof(I3CLSimStepCuda), cudaMemcpyHostToDevice, stream));
+        CUDA_ERR_THROW(cudaStreamSynchronize(stream));
+        numInputSteps = cudaSteps.size();
+    }
+    std::vector<I3CLSimPhoton> downloadPhotons() {
+        uint32_t numberPhotons;
+        CUDA_ERR_THROW(cudaMemcpyAsync(&numberPhotons, numOutputPhotons, 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
+        CUDA_ERR_THROW(cudaStreamSynchronize(stream));
+        std::vector<I3CLSimPhotonCuda> cudaPhotons(numberPhotons);
+        std::vector<I3CLSimPhoton> photons(numberPhotons);
+        CUDA_ERR_THROW(cudaMemcpyAsync(cudaPhotons.data(), outputPhotons, numberPhotons * sizeof(I3CLSimPhotonCuda), cudaMemcpyDeviceToHost, stream));
+        CUDA_ERR_THROW(cudaStreamSynchronize(stream));
+        for (int i = 0; i < numberPhotons; i++) {
+            photons[i] = cudaPhotons[i].getI3CLSimPhoton();
+        }
+        return photons;
+    }
+#endif
+};
+
+Kernel::Kernel(
+    int device,
+    size_t maxNumWorkItems,
+    size_t maxNumOutputPhotons,
+    const std::vector<double> &wavelengths,
+    const std::vector<double> &wavelengthBias,
+    const std::vector<double> &wavelengthPMF,
+    const std::vector<double> &wavelengthCDF,
+    const std::vector<double> &scatteringLength_b400,
+    const std::vector<double> &absorptionLength_aDust400,
+    const std::vector<double> &absorptionLength_deltaTau,
+    const std::vector<uint64_t> &x,
+    const std::vector<uint32_t> &a
+) : impl(
+        new KernelBuffers(
+            maxNumWorkItems,
+            maxNumOutputPhotons,
+            wavelengths,
+            wavelengthBias,
+            wavelengthPMF,
+            wavelengthCDF,
+            scatteringLength_b400,
+            absorptionLength_aDust400,
+            absorptionLength_deltaTau,
+            x,
+            a
+        )
+    )
+{
+    CUDA_ERR_THROW(cudaSetDevice(device));
+}
+
+// dtor here, where KernelBuffers is complete
+Kernel::~Kernel() {}
+
+#ifndef __CUDA_ARCH__
+void Kernel::uploadSteps(const std::vector<I3CLSimStep> &steps) { impl->uploadSteps(steps); }
+std::vector<I3CLSimPhoton> Kernel::downloadPhotons() { return impl->downloadPhotons(); }
+void Kernel::execute() {
+#ifdef USE_JOBQUEUE
+    propKernelJobqueue<<<numBlocks, NTHREADS_PER_BLOCK, 0, impl->stream >>>(impl->inputSteps, impl->numInputSteps,
+                                                impl->numOutputPhotons, impl->maxHitIndex, impl->outputPhotons,
+                                                impl->wlenLut, impl->zOffsetLut,
+                                                impl->MWC_RNG_x, impl->MWC_RNG_a, sizeRNG);
+#else
+    int numBlocks = (impl->numInputSteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
+    propKernel<<<numBlocks, NTHREADS_PER_BLOCK, 0, impl->stream >>>(impl->inputSteps, impl->numInputSteps,
+                                                impl->numOutputPhotons, impl->maxHitIndex, impl->outputPhotons,
+                                                impl->wlenLut, impl->wlenBias, impl->zOffsetLut,
+                                                impl->scatteringLength_b400_LUT, impl->absorptionLength_aDust400_LUT,
+                                                impl->absorptionLength_deltaTau_LUT,
+                                                impl->MWC_RNG_x, impl->MWC_RNG_a);
+#endif
+    CUDA_ERR_THROW(cudaStreamSynchronize(impl->stream));
+}
+#endif
 
 __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                             uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
-                            const float* wlenLut, const float* zOffsetLut, 
-                            const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
+                            const float* wlenLut, const float* getWavelengthBias_data, const float* zOffsetLut,
+                            const float* scatteringLength_b400_LUT, const float* absorptionLength_aDust400_LUT,
+                            const float* absorptionLength_deltaTau_LUT,
                             uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a)
 {
     #ifdef SHARED_WLEN
@@ -340,6 +439,8 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
     rng_x[id] = rng.getState();
 }
 
+// thread_block_tile::meta_group_rank() requires CUDA 11
+#if CUDA_VERSION >= 11000
 /**
  * @brief Generates photons for one "step" and simulates propagation through the ice.
  * @param group the group of threads used to process one step (eg one warp)
@@ -476,7 +577,6 @@ __device__ __forceinline__  void propGroup(cg::thread_block_tile<32> group, cons
 __global__ void propKernelJobqueue(I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                             uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
                             const float* wlenLut, const float* zOffsetLut, 
-                            const unsigned short* __restrict__ geoLayerToOMNumIndexPerStringSet, 
                             uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a, int numPrimes)
 {
     #ifdef SHARED_WLEN
@@ -623,3 +723,4 @@ __global__ void propKernelJobqueue(I3CLSimStepCuda* __restrict__ steps, int numS
     // store rng state
     rng_x[threadId] = rng.getState();
 }
+#endif // CUDA_VERSION >= 11000

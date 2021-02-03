@@ -68,6 +68,10 @@ firstX_(xFirst)
     
     if (y_.size() <= 1)
         log_fatal("At least two entries have to be specified in the vector passed to I3CLSimRandomValueInterpolatedDistribution().");
+
+    for (unsigned i=0; i < y_.size(); i++) {
+        x_.push_back(firstX_ + constantXSpacing_*i);
+    }
     
     InitTables();
 }
