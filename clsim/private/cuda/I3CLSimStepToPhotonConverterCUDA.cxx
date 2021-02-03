@@ -165,7 +165,6 @@ void I3CLSimStepToPhotonConverterCUDA::Initialize()
 
     const unsigned int numBuffers = disableDoubleBuffering_ ? 1 : 2;
 
-    log_warn("setting buffer sizes");
     // For GPUs, choose the largest number of work items such that they still
     // fit in device memory
     if (device_->IsGPU()) {
@@ -200,7 +199,7 @@ void I3CLSimStepToPhotonConverterCUDA::Initialize()
     log_debug("basic OpenCL setup done.");
 
     // set up rng
-    log_warn("Setting up RNG for %zu workitems.", maxNumWorkitems_);
+    log_debug("Setting up RNG for %zu workitems.", maxNumWorkitems_);
 
     MWC_RNG_x.resize(maxNumWorkitems_);
     MWC_RNG_a.resize(maxNumWorkitems_);
