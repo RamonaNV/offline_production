@@ -185,11 +185,17 @@ struct KernelBuffers {
 // hide from device compilation trajectory (I3CLSimStep contains unsupported vector types)
 #ifndef __CUDA_ARCH__
     void uploadSteps(const std::vector<I3CLSimStep> &steps) {
+        // upload steps
         std::vector<I3CLSimStepCuda> cudaSteps(steps.size());
         for (int i = 0; i < steps.size(); i++) {
             cudaSteps[i] = I3CLSimStepCuda(steps[i]);
         }
         CUDA_ERR_THROW(cudaMemcpyAsync(inputSteps, cudaSteps.data(), cudaSteps.size() * sizeof(I3CLSimStepCuda), cudaMemcpyHostToDevice, stream));
+
+        // reset end of output buffer
+        uint32_t zero = 0;
+        CUDA_ERR_THROW(cudaMemcpyAsync(numOutputPhotons, &zero, sizeof(uint32_t), cudaMemcpyHostToDevice, stream));
+
         CUDA_ERR_THROW(cudaStreamSynchronize(stream));
         numInputSteps = cudaSteps.size();
     }
