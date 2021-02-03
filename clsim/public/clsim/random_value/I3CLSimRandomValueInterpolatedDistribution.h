@@ -67,7 +67,11 @@ public:
                                           ) const;
 
     virtual bool CompareTo(const I3CLSimRandomValue &other) const;
-    
+
+    std::vector<double> GetXValues() const { return x_; }
+    std::vector<double> GetYValues() const { return data_beta_; }
+    std::vector<double> GetCumulativeYValues() const { return data_acu_; }
+
 private:
     void InitTables();
     std::string WriteTableCode(const std::string &prefix) const;

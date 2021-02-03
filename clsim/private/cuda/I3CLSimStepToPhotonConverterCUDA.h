@@ -44,6 +44,9 @@
 #include <string>
 #include <stdexcept>
 
+I3_FORWARD_DECLARATION(I3CLSimFunctionFromTable);
+I3_FORWARD_DECLARATION(I3CLSimRandomValueInterpolatedDistribution);
+
 /**
  * @brief Creates photons from a given list of steps and propagates
  * them to a DOM using an OpenCL-enabled algorithm
@@ -316,8 +319,8 @@ private:
     
     bool initialized_;
     bool compiled_;
-    std::vector<I3CLSimRandomValueConstPtr> wlenGenerators_;
-    I3CLSimFunctionConstPtr wlenBias_;
+    I3CLSimRandomValueInterpolatedDistributionConstPtr wlenGenerator_;
+    I3CLSimFunctionFromTableConstPtr wlenBias_;
     I3CLSimMediumPropertiesConstPtr mediumProperties_;
     I3CLSimSimpleGeometryConstPtr geometry_;
     

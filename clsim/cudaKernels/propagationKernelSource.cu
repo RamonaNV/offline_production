@@ -50,7 +50,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                                                                     uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
-                                                                    const float* wlenLut, const float* zOffsetLut,
+                                                                    const float* wlenLut, const float* wlenBias, const float* zOffsetLut,
                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a); 
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernelJobqueue(I3CLSimStepCuda* __restrict__ steps, int numSteps, 
@@ -60,6 +60,7 @@ __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernel
 
 struct KernelBuffers {
     float* wlenLut;
+    float* wlenBias;
     float* zOffsetLut;
     uint64_t *MWC_RNG_x;
     uint32_t *MWC_RNG_a;
@@ -71,12 +72,30 @@ struct KernelBuffers {
     cudaStream_t stream;
     KernelBuffers(
         size_t maxNumWorkItems, size_t maxNumOutputPhotons,
+        const std::vector<double> &wavelengths,
+        const std::vector<double> &wavelengthBias,
+        const std::vector<double> &wavelengthPMF,
+        const std::vector<double> &wavelengthCDF,
         const std::vector<uint64_t> &x, const std::vector<uint32_t> &a
     ) : wlenLut(nullptr), zOffsetLut(nullptr), MWC_RNG_x(nullptr), MWC_RNG_a(nullptr), inputSteps(nullptr), numInputSteps(0), outputPhotons(nullptr), numOutputPhotons(nullptr), maxHitIndex(maxNumOutputPhotons) {
         {
-            auto wlen = generateWavelengthLut();
+            if (wavelengths.size() != 43) {
+                throw std::runtime_error("Wavelength table must have exactly 43 entries");
+            }
+            if (wavelengths[0] != 2.6e-7) {
+                throw std::runtime_error("Wavelength table must start at 260 nm");
+            }
+            if (fabs(wavelengths[1]-wavelengths[0]-1e-8) > 1e-12) {
+                throw std::runtime_error("Wavelength step must but 10 nm");
+            }
+
+            auto wlen = generateWavelengthLut(wavelengthPMF.data(), wavelengthCDF.data());
             CUDA_ERR_THROW(cudaMalloc((void**)&wlenLut, wlen.size()*sizeof(float)));
             CUDA_ERR_THROW(cudaMemcpy(wlenLut, wlen.data(), wlen.size() * sizeof(float), cudaMemcpyHostToDevice));
+
+            std::vector<float> bias(wavelengthBias.begin(), wavelengthBias.end());
+            CUDA_ERR_THROW(cudaMalloc((void**)&wlenBias, bias.size()*sizeof(float)));
+            CUDA_ERR_THROW(cudaMemcpy(wlenBias, bias.data(), bias.size() * sizeof(float), cudaMemcpyHostToDevice));
         }
         {
             auto zOffset = generateZOffsetLut();
@@ -142,9 +161,13 @@ Kernel::Kernel(
     int device,
     size_t maxNumWorkItems,
     size_t maxNumOutputPhotons,
+    const std::vector<double> &wavelengths,
+    const std::vector<double> &wavelengthBias,
+    const std::vector<double> &wavelengthPMF,
+    const std::vector<double> &wavelengthCDF,
     const std::vector<uint64_t> &x,
     const std::vector<uint32_t> &a
-) : impl(new KernelBuffers(maxNumWorkItems, maxNumOutputPhotons, x, a))
+) : impl(new KernelBuffers(maxNumWorkItems, maxNumOutputPhotons, wavelengths, wavelengthBias, wavelengthPMF, wavelengthCDF, x, a))
 {
     CUDA_ERR_THROW(cudaSetDevice(device));
 }
@@ -165,111 +188,16 @@ void Kernel::execute() {
     int numBlocks = (impl->numInputSteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
     propKernel<<<numBlocks, NTHREADS_PER_BLOCK, 0, impl->stream >>>(impl->inputSteps, impl->numInputSteps,
                                                 impl->numOutputPhotons, impl->maxHitIndex, impl->outputPhotons,
-                                                impl->wlenLut, impl->zOffsetLut,
+                                                impl->wlenLut, impl->wlenBias, impl->zOffsetLut,
                                                 impl->MWC_RNG_x, impl->MWC_RNG_a);
 #endif
     CUDA_ERR_THROW(cudaStreamSynchronize(impl->stream));
 }
 #endif
 
-void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, int nsteps, const uint32_t maxHitIndex,
-                          I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
-                          uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime)
-{
-    // setup the rng
-    uint64_t* d_MWC_RNG_x;
-    uint32_t* d_MWC_RNG_a;
-    #ifdef USE_JOBQUEUE
-        int numBlocks = (nsteps*32 + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK; // run 32 threads per step
-        int numThreads = numBlocks * NTHREADS_PER_BLOCK;
-        initMWCRng_jobqueue(sizeRNG, numThreads, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
-    #else
-         int numBlocks = (nsteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
-        initMWCRng(sizeRNG, MWC_RNG_x, MWC_RNG_a, &d_MWC_RNG_x, &d_MWC_RNG_a);
-    #endif
-
-    // convert and upload steps
-    I3CLSimStepCuda* h_cudastep = (I3CLSimStepCuda*)malloc(nsteps * sizeof(struct I3CLSimStepCuda));
-    for (int i = 0; i < nsteps; i++) {
-        h_cudastep[i] = I3CLSimStepCuda(in_steps[i]);
-    }
-    I3CLSimStepCuda* d_cudastep;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudastep, nsteps * sizeof(I3CLSimStepCuda)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_cudastep, h_cudastep, nsteps * sizeof(I3CLSimStepCuda), cudaMemcpyHostToDevice));
-
-    // allocate storage to store hits
-    uint32_t* d_hitIndex;
-    uint32_t h_hitIndex[1];
-    h_hitIndex[0] = 0;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_hitIndex, 1 * sizeof(uint32_t)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_hitIndex, h_hitIndex, 1 * sizeof(uint32_t), cudaMemcpyHostToDevice));
-
-    I3CLSimPhotonCuda* d_cudaphotons;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_cudaphotons, maxHitIndex * sizeof(I3CLSimPhotonCuda)));
-
-    // wlen lut
-    auto wlenLut = generateWavelengthLut();
-    float* d_wlenLut;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_wlenLut, WLEN_LUT_SIZE * sizeof(float)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_wlenLut, wlenLut.data(), WLEN_LUT_SIZE * sizeof(float), cudaMemcpyHostToDevice));
-
-    // zOffset lut
-    auto zOffsetLut = generateZOffsetLut();
-    float* d_zOffsetLut;
-    CUDA_ERR_CHECK(cudaMalloc((void**)&d_zOffsetLut, zOffsetLut.size() * sizeof(float)));
-    CUDA_ERR_CHECK(cudaMemcpy(d_zOffsetLut, zOffsetLut.data(), zOffsetLut.size() * sizeof(float), cudaMemcpyHostToDevice));
-
-    // launch
-    printf("launching kernel propKernel<<< %d , %d >>>( .., nsteps=%d)  \n", numBlocks, NTHREADS_PER_BLOCK, nsteps);
-    std::chrono::time_point<std::chrono::system_clock> startKernel = std::chrono::system_clock::now();
-
-    #ifdef USE_JOBQUEUE
-        propKernelJobqueue<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_cudastep, nsteps,
-                                                    d_hitIndex, maxHitIndex, d_cudaphotons,
-                                                    d_wlenLut, d_zOffsetLut,
-                                                    d_MWC_RNG_x, d_MWC_RNG_a, sizeRNG);
-    #else
-        propKernel<<<numBlocks, NTHREADS_PER_BLOCK>>>(d_cudastep, nsteps,
-                                                    d_hitIndex, maxHitIndex, d_cudaphotons,
-                                                    d_wlenLut, d_zOffsetLut,
-                                                    d_MWC_RNG_x, d_MWC_RNG_a);
-    #endif
-
-    CUDA_ERR_CHECK(cudaDeviceSynchronize());
-    std::chrono::time_point<std::chrono::system_clock> endKernel = std::chrono::system_clock::now();
-    totalCudaKernelTime = std::chrono::duration_cast<std::chrono::milliseconds>(endKernel - startKernel).count();
-
-    CUDA_ERR_CHECK(cudaMemcpy(h_hitIndex, d_hitIndex, 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
-    int numberPhotons = h_hitIndex[0];
-
-    if (numberPhotons > maxHitIndex) {
-        printf("Maximum number of photons exceeded, only receiving %u of %u photons", maxHitIndex, numberPhotons);
-        numberPhotons = maxHitIndex;
-    }
-
-    // copy (max fo maxHitIndex) photons to host.
-    struct I3CLSimPhotonCuda* h_cudaphotons =
-        (struct I3CLSimPhotonCuda*)malloc(numberPhotons * sizeof(struct I3CLSimPhotonCuda));
-    CUDA_ERR_CHECK(
-        cudaMemcpy(h_cudaphotons, d_cudaphotons, numberPhotons * sizeof(I3CLSimPhotonCuda), cudaMemcpyDeviceToHost));
-
-    outphotons.resize(numberPhotons);
-    for (int i = 0; i < numberPhotons; i++) {
-        outphotons[i] = h_cudaphotons[i].getI3CLSimPhoton();
-    }
-
-    free(h_cudastep);
-    free(h_cudaphotons);
-    CUDA_ERR_CHECK(cudaFree(d_cudaphotons));
-    CUDA_ERR_CHECK(cudaFree(d_cudastep));
-    CUDA_ERR_CHECK(cudaFree(d_MWC_RNG_a));
-    CUDA_ERR_CHECK(cudaFree(d_MWC_RNG_x));
-    printf("photon hits = %i from %i steps \n", numberPhotons, nsteps);
-}
-
 __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                             uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
-                            const float* wlenLut, const float* zOffsetLut,
+                            const float* wlenLut, const float* getWavelengthBias_data, const float* zOffsetLut,
                             uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a)
 {
     #ifdef SHARED_WLEN

@@ -126,6 +126,9 @@ public:
 
     I3CLSimFunctionFromTablePtr Scale(double coefficient) const;
 
+    std::vector<double> GetXValues() const { return wlens_; }
+    std::vector<double> GetYValues() const { return values_; }
+
 private:
     I3CLSimFunctionFromTable();
     virtual I3CLSimFunctionFromTable* ScaleImpl(double coefficient) const;

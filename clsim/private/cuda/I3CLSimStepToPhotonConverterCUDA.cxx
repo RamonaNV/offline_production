@@ -28,6 +28,8 @@
 #define __STDC_FORMAT_MACROS
 #endif
 #include "I3CLSimStepToPhotonConverterCUDA.h"
+#include "clsim/random_value/I3CLSimRandomValueInterpolatedDistribution.h"
+#include "clsim/function/I3CLSimFunctionFromTable.h"
 
 #include <inttypes.h>
 
@@ -281,16 +283,28 @@ void I3CLSimStepToPhotonConverterCUDA::SetWlenGenerators(
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterCUDA already initialized!");
+    if (wlenGenerators.size() != 1u)
+        throw I3CLSimStepToPhotonConverter_exception("There can be only one! (Cherenkov wavelength generator)");
+    if (!wlenGenerators.at(0))
+        throw I3CLSimStepToPhotonConverter_exception("Wavelength generator may not be null");
+    auto wlenGenerator = boost::dynamic_pointer_cast<const I3CLSimRandomValueInterpolatedDistribution>(wlenGenerators.at(0));
+    if (!wlenGenerator)
+        throw I3CLSimStepToPhotonConverter_exception("Wavelength generator must be an instance of I3CLSimRandomValueInterpolatedDistribution");
 
-    wlenGenerators_ = wlenGenerators;
+    wlenGenerator_ = wlenGenerator;
 }
 
 void I3CLSimStepToPhotonConverterCUDA::SetWlenBias(I3CLSimFunctionConstPtr wlenBias)
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterCUDA already initialized!");
+    if (!wlenBias)
+        throw I3CLSimStepToPhotonConverter_exception("Wavelength bias not be null");
+    auto bias = boost::dynamic_pointer_cast<const I3CLSimFunctionFromTable>(wlenBias);
+    if (!bias)
+        throw I3CLSimStepToPhotonConverter_exception("Wavelength bias must be a table");
 
-    wlenBias_ = wlenBias;
+    wlenBias_ = bias;
 }
 
 void I3CLSimStepToPhotonConverterCUDA::SetMediumProperties(I3CLSimMediumPropertiesConstPtr mediumProperties)
@@ -450,7 +464,17 @@ void I3CLSimStepToPhotonConverterCUDA::ThreadyThread(boost::this_thread::disable
     uint32_t stepsIdentifier = 0;
     I3CLSimStepSeriesConstPtr steps;
 
-    Kernel kernel(device_->GetDeviceNumber(), maxNumWorkitems_, maxNumOutputPhotons_, MWC_RNG_x, MWC_RNG_a);
+    Kernel kernel(
+        device_->GetDeviceNumber(),
+        maxNumWorkitems_,
+        maxNumOutputPhotons_,
+        wlenBias_->GetXValues(),
+        wlenBias_->GetYValues(),
+        wlenGenerator_->GetYValues(),
+        wlenGenerator_->GetCumulativeYValues(),
+        MWC_RNG_x,
+        MWC_RNG_a
+    );
 
     // notify the main thread that everything is set up
     {
