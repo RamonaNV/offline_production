@@ -65,8 +65,7 @@ const bool I3CLSimStepToPhotonConverterCUDA::default_useNativeMath = true;
 
 I3CLSimStepToPhotonConverterCUDA::I3CLSimStepToPhotonConverterCUDA(I3RandomServicePtr randomService,
                                                                        bool useNativeMath)
-    : openCLStarted_(false),
-      queueToOpenCL_(new I3CLSimQueue<ToOpenCLPair_t>(2)),
+    : queueToOpenCL_(new I3CLSimQueue<ToOpenCLPair_t>(2)),
       queueFromOpenCL_(new I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t>(2)),
       randomService_(randomService),
       initialized_(false),
@@ -80,22 +79,23 @@ I3CLSimStepToPhotonConverterCUDA::I3CLSimStepToPhotonConverterCUDA(I3RandomServi
       maxNumWorkitems_(10240)
 {
     if (!randomService_) log_fatal("You need to supply a I3RandomService.");
+    threadState_.started = false;
 }
 
 I3CLSimStepToPhotonConverterCUDA::~I3CLSimStepToPhotonConverterCUDA()
 {
-    if (openCLThreadObj_) {
-        if (openCLThreadObj_->joinable()) {
-            log_debug("Stopping the OpenCL worker thread..");
+    if (thread_) {
+        if (thread_->joinable()) {
+            log_debug("Stopping worker thread..");
 
-            openCLThreadObj_->interrupt();
+            thread_->interrupt();
 
-            openCLThreadObj_->join();  // wait for it indefinitely
+            thread_->join();  // wait for it indefinitely
 
-            log_debug("OpenCL worker thread stopped.");
+            log_debug("Worker thread stopped.");
         }
 
-        openCLThreadObj_.reset();
+        thread_.reset();
     }
 }
 
@@ -196,7 +196,7 @@ void I3CLSimStepToPhotonConverterCUDA::Initialize()
     // input steps. Should be plenty..
     maxNumOutputPhotons_ = static_cast<uint32_t>(std::min(maxNumWorkitems_*10, static_cast<std::size_t>(std::numeric_limits<uint32_t>::max())));
 
-    log_debug("basic OpenCL setup done.");
+    log_debug("basic setup done.");
 
     // set up rng
     log_debug("Setting up RNG for %zu workitems.", maxNumWorkitems_);
@@ -209,18 +209,18 @@ void I3CLSimStepToPhotonConverterCUDA::Initialize()
 
     log_debug("RNG is set up..");
 
-    log_debug("Starting the OpenCL worker thread..");
-    openCLStarted_ = false;
+    log_debug("Starting the worker thread..");
+    threadState_.started = false;
 
-    openCLThreadObj_ = boost::shared_ptr<boost::thread>(
-        new boost::thread(boost::bind(&I3CLSimStepToPhotonConverterCUDA::OpenCLThread, this)));
+    thread_ = boost::shared_ptr<boost::thread>(
+        new boost::thread(boost::bind(&I3CLSimStepToPhotonConverterCUDA::ServiceThread, this)));
 
     // wait for startup
     {
-        boost::unique_lock<boost::mutex> guard(openCLStarted_mutex_);
+        boost::unique_lock<boost::mutex> guard(threadState_.mutex);
         for (;;) {
-            if (openCLStarted_) break;
-            openCLStarted_cond_.wait(guard);
+            if (threadState_.started) break;
+            threadState_.cond.wait(guard);
         }
     }
 
@@ -231,17 +231,15 @@ void I3CLSimStepToPhotonConverterCUDA::Initialize()
     initialized_ = true;
 }
 
-void I3CLSimStepToPhotonConverterCUDA::OpenCLThread()
+void I3CLSimStepToPhotonConverterCUDA::ServiceThread()
 {
     // do not interrupt this thread by default
     boost::this_thread::disable_interruption di;
 
     try {
-        //   OpenCLThread_impl(di);
-        ThreadyThread(di);
-        PRINTLC
+        ServiceThread_impl(di);
     } catch (...) {  // any exceptions?
-        std::cerr << "OpenCL worker thread died unexpectedly.." << std::endl;
+        std::cerr << "Worker thread died unexpectedly.." << std::endl;
         exit(0);  // get out as quickly as possible, we probably just had a FATAL error anyway..
         throw;    // will never be reached
     }
@@ -488,7 +486,7 @@ std::map<std::string, double> I3CLSimStepToPhotonConverterCUDA::GetStatistics() 
     return summary;
 }
 
-void I3CLSimStepToPhotonConverterCUDA::ThreadyThread(boost::this_thread::disable_interruption &di)
+void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(boost::this_thread::disable_interruption &di)
 {
     uint32_t stepsIdentifier = 0;
     I3CLSimStepSeriesConstPtr steps;
@@ -526,10 +524,10 @@ void I3CLSimStepToPhotonConverterCUDA::ThreadyThread(boost::this_thread::disable
 
     // notify the main thread that everything is set up
     {
-        boost::unique_lock<boost::mutex> guard(openCLStarted_mutex_);
-        openCLStarted_=true;
+        boost::unique_lock<boost::mutex> guard(threadState_.mutex);
+        threadState_.started=true;
     }
-    openCLStarted_cond_.notify_all();
+    threadState_.cond.notify_all();
 
     std::chrono::high_resolution_clock::time_point previous_finish_time;
 

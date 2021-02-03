@@ -49,7 +49,7 @@ I3_FORWARD_DECLARATION(I3CLSimRandomValueInterpolatedDistribution);
 
 /**
  * @brief Creates photons from a given list of steps and propagates
- * them to a DOM using an OpenCL-enabled algorithm
+ * them to a DOM using a CUDA program
  */
 struct I3CLSimStepToPhotonConverterCUDA : public I3CLSimStepToPhotonConverter
 {
@@ -267,8 +267,8 @@ public:
 private:
     typedef std::pair<uint32_t, I3CLSimStepSeriesConstPtr> ToOpenCLPair_t;
 
-    void OpenCLThread();
-    void ThreadyThread(boost::this_thread::disable_interruption &);
+    void ServiceThread();
+    void ServiceThread_impl(boost::this_thread::disable_interruption &);
 
     // Keep a running mean using Welford's online algorithm
     // See: https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
@@ -307,11 +307,13 @@ private:
     };
     statistics_bundle statistics_;
 
-    boost::shared_ptr<boost::thread> openCLThreadObj_;
-    boost::condition_variable_any openCLStarted_cond_;
-    boost::mutex openCLStarted_mutex_;
-    bool openCLStarted_;
-    
+    boost::shared_ptr<boost::thread> thread_;
+    struct {
+        boost::condition_variable_any cond;
+        boost::mutex mutex;
+        bool started;
+    } threadState_;
+
     boost::shared_ptr<I3CLSimQueue<ToOpenCLPair_t> > queueToOpenCL_;
     boost::shared_ptr<I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t> > queueFromOpenCL_;
 
