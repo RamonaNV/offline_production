@@ -30,6 +30,8 @@
 #include "I3CLSimStepToPhotonConverterCUDA.h"
 #include "clsim/random_value/I3CLSimRandomValueInterpolatedDistribution.h"
 #include "clsim/function/I3CLSimFunctionFromTable.h"
+#include "clsim/function/I3CLSimFunctionAbsLenIceCube.h"
+#include "clsim/function/I3CLSimFunctionScatLenIceCube.h"
 
 #include <inttypes.h>
 
@@ -311,6 +313,34 @@ void I3CLSimStepToPhotonConverterCUDA::SetMediumProperties(I3CLSimMediumProperti
 {
     if (initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterCUDA already initialized!");
+    i3_assert(mediumProperties);
+    if (mediumProperties->GetMinWavelength() != 265*I3Units::nanometer) {
+        log_fatal_stream("Minimum wavelength for medium properties must be 265 nm");
+    }
+    if (mediumProperties->GetMaxWavelength() != 675*I3Units::nanometer) {
+        log_fatal_stream("Maxium wavelength for medium properties must be 265 nm");
+    }
+    if (mediumProperties->GetLayersNum() != 171) {
+        log_fatal_stream("Medium properties must have 171 layers");
+    }
+    if (fabs(mediumProperties->GetLayersZStart()+855.4*I3Units::m) > 1e-4) {
+        log_fatal_stream("Medium properties must start at z=-855.4 (got "<< mediumProperties->GetLayersZStart() <<")");
+    }
+    if (mediumProperties->GetLayersHeight() != 10*I3Units::m) {
+        log_fatal_stream("Medium layer thickness must be 10m");
+    }
+    for (uint32_t i=0; i < mediumProperties->GetLayersNum(); i++) {
+        // TODO check that constant parameters of the ice model (ABCDE) match values in the kernel
+        if (!boost::dynamic_pointer_cast<const I3CLSimFunctionAbsLenIceCube>(mediumProperties->GetAbsorptionLength(i)))
+            log_fatal_stream("Absorption length function must be I3CLSimFunctionAbsLenIceCube");
+        if (!boost::dynamic_pointer_cast<const I3CLSimFunctionScatLenIceCube>(mediumProperties->GetScatteringLength(i)))
+            log_fatal_stream("Absorption length function must be I3CLSimFunctionScatLenIceCube");
+    }
+    // TODO: check for nonstandard configurations of
+    // - ice tilt
+    // - anisotropy
+    // - refractive index
+    // - efficiency
 
     mediumProperties_ = mediumProperties;
 }
@@ -464,6 +494,22 @@ void I3CLSimStepToPhotonConverterCUDA::ThreadyThread(boost::this_thread::disable
     uint32_t stepsIdentifier = 0;
     I3CLSimStepSeriesConstPtr steps;
 
+    std::vector<double> scatteringLength_b400;
+    std::vector<double> absorptionLength_aDust400;
+    std::vector<double> absorptionLength_deltaTau;
+
+    for (uint i=0; i < mediumProperties_->GetLayersNum(); i++) {
+        auto scatteringLength = boost::dynamic_pointer_cast<const I3CLSimFunctionScatLenIceCube>(mediumProperties_->GetScatteringLength(i));
+        auto absorptionLength = boost::dynamic_pointer_cast<const I3CLSimFunctionAbsLenIceCube>(mediumProperties_->GetAbsorptionLength(i));
+        if (absorptionLength && scatteringLength) {
+            scatteringLength_b400.push_back(scatteringLength->GetB400());
+            absorptionLength_aDust400.push_back(absorptionLength->GetADust400());
+            absorptionLength_deltaTau.push_back(absorptionLength->GetDeltaTau());
+        } else {
+            log_fatal_stream("Unsupported scattering/absorption lengths in layer "<<i);
+        }
+    }
+
     Kernel kernel(
         device_->GetDeviceNumber(),
         maxNumWorkitems_,
@@ -472,6 +518,9 @@ void I3CLSimStepToPhotonConverterCUDA::ThreadyThread(boost::this_thread::disable
         wlenBias_->GetYValues(),
         wlenGenerator_->GetYValues(),
         wlenGenerator_->GetCumulativeYValues(),
+        scatteringLength_b400,
+        absorptionLength_aDust400,
+        absorptionLength_deltaTau,
         MWC_RNG_x,
         MWC_RNG_a
     );

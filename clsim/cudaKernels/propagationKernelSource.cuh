@@ -38,6 +38,9 @@ public:
         const std::vector<double> &wavelengthBias,
         const std::vector<double> &wavelengthPMF,
         const std::vector<double> &wavelengthCDF,
+        const std::vector<double> &scatteringLength_b400,
+        const std::vector<double> &absorptionLength_aDust400,
+        const std::vector<double> &absorptionLength_deltaTau,
         const std::vector<uint64_t> &x,
         const std::vector<uint32_t> &a
     );

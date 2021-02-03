@@ -51,6 +51,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                                                                     uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
                                                                     const float* wlenLut, const float* wlenBias, const float* zOffsetLut,
+                                                                    const float* scatteringLength_b400_LUT, const float* absorptionLength_aDust400_LUT,
+                                                                    const float* absorptionLength_deltaTau_LUT,
                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a); 
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernelJobqueue(I3CLSimStepCuda* __restrict__ steps, int numSteps, 
@@ -58,10 +60,21 @@ __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernel
                                                                     const float* wlenLut, const float* zOffsetLut,
                                                                     uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a, int numPrimes); 
 
+template <typename T, typename P>
+void vectorToDevice(T** ptr, const std::vector<P> &data)
+{
+    std::vector<T> vec(data.begin(), data.end());
+    CUDA_ERR_THROW(cudaMalloc((void**)ptr, vec.size()*sizeof(T)));
+    CUDA_ERR_THROW(cudaMemcpy(*ptr, vec.data(), vec.size() * sizeof(T), cudaMemcpyHostToDevice));
+}
+
 struct KernelBuffers {
     float* wlenLut;
     float* wlenBias;
     float* zOffsetLut;
+    float* scatteringLength_b400_LUT;
+    float* absorptionLength_aDust400_LUT;
+    float* absorptionLength_deltaTau_LUT;
     uint64_t *MWC_RNG_x;
     uint32_t *MWC_RNG_a;
     I3CLSimStepCuda* inputSteps;
@@ -76,8 +89,25 @@ struct KernelBuffers {
         const std::vector<double> &wavelengthBias,
         const std::vector<double> &wavelengthPMF,
         const std::vector<double> &wavelengthCDF,
+        const std::vector<double> &scatteringLength_b400,
+        const std::vector<double> &absorptionLength_aDust400,
+        const std::vector<double> &absorptionLength_deltaTau,
         const std::vector<uint64_t> &x, const std::vector<uint32_t> &a
-    ) : wlenLut(nullptr), zOffsetLut(nullptr), MWC_RNG_x(nullptr), MWC_RNG_a(nullptr), inputSteps(nullptr), numInputSteps(0), outputPhotons(nullptr), numOutputPhotons(nullptr), maxHitIndex(maxNumOutputPhotons) {
+    ) :
+        wlenLut(nullptr),
+        wlenBias(nullptr),
+        zOffsetLut(nullptr),
+        scatteringLength_b400_LUT(nullptr),
+        absorptionLength_aDust400_LUT(nullptr),
+        absorptionLength_deltaTau_LUT(nullptr),
+        MWC_RNG_x(nullptr),
+        MWC_RNG_a(nullptr),
+        inputSteps(nullptr),
+        numInputSteps(0),
+        outputPhotons(nullptr),
+        numOutputPhotons(nullptr),
+        maxHitIndex(maxNumOutputPhotons)
+    {
         {
             if (wavelengths.size() != 43) {
                 throw std::runtime_error("Wavelength table must have exactly 43 entries");
@@ -98,6 +128,20 @@ struct KernelBuffers {
             CUDA_ERR_THROW(cudaMemcpy(wlenBias, bias.data(), bias.size() * sizeof(float), cudaMemcpyHostToDevice));
         }
         {
+            if (scatteringLength_b400.size() != 171) {
+                throw std::runtime_error("b400 must have 171 entries");
+            }
+            if (absorptionLength_aDust400.size() != 171) {
+                throw std::runtime_error("b400 must have 171 entries");
+            }
+            if (absorptionLength_deltaTau.size() != 171) {
+                throw std::runtime_error("b400 must have 171 entries");
+            }
+            vectorToDevice(&scatteringLength_b400_LUT, scatteringLength_b400);
+            vectorToDevice(&absorptionLength_aDust400_LUT, absorptionLength_aDust400);
+            vectorToDevice(&absorptionLength_deltaTau_LUT, absorptionLength_deltaTau);
+        }
+        {
             auto zOffset = generateZOffsetLut();
             CUDA_ERR_THROW(cudaMalloc((void**)&zOffsetLut, zOffset.size() * sizeof(float)));
             CUDA_ERR_THROW(cudaMemcpy(zOffsetLut, zOffset.data(), zOffset.size() * sizeof(float), cudaMemcpyHostToDevice));
@@ -115,8 +159,16 @@ struct KernelBuffers {
     ~KernelBuffers() {
         if (wlenLut != nullptr)
             cudaFree(wlenLut);
+        if (wlenBias != nullptr)
+            cudaFree(wlenBias);
         if (zOffsetLut != nullptr)
             cudaFree(zOffsetLut);
+        if (scatteringLength_b400_LUT != nullptr)
+            cudaFree(scatteringLength_b400_LUT);
+        if (absorptionLength_aDust400_LUT != nullptr)
+            cudaFree(absorptionLength_aDust400_LUT);
+        if (absorptionLength_deltaTau_LUT != nullptr)
+            cudaFree(absorptionLength_deltaTau_LUT);
         if (MWC_RNG_x != nullptr)
             cudaFree(MWC_RNG_x);
         if (MWC_RNG_a != nullptr)
@@ -165,9 +217,26 @@ Kernel::Kernel(
     const std::vector<double> &wavelengthBias,
     const std::vector<double> &wavelengthPMF,
     const std::vector<double> &wavelengthCDF,
+    const std::vector<double> &scatteringLength_b400,
+    const std::vector<double> &absorptionLength_aDust400,
+    const std::vector<double> &absorptionLength_deltaTau,
     const std::vector<uint64_t> &x,
     const std::vector<uint32_t> &a
-) : impl(new KernelBuffers(maxNumWorkItems, maxNumOutputPhotons, wavelengths, wavelengthBias, wavelengthPMF, wavelengthCDF, x, a))
+) : impl(
+        new KernelBuffers(
+            maxNumWorkItems,
+            maxNumOutputPhotons,
+            wavelengths,
+            wavelengthBias,
+            wavelengthPMF,
+            wavelengthCDF,
+            scatteringLength_b400,
+            absorptionLength_aDust400,
+            absorptionLength_deltaTau,
+            x,
+            a
+        )
+    )
 {
     CUDA_ERR_THROW(cudaSetDevice(device));
 }
@@ -189,6 +258,8 @@ void Kernel::execute() {
     propKernel<<<numBlocks, NTHREADS_PER_BLOCK, 0, impl->stream >>>(impl->inputSteps, impl->numInputSteps,
                                                 impl->numOutputPhotons, impl->maxHitIndex, impl->outputPhotons,
                                                 impl->wlenLut, impl->wlenBias, impl->zOffsetLut,
+                                                impl->scatteringLength_b400_LUT, impl->absorptionLength_aDust400_LUT,
+                                                impl->absorptionLength_deltaTau_LUT,
                                                 impl->MWC_RNG_x, impl->MWC_RNG_a);
 #endif
     CUDA_ERR_THROW(cudaStreamSynchronize(impl->stream));
@@ -198,6 +269,8 @@ void Kernel::execute() {
 __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                             uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
                             const float* wlenLut, const float* getWavelengthBias_data, const float* zOffsetLut,
+                            const float* scatteringLength_b400_LUT, const float* absorptionLength_aDust400_LUT,
+                            const float* absorptionLength_deltaTau_LUT,
                             uint64_t* __restrict__ rng_x, uint32_t* __restrict__ rng_a)
 {
     #ifdef SHARED_WLEN
