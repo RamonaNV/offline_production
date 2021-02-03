@@ -35,7 +35,6 @@
 
 #include <inttypes.h>
 
-#include <boost/date_time/posix_time/posix_time.hpp>
 #include <cmath>
 
 #define PRINTLC printf("thread 0 - in line %d \n", __LINE__);
@@ -53,6 +52,7 @@
 #include <algorithm>
 #include <boost/foreach.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/thread/barrier.hpp>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -79,24 +79,22 @@ I3CLSimStepToPhotonConverterCUDA::I3CLSimStepToPhotonConverterCUDA(I3RandomServi
       maxNumWorkitems_(10240)
 {
     if (!randomService_) log_fatal("You need to supply a I3RandomService.");
-    threadState_.started = false;
 }
 
 I3CLSimStepToPhotonConverterCUDA::~I3CLSimStepToPhotonConverterCUDA()
 {
-    if (thread_) {
-        if (thread_->joinable()) {
-            log_debug("Stopping worker thread..");
+    for (auto &thread : threads_) {
+        if (thread.joinable()) {
+            log_debug_stream("Stopping worker thread "<<thread.get_id()<<"...");
 
-            thread_->interrupt();
+            thread.interrupt();
 
-            thread_->join();  // wait for it indefinitely
+            thread.join();  // wait for it indefinitely
 
-            log_debug("Worker thread stopped.");
+            log_debug_stream("Worker thread "<<thread.get_id()<<" stopped.");
         }
-
-        thread_.reset();
     }
+    threads_.clear();
 }
 
 uint64_t I3CLSimStepToPhotonConverterCUDA::GetMaxWorkgroupSize() const
@@ -210,19 +208,13 @@ void I3CLSimStepToPhotonConverterCUDA::Initialize()
     log_debug("RNG is set up..");
 
     log_debug("Starting the worker thread..");
-    threadState_.started = false;
 
-    thread_ = boost::shared_ptr<boost::thread>(
-        new boost::thread(boost::bind(&I3CLSimStepToPhotonConverterCUDA::ServiceThread, this)));
-
-    // wait for startup
-    {
-        boost::unique_lock<boost::mutex> guard(threadState_.mutex);
-        for (;;) {
-            if (threadState_.started) break;
-            threadState_.cond.wait(guard);
-        }
+    auto barrier = boost::make_shared<boost::barrier>(numBuffers+1);
+    for (unsigned i=0; i < numBuffers; i++) {
+        threads_.emplace_back(boost::bind(&I3CLSimStepToPhotonConverterCUDA::ServiceThread, this, i, boost::ref(barrier)));
     }
+    // wait for startup
+    barrier->wait();
 
     log_debug("CUDA worker thread started.");
 
@@ -231,15 +223,12 @@ void I3CLSimStepToPhotonConverterCUDA::Initialize()
     initialized_ = true;
 }
 
-void I3CLSimStepToPhotonConverterCUDA::ServiceThread()
+void I3CLSimStepToPhotonConverterCUDA::ServiceThread(unsigned thread_index, boost::shared_ptr<boost::barrier> &barrier)
 {
-    // do not interrupt this thread by default
-    boost::this_thread::disable_interruption di;
-
     try {
-        ServiceThread_impl(di);
+        ServiceThread_impl(thread_index, barrier);
     } catch (...) {  // any exceptions?
-        std::cerr << "Worker thread died unexpectedly.." << std::endl;
+        std::cerr << "Worker thread "<<boost::this_thread::get_id()<<" died unexpectedly.." << std::endl;
         exit(0);  // get out as quickly as possible, we probably just had a FATAL error anyway..
         throw;    // will never be reached
     }
@@ -457,13 +446,15 @@ std::map<std::string, double> I3CLSimStepToPhotonConverterCUDA::GetStatistics() 
 {
     std::map<std::string, double> summary;
     boost::unique_lock<boost::mutex> guard(statistics_.mutex);
+    // TODO figure out why device time is double-counted when using two threads
+    const double norm = (disableDoubleBuffering_ ? 1 : 2);
 
     const double totalNumPhotonsGenerated = statistics_.total_num_photons_generated;
     const double totalDeviceTime = static_cast<double>(statistics_.total_device_duration) * I3Units::ns;
     const double totalHostTime = static_cast<double>(statistics_.total_host_duration) * I3Units::ns;
 
-    summary["TotalDeviceTime"] = totalDeviceTime;
-    summary["TotalHostTime"] = totalHostTime;
+    summary["TotalDeviceTime"] = totalDeviceTime / norm;
+    summary["TotalHostTime"] = totalHostTime / norm;
     summary["TotalQueueTime"] = statistics_.total_queue_duration;
 
     summary["DeviceTimePerKernelMean"] = statistics_.device_duration.mean();
@@ -479,15 +470,18 @@ std::map<std::string, double> I3CLSimStepToPhotonConverterCUDA::GetStatistics() 
     summary["TotalNumPhotonsGenerated"] = totalNumPhotonsGenerated;
     summary["TotalNumPhotonsAtDOMs"] = statistics_.total_num_photons_atDOMs;
 
-    summary["AverageDeviceTimePerPhoton"] = totalDeviceTime / totalNumPhotonsGenerated;
-    summary["AverageHostTimePerPhoton"] = totalHostTime / totalNumPhotonsGenerated;
+    summary["AverageDeviceTimePerPhoton"] = totalDeviceTime / totalNumPhotonsGenerated / norm;
+    summary["AverageHostTimePerPhoton"] = totalHostTime / totalNumPhotonsGenerated / norm;
     summary["DeviceUtilization"] = totalDeviceTime / totalHostTime;
 
     return summary;
 }
 
-void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(boost::this_thread::disable_interruption &di)
+void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(unsigned thread_index, boost::shared_ptr<boost::barrier> barrier)
 {
+    // do not interrupt this thread by default
+    boost::this_thread::disable_interruption di;
+
     uint32_t stepsIdentifier = 0;
     I3CLSimStepSeriesConstPtr steps;
 
@@ -522,19 +516,15 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(boost::this_thread::di
         MWC_RNG_a
     );
 
-    // notify the main thread that everything is set up
-    {
-        boost::unique_lock<boost::mutex> guard(threadState_.mutex);
-        threadState_.started=true;
-    }
-    threadState_.cond.notify_all();
+    //notify the main thread that everything is set up
+    barrier->wait();
 
     std::chrono::high_resolution_clock::time_point previous_finish_time;
 
     while (true) {
         try {
             boost::this_thread::restore_interruption ri(di);
-            log_debug_stream("Waiting for steps");
+            log_debug_stream("["<<thread_index<<"] Waiting for steps");
 
             std::tie(stepsIdentifier, steps) = inputQueue_->Get();
         } catch (boost::thread_interrupted &i) {
@@ -543,10 +533,10 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(boost::this_thread::di
 
         i3_assert(steps);
         kernel.uploadSteps(*steps);
-        log_debug_stream("Uploaded " << steps->size() << " steps");
+        log_debug_stream("["<<thread_index<<"] Uploaded " << steps->size() << " steps");
         size_t kernel_duration_in_nanoseconds = kernel.execute();
         auto photons = kernel.downloadPhotons();
-        log_debug_stream("Got " << photons.size() << " photons");
+        log_debug_stream("["<<thread_index<<"] Got " << photons.size() << " photons");
 
         try {
             boost::this_thread::restore_interruption ri(di);
