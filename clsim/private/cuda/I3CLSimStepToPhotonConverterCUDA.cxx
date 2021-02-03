@@ -65,8 +65,8 @@ const bool I3CLSimStepToPhotonConverterCUDA::default_useNativeMath = true;
 
 I3CLSimStepToPhotonConverterCUDA::I3CLSimStepToPhotonConverterCUDA(I3RandomServicePtr randomService,
                                                                        bool useNativeMath)
-    : queueToOpenCL_(new I3CLSimQueue<ToOpenCLPair_t>(2)),
-      queueFromOpenCL_(new I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t>(2)),
+    : inputQueue_(new I3CLSimQueue<ToOpenCLPair_t>(2)),
+      outputQueue_(new I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t>(2)),
       randomService_(randomService),
       initialized_(false),
       compiled_(false),
@@ -384,7 +384,7 @@ void I3CLSimStepToPhotonConverterCUDA::EnqueueSteps(I3CLSimStepSeriesConstPtr st
     if (steps->size() % workgroupSize_ != 0)
         throw I3CLSimStepToPhotonConverter_exception("The number of steps is not a multiple of the workgroup size!");
 
-    queueToOpenCL_->Put(make_pair(identifier, steps));
+    inputQueue_->Put(make_pair(identifier, steps));
 }
 
 std::size_t I3CLSimStepToPhotonConverterCUDA::QueueSize() const
@@ -392,7 +392,7 @@ std::size_t I3CLSimStepToPhotonConverterCUDA::QueueSize() const
     if (!initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterCUDA is not initialized!");
 
-    return queueToOpenCL_->size();
+    return inputQueue_->size();
 }
 
 bool I3CLSimStepToPhotonConverterCUDA::MorePhotonsAvailable() const
@@ -400,7 +400,7 @@ bool I3CLSimStepToPhotonConverterCUDA::MorePhotonsAvailable() const
     if (!initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterCUDA is not initialized!");
 
-    return (!queueFromOpenCL_->empty());
+    return (!outputQueue_->empty());
 }
 
 // helper
@@ -444,7 +444,7 @@ I3CLSimStepToPhotonConverter::ConversionResult_t I3CLSimStepToPhotonConverterCUD
     if (!initialized_)
         throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterCUDA is not initialized!");
 
-    ConversionResult_t result = queueFromOpenCL_->Get();
+    ConversionResult_t result = outputQueue_->Get();
 
     if (result.photons) {
         ReplaceStringDOMIndexWithStringDOMIDs(*result.photons);
@@ -536,7 +536,7 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(boost::this_thread::di
             boost::this_thread::restore_interruption ri(di);
             log_debug_stream("Waiting for steps");
 
-            std::tie(stepsIdentifier, steps) = queueToOpenCL_->Get();
+            std::tie(stepsIdentifier, steps) = inputQueue_->Get();
         } catch (boost::thread_interrupted &i) {
             break;
         }
@@ -550,7 +550,7 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(boost::this_thread::di
 
         try {
             boost::this_thread::restore_interruption ri(di);
-            queueFromOpenCL_->Put(ConversionResult_t(stepsIdentifier, boost::make_shared<I3CLSimPhotonSeries>(std::move(photons)), nullptr));
+            outputQueue_->Put(ConversionResult_t(stepsIdentifier, boost::make_shared<I3CLSimPhotonSeries>(std::move(photons)), nullptr));
         } catch (boost::thread_interrupted &i) {
             break;
         }

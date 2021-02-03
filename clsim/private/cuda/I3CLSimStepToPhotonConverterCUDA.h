@@ -314,8 +314,8 @@ private:
         bool started;
     } threadState_;
 
-    boost::shared_ptr<I3CLSimQueue<ToOpenCLPair_t> > queueToOpenCL_;
-    boost::shared_ptr<I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t> > queueFromOpenCL_;
+    boost::shared_ptr<I3CLSimQueue<ToOpenCLPair_t> > inputQueue_;
+    boost::shared_ptr<I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t> > outputQueue_;
 
     I3RandomServicePtr randomService_;
     
