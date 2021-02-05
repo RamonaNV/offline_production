@@ -480,6 +480,9 @@ std::map<std::string, double> I3CLSimStepToPhotonConverterCUDA::GetStatistics() 
     summary["AverageHostTimePerPhoton"] = totalHostTime / totalNumPhotonsGenerated / norm;
     summary["DeviceUtilization"] = totalDeviceTime / totalHostTime;
 
+    summary["MaxNumWorkItems"] = static_cast<double>(maxNumWorkitems_);
+    summary["WorkgroupSize"] = static_cast<double>(workgroupSize_);
+
     return summary;
 }
 
