@@ -446,7 +446,13 @@ std::map<std::string, double> I3CLSimStepToPhotonConverterCUDA::GetStatistics() 
 {
     std::map<std::string, double> summary;
     boost::unique_lock<boost::mutex> guard(statistics_.mutex);
-    // TODO figure out why device time is double-counted when using two threads
+    // NB: in double-buffering mode, step uploads and photon downloads are
+    // interleaved on separate streams. The duration returned by 
+    // Kernel::execute() is the time between the end of step upload and the
+    // end of the kernel, and may include a delay between the end of the upload
+    // and the start of the kernel, while the GPU waits for a kernel invoked
+    // from the other stream to finish. To correct for this double-counting, we
+    // average host and devices times over threads.
     const double norm = (disableDoubleBuffering_ ? 1 : 2);
 
     const double totalNumPhotonsGenerated = statistics_.total_num_photons_generated;
