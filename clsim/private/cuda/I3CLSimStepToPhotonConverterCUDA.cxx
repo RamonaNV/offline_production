@@ -488,6 +488,8 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(unsigned thread_index,
     // do not interrupt this thread by default
     boost::this_thread::disable_interruption di;
 
+    using clock_type = std::chrono::high_resolution_clock;
+
     uint32_t stepsIdentifier = 0;
     I3CLSimStepSeriesConstPtr steps;
 
@@ -525,14 +527,28 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(unsigned thread_index,
     //notify the main thread that everything is set up
     barrier->wait();
 
-    std::chrono::high_resolution_clock::time_point previous_finish_time;
+    clock_type::time_point previous_finish_time;
 
     while (true) {
+        uint64_t totalNumberOfPhotons=0;
+        uint64_t totalNumberOfPhotonsAtDOMs=0;
         try {
             boost::this_thread::restore_interruption ri(di);
             log_debug_stream("["<<thread_index<<"] Waiting for steps");
 
+            auto t0 = clock_type::now();
             std::tie(stepsIdentifier, steps) = inputQueue_->Get();
+#ifdef DUMP_STATISTICS
+            if (previous_finish_time != clock_type::time_point()) {
+                for (const auto &step : *steps) {
+                    totalNumberOfPhotons += step.numPhotons;
+                }
+                auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_type::now() - t0).count();
+                boost::unique_lock<boost::mutex> guard(statistics_.mutex);
+                statistics_.input_wait.update(ns);
+                statistics_.total_queue_duration += ns;
+            }
+#endif
         } catch (boost::thread_interrupted &i) {
             break;
         }
@@ -544,9 +560,23 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(unsigned thread_index,
         auto photons = kernel.downloadPhotons();
         log_debug_stream("["<<thread_index<<"] Got " << photons.size() << " photons");
 
+        ConversionResult_t result(stepsIdentifier, boost::make_shared<I3CLSimPhotonSeries>(std::move(photons)), nullptr);
+
         try {
             boost::this_thread::restore_interruption ri(di);
-            outputQueue_->Put(ConversionResult_t(stepsIdentifier, boost::make_shared<I3CLSimPhotonSeries>(std::move(photons)), nullptr));
+
+            auto t0 = clock_type::now();
+            outputQueue_->Put(result);
+#ifdef DUMP_STATISTICS
+            if (previous_finish_time != clock_type::time_point()) {
+                auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_type::now() - t0).count();
+                totalNumberOfPhotonsAtDOMs = result.photons->size();
+
+                boost::unique_lock<boost::mutex> guard(statistics_.mutex);
+                statistics_.output_wait.update(ns);
+                statistics_.total_queue_duration += ns;
+            }
+#endif
         } catch (boost::thread_interrupted &i) {
             break;
         }
@@ -561,10 +591,6 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(unsigned thread_index,
         size_t host_duration_in_nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now-previous_finish_time).count();
         previous_finish_time = now;
 
-        uint64_t totalNumberOfPhotons=0;
-        for (const auto &step : *steps) {
-            totalNumberOfPhotons += step.numPhotons;
-        }
         {
            boost::unique_lock<boost::mutex> guard(statistics_.mutex);
 
@@ -573,7 +599,8 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(unsigned thread_index,
            statistics_.total_device_duration += kernel_duration_in_nanoseconds;
            statistics_.total_host_duration += host_duration_in_nanoseconds;
            statistics_.total_kernel_calls++;
-           statistics_.total_num_photons_generated += totalNumberOfPhotons; 
+           statistics_.total_num_photons_generated += totalNumberOfPhotons;
+           statistics_.total_num_photons_atDOMs += totalNumberOfPhotonsAtDOMs;
         }
 #endif
     }
