@@ -199,11 +199,15 @@ void I3CLSimStepToPhotonConverterCUDA::Initialize()
     // set up rng
     log_debug("Setting up RNG for %zu workitems.", maxNumWorkitems_);
 
-    MWC_RNG_x.resize(maxNumWorkitems_);
-    MWC_RNG_a.resize(maxNumWorkitems_);
+    MWC_RNG_x.resize(maxNumWorkitems_*numBuffers);
+    MWC_RNG_a.resize(maxNumWorkitems_*numBuffers);
 
-    if (init_MWC_RNG(&(MWC_RNG_x[0]), &(MWC_RNG_a[0]), maxNumWorkitems_, randomService_) != 0)
-        throw I3CLSimStepToPhotonConverter_exception("I3CLSimStepToPhotonConverterCUDA already initialized!");
+    // make a unique block of RNG states for each kernel instance. the sequence
+    // of multipliers a will be the same, but x will be different.
+    for (unsigned i = 0; i < numBuffers; i++) {
+        if (init_MWC_RNG(&(MWC_RNG_x[i*maxNumWorkitems_]), &(MWC_RNG_a[i*maxNumWorkitems_]), maxNumWorkitems_, randomService_) != 0)
+            throw I3CLSimStepToPhotonConverter_exception("Could not initialize RNG");
+    }
 
     log_debug("RNG is set up..");
 
@@ -523,8 +527,15 @@ void I3CLSimStepToPhotonConverterCUDA::ServiceThread_impl(unsigned thread_index,
         scatteringLength_b400,
         absorptionLength_aDust400,
         absorptionLength_deltaTau,
-        MWC_RNG_x,
-        MWC_RNG_a
+        // use a unique block of RNG states for each instance of the kernel
+        std::vector<uint64_t>(
+            MWC_RNG_x.begin()+thread_index*maxNumWorkitems_,
+            MWC_RNG_x.begin()+(thread_index+1)*maxNumWorkitems_
+        ),
+        std::vector<uint32_t>(
+            MWC_RNG_a.begin()+thread_index*maxNumWorkitems_,
+            MWC_RNG_a.begin()+(thread_index+1)*maxNumWorkitems_
+        )
     );
 
     //notify the main thread that everything is set up
