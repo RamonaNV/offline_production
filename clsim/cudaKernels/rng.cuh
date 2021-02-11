@@ -94,14 +94,14 @@ void inline initMWCRng(int maxNumWorkitems, const uint64_t* MWC_RNG_x, const uin
     CUDA_ERR_CHECK(cudaMemcpy(*d_MWC_RNG_x, MWC_RNG_x, maxNumWorkitems * sizeof(uint64_t), cudaMemcpyHostToDevice));
 
     cudaDeviceSynchronize();
-    printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
+    // printf("RNG is set up on CUDA gpu %d. \n", maxNumWorkitems);
 }
 
 // initializes the rng and allows to use more threads than prime numbers
 void inline initMWCRng_jobqueue(int numRngPrimes, int requestedThreads, const uint64_t* MWC_RNG_x, const uint32_t* MWC_RNG_a, uint64_t** d_MWC_RNG_x,
                    uint32_t** d_MWC_RNG_a)
 {
-    printf("RNG setup. Available primes: %i. Requested threads %i \n", numRngPrimes, requestedThreads);
+    // printf("RNG setup. Available primes: %i. Requested threads %i \n", numRngPrimes, requestedThreads);
 
     // prime numbers
     CUDA_ERR_CHECK(cudaMalloc(d_MWC_RNG_a, numRngPrimes * sizeof(uint32_t)));

@@ -20,14 +20,41 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 # */
 
-find_package(CUDAToolkit REQUIRED)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_75,code=sm_75 -gencode arch=compute_80,code=sm_80 --keep  -use_fast_math --expt-relaxed-constexpr --ptxas-options -v --resource-usage")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  -lineinfo") # source code information for profiling
+enable_language(CUDA)
 
 add_library(thiscudalib SHARED
   propagationKernelSource.cu
   I3CLSimCUDADevice.cu
   )
+
+set(_architectures
+  30 # GTX 680
+  35 # K20
+  37 # K80
+  52 # GTX 980
+  61 # P4, GTX 1080
+  75 # RTX 2080
+)
+
+if (CUDAToolkit_VERSION_MAJOR VERSION_GREATER_EQUAL 11)
+  list(APPEND _architectures
+    80 # A100
+    86 # RTX 3080
+  )
+endif()
+
+set(CLSIM_CUDA_ARCHITECTURES ${_architectures} CACHE STRING "CUDA architectures to build for (see https://en.wikipedia.org/wiki/CUDA#GPUs_supported)")
+
+colormsg(GREEN "+-- CUDA architectures: ${CLSIM_CUDA_ARCHITECTURES}")
+
+set_property(TARGET thiscudalib PROPERTY CUDA_ARCHITECTURES ${CLSIM_CUDA_ARCHITECTURES})
+
+# call constexpr __host__ functions from __device__
+target_compile_options(thiscudalib PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+target_compile_options(thiscudalib PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-use_fast_math>)
+# source code information for profiling
+target_compile_options(thiscudalib PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>)
+
 
 target_link_libraries(thiscudalib
   PUBLIC

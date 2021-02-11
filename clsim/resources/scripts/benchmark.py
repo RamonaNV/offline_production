@@ -45,6 +45,9 @@ group.add_argument("--use-cpu",  action="store_true", default=False,
 group.add_argument("--use-cuda",  action="store_true", default=False,
                   dest="CUDA", help="use CUDA kernel instead of OpenCL")
 
+parser.add_argument("--double-buffering", default=False, action="store_true",
+                  help="Interleave kernel execution and i/o")
+
 # parse cmd line args, bail out if anything is not understood
 options = parser.parse_args()
 
@@ -327,6 +330,7 @@ tray.AddSegment(clsim.I3CLSimMakeHits, "makeCLSimHits",
     UseCPUs=options.USECPU,
     UseOnlyDeviceNumber=options.DEVICE,
     UseCUDA=options.CUDA,
+    EnableDoubleBuffering=options.double_buffering,
     UseI3PropagatorService=options.PROPAGATE_MUONS,
     IceModelLocation=options.ICEMODEL,
     DOMOversizeFactor=options.OVERSIZE,

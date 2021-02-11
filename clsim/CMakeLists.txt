@@ -50,8 +50,18 @@ if (APPLE AND (CMAKE_SYSTEM_VERSION VERSION_LESS "11.0.0"))
   set(OPENCL_FOUND False)
 endif (APPLE AND (CMAKE_SYSTEM_VERSION VERSION_LESS "11.0.0"))
 
-# FIXME: stub; make conditional on CUDA detection (>= 11.0)
-set (BUILD_CLSIM_CUDA YES)
+set (BUILD_CLSIM_CUDA OFF)
+if (${CMAKE_VERSION} VERSION_GREATER "3.17")
+  find_package(CUDAToolkit 10 REQUIRED)
+  if (${CUDAToolkit_FOUND})
+    set (BUILD_CLSIM_CUDA ON)
+    colormsg(GREEN "+-- CUDA support")
+  elseif()
+    colormsg(RED "+-- CUDA support disabled (CUDA >= 10 not found)")
+  endif()
+else()
+  colormsg(RED "+-- CUDA support disabled (CMake ${CMAKE_VERSION} < 3.18)")
+endif()
 
 # The IceTray project definition
 if (BUILD_CLSIM_DATACLASSES_ONLY)
@@ -290,7 +300,6 @@ if(NOT BUILD_CLSIM_DATACLASSES_ONLY)
 endif()
 
 if (BUILD_CLSIM_CUDA)
-  enable_language(CUDA)
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cudaKernels)
   add_definitions(-DHAS_CUDA)
   list(APPEND LIB_${PROJECT_NAME}_LIBRARIES
@@ -303,9 +312,6 @@ if (BUILD_CLSIM_CUDA)
     private/pybindings/I3CLSimStepToPhotonConverterCUDA.cxx
     private/pybindings/I3CLSimCUDADevice.cxx
   )
-  colormsg(GREEN "+-- CUDA support")
-else()
-  colormsg(RED "+-- CUDA support disabled")
 endif()
 
 # check for Geant4

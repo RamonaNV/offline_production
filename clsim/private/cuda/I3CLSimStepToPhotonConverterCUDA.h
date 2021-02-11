@@ -35,6 +35,10 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/locks.hpp>
 
+namespace boost {
+    class barrier;
+}
+
 #include "clsim/I3CLSimQueue.h"
 
 #include "I3CLSimCUDADevice.h"
@@ -49,7 +53,7 @@ I3_FORWARD_DECLARATION(I3CLSimRandomValueInterpolatedDistribution);
 
 /**
  * @brief Creates photons from a given list of steps and propagates
- * them to a DOM using an OpenCL-enabled algorithm
+ * them to a DOM using a CUDA program
  */
 struct I3CLSimStepToPhotonConverterCUDA : public I3CLSimStepToPhotonConverter
 {
@@ -267,8 +271,8 @@ public:
 private:
     typedef std::pair<uint32_t, I3CLSimStepSeriesConstPtr> ToOpenCLPair_t;
 
-    void OpenCLThread();
-    void ThreadyThread(boost::this_thread::disable_interruption &);
+    void ServiceThread(unsigned, boost::shared_ptr<boost::barrier> &);
+    void ServiceThread_impl(unsigned, boost::shared_ptr<boost::barrier>);
 
     // Keep a running mean using Welford's online algorithm
     // See: https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
@@ -307,13 +311,10 @@ private:
     };
     statistics_bundle statistics_;
 
-    boost::shared_ptr<boost::thread> openCLThreadObj_;
-    boost::condition_variable_any openCLStarted_cond_;
-    boost::mutex openCLStarted_mutex_;
-    bool openCLStarted_;
-    
-    boost::shared_ptr<I3CLSimQueue<ToOpenCLPair_t> > queueToOpenCL_;
-    boost::shared_ptr<I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t> > queueFromOpenCL_;
+    std::vector<boost::thread> threads_;
+
+    boost::shared_ptr<I3CLSimQueue<ToOpenCLPair_t> > inputQueue_;
+    boost::shared_ptr<I3CLSimQueue<I3CLSimStepToPhotonConverter::ConversionResult_t> > outputQueue_;
 
     I3RandomServicePtr randomService_;
     

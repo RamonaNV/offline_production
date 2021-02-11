@@ -46,7 +46,8 @@ public:
     );
     ~Kernel();
     void uploadSteps(const std::vector<I3CLSimStep> &steps);
-    void execute();
+    /// @returns: kernel duration in ns
+    size_t execute();
     std::vector<I3CLSimPhoton> downloadPhotons();
 private:
     std::unique_ptr<KernelBuffers> impl;
