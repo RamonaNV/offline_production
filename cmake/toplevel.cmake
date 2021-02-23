@@ -16,7 +16,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>
 #
-cmake_minimum_required(VERSION 3.17.0 FATAL_ERROR) # required for "FindCUDAToolkit"
+cmake_minimum_required(VERSION 3.9.0 FATAL_ERROR) # required for CUDA support
 project(icetray)
 
 if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")

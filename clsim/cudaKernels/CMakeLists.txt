@@ -19,9 +19,6 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 # */
-
-enable_language(CUDA)
-
 add_library(thiscudalib SHARED
   propagationKernelSource.cu
   I3CLSimCUDADevice.cu
@@ -54,12 +51,9 @@ target_compile_options(thiscudalib PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-rel
 target_compile_options(thiscudalib PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-use_fast_math>)
 # source code information for profiling
 target_compile_options(thiscudalib PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>)
+# forward unkown linker options to host linker to fix problem with older CMake versions (GCC linker flags being passed to nvcc)
+target_compile_options(thiscudalib PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-forward-unknown-to-host-linker>)
 
-
-target_link_libraries(thiscudalib
-  PUBLIC
-  CUDA::cudart
-  )
 
 target_include_directories(thiscudalib
   PUBLIC
@@ -72,6 +66,7 @@ target_include_directories(thiscudalib
   ${CMAKE_CURRENT_SOURCE_DIR}/../../icetray/public
   ${CMAKE_CURRENT_SOURCE_DIR}/../../serialization/public
   ${CMAKE_CURRENT_SOURCE_DIR}/../../phys-services/public
+  ${BOOST_INCLUDE_DIR}  # required when building against CVMFS boost using the host CUDA/nvcc
   )
  
 # set some options for benchmarking
