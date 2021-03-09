@@ -51,7 +51,7 @@ if (APPLE AND (CMAKE_SYSTEM_VERSION VERSION_LESS "11.0.0"))
 endif (APPLE AND (CMAKE_SYSTEM_VERSION VERSION_LESS "11.0.0"))
 
 set (BUILD_CLSIM_CUDA OFF)
-if (${CMAKE_VERSION} VERSION_GREATER "3.9")
+if (${CMAKE_VERSION} VERSION_GREATER "3.17")
   include(CheckLanguage)
   check_language(CUDA)
   if (CMAKE_CUDA_COMPILER)
@@ -66,7 +66,7 @@ if (${CMAKE_VERSION} VERSION_GREATER "3.9")
     colormsg(RED "+-- CUDA support disabled (CUDA not found)")
   endif()
 else()
-  colormsg(RED "+-- CUDA support disabled (CMake ${CMAKE_VERSION} < 3.10)")
+  colormsg(RED "+-- CUDA support disabled (CMake ${CMAKE_VERSION} < 3.18)")
 endif()
 
 # The IceTray project definition

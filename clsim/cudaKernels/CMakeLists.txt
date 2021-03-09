@@ -25,7 +25,6 @@ add_library(thiscudalib SHARED
   )
 
 set(_architectures
-  30 # GTX 680
   35 # K20
   37 # K80
   52 # GTX 980
@@ -37,6 +36,10 @@ if (CUDAToolkit_VERSION_MAJOR VERSION_GREATER_EQUAL 11)
   list(APPEND _architectures
     80 # A100
     86 # RTX 3080
+  )
+elseif ()
+  list(APPEND _architectures
+    30 # GTX 680
   )
 endif()
 
