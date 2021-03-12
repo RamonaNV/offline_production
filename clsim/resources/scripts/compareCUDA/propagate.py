@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-from icecube import icetray, ppc, clsim, phys_services, dataclasses, simclasses
-from icecube.ppc import MakeCLSimPropagator
+from icecube import icetray, clsim, phys_services, dataclasses, simclasses
 from os.path import expandvars, join, isfile
 from os import environ
 import tempfile
@@ -12,9 +11,6 @@ import numpy
 
 parser = ArgumentParser()
 parser.add_argument('-g', '--gcd-file', default=expandvars('$I3_DATA/GCD/GeoCalibDetectorStatus_IC86_Merged.i3.gz'))
-parser.add_argument('--use-gpus', default=True, action='store_true')
-# DOM oversizing still gives different results (PPC > clsim).
-# TODO: I should track this down!
 parser.add_argument('--oversize', default=1, type=int)
 parser.add_argument('--energy', default=1e5, type=float)
 parser.add_argument('-o', '--output-file', default='hits')
@@ -30,21 +26,19 @@ DetectorParams = clsim.traysegments.common.setupDetector(
     # IceModelLocation=expandvars("$I3_SRC/ice-models/resources/models/spice_bfr-dv1_complete")
     # IceModelLocation=expandvars("./spice_bfr_cranked_up")
 )
-icetray.logging.set_level_for_unit('ppc', 'WARN')
 
 rng = phys_services.I3GSLRandomService(0)
 
-ppcer = MakeCLSimPropagator(DetectorParams, UseGPUs=args.use_gpus,
-                            UseCPUs=not args.use_gpus, CopyConfig=True)
-
 clsimer = clsim.traysegments.common.setupPropagators(rng, DetectorParams,
-                                                     UseCPUs=not
-                                                     args.use_gpus)[0]
+                                                     UseCUDA=False)[0]
+clsimer_CUDA = clsim.traysegments.common.setupPropagators(rng, DetectorParams,
+                                                     UseCUDA=True)[0]
 
-print('---> ppc granularity %d, bunch size %d' % (ppcer.workgroupSize,
-                                                  ppcer.maxNumWorkitems))
-print('---> clsim granularity %d, bunch size %d' % (clsimer.workgroupSize,
+
+print('---> clsim (ocl) granularity %d, bunch size %d' % (clsimer.workgroupSize,
                                                     clsimer.maxNumWorkitems))
+print('---> clsim (CUDA) granularity %d, bunch size %d' % (clsimer_CUDA.workgroupSize,
+                                                  clsimer_CUDA.maxNumWorkitems))
 
 try:
     from math import gcd
@@ -56,8 +50,8 @@ def lcm(a, b):
     return a*b/gcd(a, b)
 
 
-granularity = int(lcm(ppcer.workgroupSize, clsimer.workgroupSize))
-maxBunchSize = min((clsimer.maxNumWorkitems, ppcer.maxNumWorkitems))
+granularity = int(lcm(clsimer_CUDA.workgroupSize, clsimer.workgroupSize))
+maxBunchSize = min((clsimer.maxNumWorkitems, clsimer_CUDA.maxNumWorkitems))
 maxBunchSize -= (maxBunchSize % granularity)
 print('---> common granularity %d, bunch size %d' % (granularity,
                                                      maxBunchSize))
@@ -112,28 +106,28 @@ while True:
 
     print('---> sending %d photons in bunch %d'
           % (sum((s.num for s in steps)), i))
-    ppcer.EnqueueSteps(steps, i)
+    clsimer_CUDA.EnqueueSteps(steps, i)
     clsimer.EnqueueSteps(steps, i)
     i += 1
 
-    result_ppc = ppcer.GetConversionResult()
-    result_clsim = clsimer.GetConversionResult()
+    result_CUDA = clsimer_CUDA.GetConversionResult()
+    result_ocl = clsimer.GetConversionResult()
 
-    photons['ppc'].extend(result_ppc.photons)
-    photons['clsim'].extend(result_clsim.photons)
+    photons['CUDA'].extend(result_CUDA.photons)
+    photons['ocl'].extend(result_ocl.photons)
 
-    n_ppc = len(result_ppc.photons)
-    n_clsim = len(result_clsim.photons)
-    print('---> got {ppc: %d, clsim: %d} photons in bunch %d (ppc/clsim=%.2f)'
-          % (n_ppc, n_clsim, result_ppc.identifier, n_ppc/float(n_clsim)))
+    n_CUDA = len(result_CUDA.photons)
+    n_ocl = len(result_ocl.photons)
+    print('---> got {CUDA: %d, ocl: %d} photons in bunch %d (CUDA/ocl=%.2f)'
+          % (n_CUDA, n_ocl, result_ocl.identifier, n_CUDA/float(n_ocl)))
 
     if barrierWasReset:
         break
 
-n_ppc = len(photons['ppc'])
-n_clsim = len(photons['clsim'])
-print('total unweighted {ppc: %d, clsim: %d} photons (ppc/clsim=%.3f)'
-      % (n_ppc, n_clsim, n_ppc/float(n_clsim)))
+n_ocl = len(photons['ocl'])
+n_CUDA = len(photons['CUDA'])
+print('total unweighted {CUDA: %d, ocl: %d} photons (CUDA/ocl=%.3f)'
+      % (n_CUDA, n_ocl, n_CUDA/float(n_ocl)))
 
 if args.output_file:
     numpy.savez(args.output_file, **photons)

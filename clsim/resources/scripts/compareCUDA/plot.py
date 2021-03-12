@@ -15,14 +15,14 @@ args = parser.parse_args()
 
 print("Loading saved hits...")
 photons = np.load(args.input_file, allow_pickle=True)
-n_ppc = len(photons['ppc'])
-n_clsim = len(photons['clsim'])
-print('total unweighted {ppc: %d, clsim: %d} photons (ppc/clsim=%.3f)'
-      % (n_ppc, n_clsim, n_ppc/n_clsim))
+n_CUDA = len(photons['CUDA'])
+n_ocl = len(photons['ocl'])
+print('total unweighted {CUDA: %d, ocl: %d} photons (CUDA/ocl=%.3f)'
+      % (n_CUDA, n_ocl, n_CUDA/n_ocl))
 
 print("Summing up counts per DOM...")
 cl_counts = np.zeros(shape=(86, 60), dtype=np.int)
-for photon in photons['clsim']:
+for photon in photons['ocl']:
     cl_counts[photon.stringID - 1][photon.omID - 1] += 1
 
 max_hits_om = np.unravel_index(cl_counts.argmax(), cl_counts.shape)
@@ -33,20 +33,20 @@ print("Number of hits for that DOM:", cl_counts[max_hits_om])
 
 print("Creating time histogram for DOM with most hits...")
 cl_times = []
-for photon in photons['clsim']:
+for photon in photons['ocl']:
     if (photon.stringID - 1, photon.omID - 1) == max_hits_om:
         cl_times.append(photon.time)
 cl_times = np.asarray(cl_times)
 
-ppc_times = []
-for photon in photons['ppc']:
+CUDA_times = []
+for photon in photons['CUDA']:
     if (photon.stringID - 1, photon.omID - 1) == max_hits_om:
-        ppc_times.append(photon.time)
-ppc_times = np.asarray(ppc_times)
-n_ppc, bins, _ = plt.hist(ppc_times, bins='auto',
-                          range=[ppc_times.min(), ppc_times.mean()*1.3],
-                          histtype='step', label='ppc')
-n_clsim, _, _ = plt.hist(cl_times, bins=bins, histtype='step', label='clsim')
+        CUDA_times.append(photon.time)
+CUDA_times = np.asarray(CUDA_times)
+n_CUDA, bins, _ = plt.hist(CUDA_times, bins='auto',
+                          range=[CUDA_times.min(), CUDA_times.mean()*1.3],
+                          histtype='step', label='CUDA')
+n_ocl, _, _ = plt.hist(cl_times, bins=bins, histtype='step', label='ocl')
 plt.xlabel("Arrival time at DOM {} on string {}".format(max_hits_om[1] + 1,
                                                         max_hits_om[0] + 1))
 plt.ylabel("Number of hits")
@@ -59,7 +59,7 @@ else:
 print("Saved as max_hist.png.")
 
 print("KS test result:")
-print(ks_2samp(n_ppc, n_clsim))
+print(ks_2samp(n_CUDA, n_ocl))
 print("\nInfo: The p-value should be at least 99% for sufficiently large "
       "number of hits in the brightest DOM.")
 print("The total hits should match with a difference of only ~0.1%.")
