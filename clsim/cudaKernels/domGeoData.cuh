@@ -23,7 +23,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 /* 
     contains geometry data for DOM-collision check
 */
-
 #ifndef DOMGEODATA_CUH
 #define DOMGEODATA_CUH
 

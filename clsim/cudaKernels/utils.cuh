@@ -31,10 +31,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // ------------------
 #include <cuda.h>
 #include <cuda_runtime_api.h>
-#include "helper_math.h" // include helper math as a utility
-// ------------------
-
-// cuda error checking
+#include <helper_math.h> // include helper math as a utility
+ 
+ 
 
 // check error in return value of cuda api call
 #define CUDA_ERR_CHECK(e)              \
@@ -49,6 +48,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
             printf("!!! Cuda Error %s in line %d \n", cudaGetErrorString(cudaError_t(gl_err)), __LINE__ - 1); \
     }s
     
+// for debugging:
+#define PRINTLROOT                                                              \
+    if (blockIdx.x * blockDim.x + threadIdx.x == 0) {                           \
+        printf("thread 0 - in line %d and function %s \n", __LINE__, __func__); \
+    }
+#define PRINTL        printf("thread %d - in line %d and function %s \n", blockIdx.x * blockDim.x + threadIdx.x,
+//__LINE__, __func__);
+
+
+
 // math constants
 constexpr float C_LIGHT = 0.299792458f;       // [m/ns]F
 constexpr float RECIP_C_LIGHT = 3.33564095f;  // [ns/m]

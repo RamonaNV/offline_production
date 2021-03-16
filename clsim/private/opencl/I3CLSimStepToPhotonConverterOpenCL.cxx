@@ -2020,9 +2020,7 @@ void I3CLSimStepToPhotonConverterOpenCL::runCLCUDA(boost::this_thread::disable_i
         printf(" -------------  done CL ------------- \n");
     }
 
-    printf("CUDA kernel    %f [ms] \n", totalCudaKernelTime);
-    printf("CL   kernel    %f [ms] \n", totalCLKernelTime);
-    printf(" ------------- ------------- \n");
+ 
 
     // we finished simulating.
     // signal the caller by putting it's id on the

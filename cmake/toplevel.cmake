@@ -68,11 +68,13 @@ set(CMAKE_MODULE_PATH
   ${EXTRA_CMAKE_MODULE_PATH}
   ${CMAKE_SOURCE_DIR}/cmake
   ${CMAKE_SOURCE_DIR}/cmake/tools
-  ${CMAKE_SOURCE_DIR}/cmake/utility)
+  ${CMAKE_SOURCE_DIR}/cmake/utility
+  ${CMAKE_SOURCE_DIR}/cmake/cuda
+  )
 
 include(utility)  # load utility functions (pretty print, etc)
 include(config)   # trigger the configuation meat (build types, etc)
-
+include(PTXUtilities)
 ## enable_testing() must be called before add_test() which happens in project.cmake
 set(TESTDATA_VERSION trunk)
 

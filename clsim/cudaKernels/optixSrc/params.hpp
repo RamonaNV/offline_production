@@ -19,20 +19,34 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
+ 
+#pragma once
 
-#ifndef PROPAGATIONKERNELSOURCE_CUH
-#define PROPAGATIONKERNELSOURCE_CUH
+#include <cuda_runtime.h>
+#include <optix.h>
 
-#include <cuda.h>
-#include <cuda_runtime_api.h>
-  
+#include <cstdint>
 #include <dataStructCuda.cuh>
-#include <settings.cuh>
 
 
-void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nsteps, uint32_t maxHitIndex,
-                          unsigned short* geoLayerToOMNumIndexPerStringSet, int ngeolayer,
-                          I3CLSimPhotonSeries& outphotons, uint64_t* __restrict__ MWC_RNG_x,
-                          uint32_t* __restrict__ MWC_RNG_a, int sizeRNG, float& totalCudaKernelTime);
+struct RayGenData { 
+};
 
-#endif  // PROPAGATIONKERNELSOURCE_CUH
+struct HitGroupData { 
+};
+
+struct MissData {  
+};
+
+struct Params {
+  OptixTraversableHandle handle;
+  struct I3CUDASimStep* steps;
+  uint64_t* MWC_RNG_x;
+  uint32_t* MWC_RNG_a;
+  uint32_t nsteps, maxHitIndex;
+  uint32_t* hitIndex;
+  uint32_t* cableHits;
+  I3CUDASimPhoton*  hitPhotons;
+  float* wlenLut;
+  float* zOffsetLut;
+};

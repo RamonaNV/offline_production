@@ -19,6 +19,11 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
+ 
+
+/* 
+    defines all datastructures used in the cuda clsim code
+*/
 
 /* 
     defines all datastructures used in the cuda clsim code
@@ -40,7 +45,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *          Pyhsically, it represents a part of the neutinos path, which is assumed 
  *          to result in  photons with similar properties. 
  */
-struct __align__(16) I3CLSimStepCuda {
+struct __align__(16) I3CUDASimStep {
     float4 posAndTime;           // x,y,z,time             
     float4 dirAndLengthAndBeta;  // theta,phi,length,beta   
     uint32_t numPhotons;         // number of photons created from this step
@@ -48,7 +53,7 @@ struct __align__(16) I3CLSimStepCuda {
     float weight;                        
 
     // default constructor, zero everything
-    __host__ I3CLSimStepCuda()
+    __host__ I3CUDASimStep()
         : posAndTime{0, 0, 0, 0},
           dirAndLengthAndBeta{0, 0, 0, 0},
           numPhotons(0),
@@ -57,7 +62,7 @@ struct __align__(16) I3CLSimStepCuda {
     {}
 
     // creates step from the old opencl step structure
-    __host__ explicit I3CLSimStepCuda(const I3CLSimStep &i3step)
+    __host__ explicit I3CUDASimStep(const I3CLSimStep &i3step)
         : posAndTime({i3step.GetPosX(), i3step.GetPosY(), i3step.GetPosZ(), i3step.GetTime()}),
           dirAndLengthAndBeta({i3step.GetDirTheta(), i3step.GetDirPhi(), i3step.GetLength(), i3step.GetBeta()}),
           numPhotons(i3step.numPhotons),
@@ -67,20 +72,20 @@ struct __align__(16) I3CLSimStepCuda {
 };
 
 // holds photon when it is written to device memory to be downloaded onto the host
-struct __align__(16) I3CLSimPhotonCuda {
+struct __align__(16) I3CUDASimPhoton {
     float4 posAndTime;       // x,y,z,time                      
     float2 dir;              // theta,phi                                
     float wavelength;        // photon wavelength                  
     float weight;            
-    float groupVelocity;     
     uint32_t identifier;     
     int stringID;          
-    int omID;             
+    int omID;
+    float groupVelocity;                  
     
-    __host__ __device__ I3CLSimPhotonCuda() : posAndTime{0, 0, 0, 0} {}
+    __host__ __device__ I3CUDASimPhoton() : posAndTime{0, 0, 0, 0} {}
 
     // load from the original opencl struct
-    __host__ I3CLSimPhotonCuda(const I3CLSimPhoton &i3photon)
+    __host__ I3CUDASimPhoton(const I3CLSimPhoton &i3photon)
         : posAndTime{i3photon.GetPosX(), i3photon.GetPosY(), i3photon.GetPosZ(), i3photon.GetTime()},
           dir{i3photon.GetDirTheta(), i3photon.GetDirPhi()},
           wavelength(i3photon.GetWavelength()),
@@ -126,8 +131,8 @@ struct __align__(16) I3CLSimPhotonCuda {
 };
 
 // holds photon while it is propagated through the ice
-struct I3CLPhoton {
-    I3CLPhoton() = default;
+struct I3CUDAPhoton {
+    I3CUDAPhoton() = default;
 
     float3 pos;
     float time;

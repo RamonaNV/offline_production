@@ -23,7 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef WLENBIASSOURCE_CUH
 #define WLENBIASSOURCE_CUH
 
-#include "utils.cuh"
+#include <utils.cuh>
 
 __device__ __forceinline__ float getWavelengthBias(float wavelength, const float* getWavelengthBias_dataShared);
 __device__ __forceinline__ void getWavelengthBias_getInterpolationBinAndFraction(float wavelength, int &bin,

@@ -69,14 +69,7 @@ else (BUILD_CLSIM_DATACLASSES_ONLY)
   )
 endif (BUILD_CLSIM_DATACLASSES_ONLY)
 
-
-
-
 enable_language(CUDA)
-
-
-
-
 
 
 SET(LIB_${PROJECT_NAME}_SOURCEFILES
@@ -327,7 +320,7 @@ else (GEANT4_FOUND AND OPENCL_FOUND AND NOT DISABLE_GEANT4_IN_CLSIM)
     colormsg(RED   "+-- Geant4 or OpenCL is not installed on your system. clsim will fail if it is not used with parameterizations.")
 endif (GEANT4_FOUND AND OPENCL_FOUND AND NOT DISABLE_GEANT4_IN_CLSIM)
 
- 
+include(PTXUtilities)
 
 list(APPEND LIB_${PROJECT_NAME}_LIBRARIES
  

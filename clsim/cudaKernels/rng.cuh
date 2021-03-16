@@ -30,9 +30,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // includes
 // ------------------
-#include <cuda.h>
-#include <cuda_runtime_api.h>
 #include <cfenv>
+#include <utils.cuh>
+ 
+
+ 
+
+
 // ------------------
 
 /**

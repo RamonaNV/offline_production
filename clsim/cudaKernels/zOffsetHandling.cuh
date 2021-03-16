@@ -31,7 +31,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // includes
 // ------------------
-#include "settings.cuh"
+#include <settings.cuh>
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+#include <cfenv>
+#include <math.h>
+#include <math_constants.h>
+
 // ------------------
 
 namespace detail {
