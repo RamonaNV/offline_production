@@ -308,7 +308,7 @@ void I3CLSimStepToPhotonConverterCUDA::SetMediumProperties(I3CLSimMediumProperti
         log_fatal_stream("Minimum wavelength for medium properties must be 265 nm");
     }
     if (mediumProperties->GetMaxWavelength() != 675*I3Units::nanometer) {
-        log_fatal_stream("Maxium wavelength for medium properties must be 265 nm");
+        log_fatal_stream("Maximum wavelength for medium properties must be 265 nm");
     }
     if (mediumProperties->GetLayersNum() != 171) {
         log_fatal_stream("Medium properties must have 171 layers");

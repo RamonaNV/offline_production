@@ -23,8 +23,6 @@ DetectorParams = clsim.traysegments.common.setupDetector(
     DOMOversizeFactor=args.oversize,
     HoleIceParameterization=expandvars("$I3_SRC/ice-models/resources/models/angsens/as.nominal"),
      IceModelLocation=expandvars("$I3_SRC/ice-models/resources/models/spice_3.2.2-for_clsim")
-    # IceModelLocation=expandvars("$I3_SRC/ice-models/resources/models/spice_bfr-dv1_complete")
-    # IceModelLocation=expandvars("./spice_bfr_cranked_up")
 )
 
 rng = phys_services.I3GSLRandomService(0)
@@ -78,12 +76,12 @@ if isinstance(args.cascade_position,  str):
     elif args.cascade_position.lower() == 'center':
         cascade_position = (0, 0, 0)
     else:
-        raise ValueError("Invalid value for argument cascade_position!")
+        raise ValueError("Invalid value for argument cascade-position!")
 elif isinstance(args.cascade_position, tuple):
     if len(args.cascade_position) == 3:
         cascade_position = args.cascade_position
 else:
-    raise ValueError("Invalid value for argument cascade_position!")
+    raise ValueError("Invalid value for argument cascade-position!")
 print("---> Cascade position is:", cascade_position)
 
 p = dataclasses.I3Particle()

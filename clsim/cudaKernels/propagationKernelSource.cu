@@ -116,7 +116,7 @@ struct KernelBuffers {
                 throw std::runtime_error("Wavelength table must start at 260 nm");
             }
             if (fabs(wavelengths[1]-wavelengths[0]-1e-8) > 1e-12) {
-                throw std::runtime_error("Wavelength step must but 10 nm");
+                throw std::runtime_error("Wavelength step must be 10 nm");
             }
 
             auto wlen = generateWavelengthLut(wavelengthPMF.data(), wavelengthCDF.data());
@@ -272,6 +272,7 @@ size_t Kernel::execute() {
                                                 impl->absorptionLength_deltaTau_LUT,
                                                 impl->MWC_RNG_x, impl->MWC_RNG_a);
 #endif
+    CUDA_ERR_THROW(cudaGetLastError());
     cudaEventRecord(stop, impl->stream);
     CUDA_ERR_THROW(cudaEventSynchronize(stop));
 
@@ -458,7 +459,8 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
 }
 
 // thread_block_tile::meta_group_rank() requires CUDA 11
-#if CUDA_VERSION >= 11000
+//#if CUDA_VERSION >= 11000
+#if CUDA_VERSION >= 99999999999  // TODO: add jobqueue support back
 /**
  * @brief Generates photons for one "step" and simulates propagation through the ice.
  * @param group the group of threads used to process one step (eg one warp)
