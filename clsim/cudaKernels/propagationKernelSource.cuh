@@ -34,6 +34,7 @@ public:
         int device,
         size_t maxNumWorkItems,
         size_t maxNumOutputPhotons,
+        const float DOMOversizeFactor,
         const std::vector<double> &wavelengths,
         const std::vector<double> &wavelengthBias,
         const std::vector<double> &wavelengthPMF,

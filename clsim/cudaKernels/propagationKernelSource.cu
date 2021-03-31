@@ -50,6 +50,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 __global__ __launch_bounds__(NTHREADS_PER_BLOCK, NBLOCKS_PER_SM) void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                                                                     uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
+                                                                    const float DOMOversizeFactor,
                                                                     const float* wlenLut, const float* wlenBias, const float* zOffsetLut,
                                                                     const float* scatteringLength_b400_LUT, const float* absorptionLength_aDust400_LUT,
                                                                     const float* absorptionLength_deltaTau_LUT,
@@ -69,6 +70,7 @@ void vectorToDevice(T** ptr, const std::vector<P> &data)
 }
 
 struct KernelBuffers {
+    float  DOMOversizeFactor;
     float* wlenLut;
     float* wlenBias;
     float* zOffsetLut;
@@ -85,6 +87,7 @@ struct KernelBuffers {
     cudaStream_t stream;
     KernelBuffers(
         size_t maxNumWorkItems, size_t maxNumOutputPhotons,
+        const float DOMOversizeFactor,
         const std::vector<double> &wavelengths,
         const std::vector<double> &wavelengthBias,
         const std::vector<double> &wavelengthPMF,
@@ -94,6 +97,7 @@ struct KernelBuffers {
         const std::vector<double> &absorptionLength_deltaTau,
         const std::vector<uint64_t> &x, const std::vector<uint32_t> &a
     ) :
+        DOMOversizeFactor(DOMOversizeFactor),
         wlenLut(nullptr),
         wlenBias(nullptr),
         zOffsetLut(nullptr),
@@ -219,6 +223,7 @@ Kernel::Kernel(
     int device,
     size_t maxNumWorkItems,
     size_t maxNumOutputPhotons,
+    const float DOMOversizeFactor,
     const std::vector<double> &wavelengths,
     const std::vector<double> &wavelengthBias,
     const std::vector<double> &wavelengthPMF,
@@ -232,6 +237,7 @@ Kernel::Kernel(
         new KernelBuffers(
             maxNumWorkItems,
             maxNumOutputPhotons,
+            DOMOversizeFactor,
             wavelengths,
             wavelengthBias,
             wavelengthPMF,
@@ -267,6 +273,7 @@ size_t Kernel::execute() {
     int numBlocks = (impl->numInputSteps + NTHREADS_PER_BLOCK - 1) / NTHREADS_PER_BLOCK;
     propKernel<<<numBlocks, NTHREADS_PER_BLOCK, 0, impl->stream >>>(impl->inputSteps, impl->numInputSteps,
                                                 impl->numOutputPhotons, impl->maxHitIndex, impl->outputPhotons,
+                                                impl->DOMOversizeFactor,
                                                 impl->wlenLut, impl->wlenBias, impl->zOffsetLut,
                                                 impl->scatteringLength_b400_LUT, impl->absorptionLength_aDust400_LUT,
                                                 impl->absorptionLength_deltaTau_LUT,
@@ -287,6 +294,7 @@ size_t Kernel::execute() {
 
 __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps, 
                             uint32_t* hitIndex, uint32_t maxHitIndex, I3CLSimPhotonCuda* __restrict__ outputPhotons,
+                            const float DOMOversizeFactor,
                             const float* wlenLut, const float* getWavelengthBias_data, const float* zOffsetLut,
                             const float* scatteringLength_b400_LUT, const float* absorptionLength_aDust400_LUT,
                             const float* absorptionLength_deltaTau_LUT,
@@ -435,7 +443,8 @@ __global__ void propKernel( I3CLSimStepCuda* __restrict__ steps, int numSteps,
 
         // check for collision with DOMs, if collision has happened, the hit will be stored in outputPhotons
         bool collided = checkForCollisionOld(photon, step, distanceTraveled, 
-                                  hitIndex, maxHitIndex, outputPhotons, numIndexStringSetPointer, wlenBiasLutPointer, 
+                                  hitIndex, maxHitIndex, outputPhotons, DOMOversizeFactor,
+                                  numIndexStringSetPointer, wlenBiasLutPointer, 
                                   geoCellIndex0Pointer, geoCellIndex1Pointer, geoStringInSetPointer, geoLayerNumPointer, geoLayerStartZPointer, geoLayerHeightPointer,
                                   geoStringPosXPointer, geoStringPosYPointer, geoStringMinZPointer, geoStringMaxZPointer);
 
@@ -530,7 +539,8 @@ __device__ __forceinline__  void propGroup(cg::thread_block_tile<32> group, cons
 
         // check for collision with DOMs, if collision has happened, the hit will be stored in outputPhotons
         bool collided = checkForCollisionOld(photon, step, distanceTraveled, 
-                                  hitIndex, maxHitIndex, outputPhotons, numIndexStringSetPointer, wlenBiasLutPointer, 
+                                  hitIndex, maxHitIndex, outputPhotons, DOMOversizeFactor,
+                                  numIndexStringSetPointer, wlenBiasLutPointer, 
                                   geoCellIndex0Pointer, geoCellIndex1Pointer, geoStringInSetPointer, geoLayerNumPointer, geoLayerStartZPointer, geoLayerHeightPointer,
                                   geoStringPosXPointer, geoStringPosYPointer, geoStringMinZPointer, geoStringMaxZPointer);
 

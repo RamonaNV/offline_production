@@ -287,6 +287,7 @@ namespace detail {
                                                            const float3 &photonDir,
                                                            float &thisStepLength, bool &hitRecorded,
                                                            unsigned short &hitOnString, unsigned short &hitOnDom,
+                                                           const float DOMOversizeFactor,
                                                            const unsigned short *geoLayerToOMNumIndexPerStringSetLocal,
                                                            const unsigned char* geoStringInSet, 
                                                            const unsigned short* geoLayerNumLocal, 
@@ -309,13 +310,13 @@ namespace detail {
             // if (smin > sqr( float(geoStringRadius[stringNum]))) return;  //
             // NOTE: smin == distance squared
 
-            if (smin > sqr(float(GEO_STRING_MAX_RADIUS))) return;  // NOTE: smin == distance squared
+            if (smin > sqr(float(GEO_STRING_MAX_RADIUS)*DOMOversizeFactor)) return;  // NOTE: smin == distance squared
         }
 
         {  // check if photon is above or below the string (geoStringMaxZ and
             // geoStringMinZ do not include the OM radius!)
-            if ((photonDir.z > 0.0f) && (photonPos.z > geoStringMaxZPointer[stringNum] + OM_RADIUS)) return;
-            if ((photonDir.z < 0.0f) && (photonPos.z < geoStringMinZPointer[stringNum] - OM_RADIUS)) return;
+            if ((photonDir.z > 0.0f) && (photonPos.z > geoStringMaxZPointer[stringNum] + OM_RADIUS*DOMOversizeFactor)) return;
+            if ((photonDir.z < 0.0f) && (photonPos.z < geoStringMinZPointer[stringNum] - OM_RADIUS*DOMOversizeFactor)) return;
         }
 
         // this photon could potentially be hitting an om
@@ -349,11 +350,11 @@ namespace detail {
                 const float dr2 = dot(drvec, drvec);
 
                 urdot = dot(drvec, make_float4(photonDir,0));              // this assumes drvec.w==0
-                discr = sqr(urdot) - dr2 + OM_RADIUS * OM_RADIUS;  // (discr)^2
+                discr = sqr(urdot) - dr2 + OM_RADIUS*DOMOversizeFactor * OM_RADIUS*DOMOversizeFactor;  // (discr)^2
             }
 
             if (discr < 0.0f) continue;  // no intersection with this DOM
-            discr = sqrtf(discr);
+            discr = sqrtf(discr)/DOMOversizeFactor;  // same as discr = my_sqrt(discr)/PANCAKE_FACTOR;
 
             // by construction: smin1 < smin2
             {
@@ -396,6 +397,7 @@ namespace detail {
     __device__ __forceinline__ void checkForCollision_InCellOld(
         const float photonDirLenXYSqr, const float3 &photonPos, const float3 &photonDir,
         float &thisStepLength, bool &hitRecorded, unsigned short &hitOnString, unsigned short &hitOnDom,
+        const float DOMOversizeFactor,
         const unsigned short *geoLayerToOMNumIndexPerStringSetLocal, const unsigned short *this_geoCellIndex,
         const float this_geoCellStartX, const float this_geoCellStartY, const float this_geoCellWidthX,
         const float this_geoCellWidthY, const int this_geoCellNumX, const int this_geoCellNumY,
@@ -438,6 +440,7 @@ namespace detail {
                 if (stringNum == 0xFFFF) continue;  // empty cell
                 checkForCollision_OnStringOld(stringNum, photonDirLenXYSqr, photonPos, photonDir, 
                                         thisStepLength, hitRecorded, hitOnString, hitOnDom,
+                                        DOMOversizeFactor,
                                         geoLayerToOMNumIndexPerStringSetLocal, 
                                         geoStringInSet, geoLayerNumLocal, geoLayerStartZLocal, geoLayerHeightLocal,
                                         geoStringPosXPointer, geoStringPosYPointer, geoStringMinZPointer, geoStringMaxZPointer);
@@ -451,6 +454,7 @@ namespace detail {
                                                           const float3 &photonDir,
                                                           float &thisStepLength, bool &hitRecorded,
                                                           unsigned short &hitOnString, unsigned short &hitOnDom,
+                                                          const float DOMOversizeFactor,
                                                           const unsigned short *geoLayerToOMNumIndexPerStringSetLocal,
                                                           const unsigned short* geoCellIndex0, 
                                                           const unsigned short* geoCellIndex1, 
@@ -468,7 +472,7 @@ namespace detail {
         // replace with a loop sometime.
     #define DO_CHECK(subdetectorNum)                                                                                 \
         checkForCollision_InCellOld(photonDirLenXYSqr, photonPos, photonDir, thisStepLength, hitRecorded, \
-                                hitOnString, hitOnDom, geoLayerToOMNumIndexPerStringSetLocal,                       \
+                                hitOnString, hitOnDom, DOMOversizeFactor, geoLayerToOMNumIndexPerStringSetLocal,    \
                                                                                                                     \
                                 geoCellIndex##subdetectorNum, GEO_CELL_START_X_##subdetectorNum,  \
                                 GEO_CELL_START_Y_##subdetectorNum, GEO_CELL_WIDTH_X_##subdetectorNum,               \
@@ -711,6 +715,7 @@ __device__ __forceinline__ bool checkForCollisionOld(const I3CLPhoton& photon, c
                                                   float &traveledDistance,
                                                   uint32_t *hitIndex, uint32_t maxHitIndex,
                                                   I3CLSimPhotonCuda *outputPhotons,  
+                                                  const float DOMOversizeFactor,
                                                   const unsigned short *geoLayerToOMNumIndexPerStringSetLocal,
                                                   const float* getWavelengthBias_dataShared,
                                                   const unsigned short* geoCellIndex0, 
@@ -733,6 +738,7 @@ __device__ __forceinline__ bool checkForCollisionOld(const I3CLPhoton& photon, c
 
     detail::checkForCollision_InCellsOld(photonDirLenXYSqr, photon.pos, photon.dir,
                               traveledDistance, hitRecorded, hitOnString, hitOnDom,
+                              DOMOversizeFactor,
                               geoLayerToOMNumIndexPerStringSetLocal, geoCellIndex0, geoCellIndex1, geoStringInSet, 
                               geoLayerNumLocal, geoLayerStartZLocal, geoLayerHeightLocal,
                               geoStringPosXPointer, geoStringPosYPointer, geoStringMinZPointer, geoStringMaxZPointer);
