@@ -3,18 +3,23 @@ https://github.com/IceCubeOpenSource/offline_production
 
 ## Compiling:
 with  cmake3.17.0 or newer:
-env CC=gcc-8 CXX=g++-8 cmake ..
-
+cmake .. -DCMAKE_CUDA_COMPILER=<path>/cuda-11.4/bin/nvcc  -DOPTIX_HOME=<path>/optix7.3
+ 
 ## Running Code.
 in build:
 ./env-shell.sh
-export I3_TESTDATA= PATH_TO_ICECUBECUDA/test-data
+export I3_TESTDATA=<PATH_TO_ICECUBECUDA>/test-data
  
 python clsim/resources/runSmallSim.py
 (needs variable I3_TESTDATA to test-data folder too)
 (other one:  python ./clsim/resources/scripts/benchmark.py --gcd-file=$I3_TESTDATA/GCD/GeoCalibDetectorStatus_2016.57531_V0.i3.gz --numevents 1000 ,
 has not yet been adapted to run both..)
 
+ 
+ ## Geometries:
+use ParaView Python (version > v5.6);
+ pvpython spheresGeometry.py 
+ to generate obj file at clsim/test-data/doms.obj from build/doms.csv file  (x,y,z,DOMId,StringId).
 
 ------------------------------------------------------------------
 
