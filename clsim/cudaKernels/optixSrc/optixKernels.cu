@@ -217,15 +217,12 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
  }
  
  
- extern "C" __global__ void __closesthit__prog() {
+ extern "C" __global__ void __closesthit__prog_DOMs() {
 
     unsigned int meshId = optixGetSbtGASIndex();
     optixSetPayload_0(meshId+1);
 
- 
-    if(meshId == 0)//DOM
-    {
-        const uint32_t launch_index_x = optixGetLaunchIndex().x;
+         const uint32_t launch_index_x = optixGetLaunchIndex().x;
         unsigned int tri_id = optixGetPrimitiveIndex();
         // We defined out geometry as a triangle geometry. In this case the
         // We add the t value of the intersection
@@ -262,12 +259,13 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
             params.hitPhotons[myIndex] = outphoton;
         } 
 
-    }else{//cable
-        atomicAdd(&params.cableHits[0], 1);
-    }
-
 }  
 
+
+
+extern "C" __global__ void __closesthit__prog_cables() {    
+    atomicAdd(&params.cableHits[0], 1);
+}  
 
 
 /*

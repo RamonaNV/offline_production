@@ -102,7 +102,7 @@ void RTXDataHolder::createProgramGroups() {
   OptixProgramGroupDesc hitgroup_prog_group_desc = {}; // Hit group programs
   hitgroup_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
   hitgroup_prog_group_desc.hitgroup.moduleCH = module;
-  hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = "__closesthit__prog";
+  hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = "__closesthit__prog_DOMs";
   hitgroup_prog_group_desc.hitgroup.moduleAH = nullptr;
   hitgroup_prog_group_desc.hitgroup.entryFunctionNameAH = nullptr;
 
@@ -203,7 +203,7 @@ RTXDataHolder::buildAccelerationStructure(std::vector<std::string> obj_filenames
     triangle_input[meshId].triangleArray.numVertices =  static_cast<unsigned int>(vertices.size());
     triangle_input[meshId].triangleArray.vertexBuffers = reinterpret_cast<CUdeviceptr *>(&d_vertices[meshId]);
     triangle_input[meshId].triangleArray.flags = &triangle_input_flags[meshId];
-    triangle_input[meshId].triangleArray.numSbtRecords = 1;
+    triangle_input[meshId].triangleArray.numSbtRecords = 2;
     triangle_input[meshId].triangleArray.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
     triangle_input[meshId].triangleArray.numIndexTriplets =   static_cast<unsigned int>(triangles.size());
     triangle_input[meshId].triangleArray.indexBuffer = reinterpret_cast<CUdeviceptr>(d_triangles[meshId]);
