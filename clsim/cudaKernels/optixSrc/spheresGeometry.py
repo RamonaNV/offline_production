@@ -53,7 +53,7 @@ for dom in doms[2:]:
  
 appendGeometry1 = AppendGeometry(Input=geom)
     
- # show data from appendGeometry1
+#show data from appendGeometry1
 #appendGeometry1Display = Show(appendGeometry1, renderView1, 'GeometryRepresentation')
 
 objwriter = POBJWriter(FileName = outpath+'doms.obj' , Input = appendGeometry1)

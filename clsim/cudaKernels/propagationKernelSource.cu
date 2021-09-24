@@ -47,7 +47,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
 
  
   std::string domfile =   std::string(DATA_DIR) + "doms.obj"; //pillDOMs doms
-  std::string stringfile =   std::string(DATA_DIR) + "stringsrad0235.obj";
+  std::string stringfile =   std::string(DATA_DIR) + "stringsrad10.obj";
   std::cout << "DOM file = " << domfile << std::endl;
   std::cout << "String file = " << stringfile << std::endl;
   std::string ptx_filename = PTX_DIR "optixKernels.ptx";
@@ -55,7 +55,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
   std::vector<std::string> obj_files;
   //order matters, addd doms, then strings
   obj_files.push_back(domfile);
-  bool simulate_cables = false   ; // todo add to parameter file
+  bool simulate_cables = true   ; // todo add to parameter file
   if(simulate_cables)    obj_files.push_back(stringfile);
 
   cudaStream_t stream;

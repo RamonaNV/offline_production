@@ -30,13 +30,12 @@
 
 #include <algorithm>
 #include <limits>
-
+#include <cassert>
 #include <optix.h>
 #include <optix_function_table_definition.h>
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <optixSrc/tiny_obj_loader.h>
-
 void RTXDataHolder::initContext() {
   CUDA_CHECK(cudaFree(0)); // Initializes CUDA context
   OPTIX_CHECK(optixInit());
@@ -184,7 +183,7 @@ RTXDataHolder::buildAccelerationStructure(std::vector<std::string> obj_filenames
     OptixAabb aabb;
     aabb = read_obj_mesh(obj_filenames[meshId], vertices, triangles);
     ntriangles += triangles.size();
-
+    assert(vertices.size() > 0 && "Empty geometry, check .obj file location and content.");
     const size_t vertices_size = sizeof(float3) * vertices.size();
     
     CUDA_CHECK(cudaMalloc(&d_vertices[meshId], vertices_size));
