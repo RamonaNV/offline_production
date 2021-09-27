@@ -180,7 +180,7 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
         OptixVisibilityMask visibilityMask = 255;
         const unsigned int rayFlags = OPTIX_RAY_FLAG_DISABLE_ANYHIT;
         const  unsigned int SBToffset = 0;
-        const  unsigned int SBTstride = 0;
+        const  unsigned int SBTstride = 1;
         const  unsigned int missSBTIndex = 0;
       
         // Extract Payload as unsigned int
