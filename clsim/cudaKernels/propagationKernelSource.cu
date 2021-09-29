@@ -47,7 +47,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
 
  
   std::string domfile =   std::string(DATA_DIR) + "doms.obj"; //pillDOMs doms
-  std::string stringfile =   std::string(DATA_DIR) + "stringsrad10.obj";
+  std::string stringfile =   std::string(DATA_DIR) + "strings.obj";
   std::cout << "DOM file = " << domfile << std::endl;
   std::cout << "String file = " << stringfile << std::endl;
   std::string ptx_filename = PTX_DIR "optixKernels.ptx";

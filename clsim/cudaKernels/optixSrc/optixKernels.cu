@@ -136,8 +136,6 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
     const float* absorbtionLutPointer = absorptionLength_aDust400_LUT;
     const float* absorbtionDeltaTauLutPointer = absorptionLength_deltaTau_LUT;
 
-
-
     const I3CUDASimStep step = params.steps[launch_index_x];
     const float3 stepDir = detail::calculateStepDir(step);
 
@@ -157,7 +155,6 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
         float distancePropagated;
         bool absorbed = propPhoton(photon, distancePropagated, rng, scatteringLutPointer, absorbtionLutPointer, absorbtionDeltaTauLutPointer, params.zOffsetLut);
 
-        
 
         // ----------------- check for collision part, i.e. trace ray ---------------------
            
@@ -192,8 +189,7 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
 
         optixTrace(params.handle, ray_origin, ray_direction, tmin, tmax, ray_time,
                     visibilityMask, rayFlags, SBToffset, SBTstride, missSBTIndex,
-                    hit_type,  wlen,groupvel,time );
-                               
+                    hit_type,  wlen,groupvel,time );          
     
       if(hit_type > 0)
       {
@@ -233,7 +229,7 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
         float3 hit_point = ray_origin + ray_tmax * ray_dir;
 
         // printf("Hit at triangle = %u, hit point = ( %f,  %f, %f)\n", tri_id, hit_point.x, hit_point.y, hit_point.z);
-        const uint32_t myIndex =  atomicAdd(&params.hitIndex[0], 1);
+        const uint32_t myIndex =  atomicAdd(params.hitIndex, 1);
 
         // this seems to take a lot of time, mostly filling the photon 
         if(myIndex < params.maxHitIndex )
@@ -264,7 +260,7 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
 
 
 extern "C" __global__ void __closesthit__prog_cables() {    
-    atomicAdd(&params.cableHits[0], 1);
+    atomicAdd(params.cableHits, 1);
 }  
 
 
