@@ -91,9 +91,8 @@ I3CLSimStepToPhotonConverterOpenCL::I3CLSimStepToPhotonConverterOpenCL(I3RandomS
       workgroupSize_(0),
       maxNumWorkitems_(10240)
 {
-    std::cout << " !!! this code has been adapted to run the porpagation kernel "
-                 "sperately in CL and CUDA."
-              << std::endl;
+    std::cout << " this code has been adapted to run the porpagation kernel in CUDA and with optiX \n ";
+ 
 
     if (!randomService_) log_fatal("You need to supply a I3RandomService.");
 

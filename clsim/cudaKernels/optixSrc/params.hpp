@@ -38,6 +38,9 @@ struct HitGroupData {
 struct MissData {  
 };
 
+enum GeometryType:unsigned int {DOM, CABLE, MISS};
+
+
 struct Params {
   OptixTraversableHandle handle;
   struct I3CUDASimStep* steps;

@@ -46,7 +46,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
   // ---------------------------- set up Optix -------------------------------------
 
  
-  std::string domfile =   std::string(DATA_DIR) + "doms.obj"; //pillDOMs doms
+  std::string domfile =   std::string(DATA_DIR) + "domslowres.obj";
   std::string stringfile =   std::string(DATA_DIR) + "strings.obj";
   std::cout << "DOM file = " << domfile << std::endl;
   std::cout << "String file = " << stringfile << std::endl;
@@ -55,7 +55,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
   std::vector<std::string> obj_files;
   //order matters, addd doms, then strings
   obj_files.push_back(domfile);
-  bool simulate_cables = true   ; // todo add to parameter file
+  bool simulate_cables = false;  
   if(simulate_cables)    obj_files.push_back(stringfile);
 
   cudaStream_t stream;
@@ -139,7 +139,6 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
 
   const OptixShaderBindingTable &sbt = rtx_dataholder->sbt;
 
-
   // ---------------------------- launching Optix -------------------------------------
   std::cout << "Launching OptiX for "<< nsteps <<" steps \n"; 
 
@@ -166,7 +165,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
   std::cout << " --------------------------------- \n OptiX kernel time, averaged over "<< nruns << " runs = "
     << timer*1000/nruns << " [ms] \n --------------------------------- "<< std::endl;
 
-    std::cout << " --------------------------------- \n OptiX kernel time, averaged over "<< nruns << " runs = "
+    std::cout << " OptiX kernel time, averaged over "<< nruns << " runs = "
     << timer/countPhotons*1000000000/nruns << " [ns/photon] \n --------------------------------- "<< std::endl;
 
 
@@ -219,6 +218,8 @@ if(OPTIX_VERBOSE)  std::cout << "Cleaning up ...  \n";
   CUDA_CHECK( cudaFree(d_MWC_RNG_x));
   CUDA_CHECK( cudaFree(d_wlenLut));
   CUDA_CHECK( cudaFree(d_zOffsetLut));
+  CUDA_CHECK( cudaFree(d_hitIndex));
+  CUDA_CHECK( cudaFree(d_cableHits));
   CUDA_CHECK(cudaFree(d_param));
   delete rtx_dataholder;
   std::cout <<" ------------------ optiX - done --------------------- \n \n";

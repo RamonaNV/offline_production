@@ -126,7 +126,7 @@ void RTXDataHolder::createProgramGroups() {
 void RTXDataHolder::linkPipeline() {
 
   OptixProgramGroup program_groups[] = {raygen_prog_group, miss_prog_group,
-                                        hitgroup_prog_groups[0], hitgroup_prog_groups[1]};
+                                        hitgroup_prog_groups[DOM], hitgroup_prog_groups[CABLE]};
 
   OptixPipelineLinkOptions pipeline_link_options = {};
   // This controls recursive depth of ray tracing. In this example we set to the
@@ -162,9 +162,9 @@ void RTXDataHolder::buildSBT() {
   void *hitgroupSbtRecord;
   CUDA_CHECK(cudaMalloc((void **)&hitgroupSbtRecord, hitgroupSbtRecordSize*sizeof(HitGroupSbtRecord)));
 
-  OPTIX_CHECK(optixSbtRecordPackHeader(hitgroup_prog_groups[0], &hgSBT[0]));
+  OPTIX_CHECK(optixSbtRecordPackHeader(hitgroup_prog_groups[DOM], &hgSBT[DOM]));
 
-  OPTIX_CHECK(optixSbtRecordPackHeader(hitgroup_prog_groups[1], &hgSBT[1]));
+  OPTIX_CHECK(optixSbtRecordPackHeader(hitgroup_prog_groups[CABLE], &hgSBT[CABLE]));
 
   CUDA_CHECK(cudaMemcpy(hitgroupSbtRecord, &hgSBT[0], hitgroupSbtRecordSize*sizeof(HitGroupSbtRecord),
                         cudaMemcpyHostToDevice));

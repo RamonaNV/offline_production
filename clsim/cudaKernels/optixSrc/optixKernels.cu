@@ -181,7 +181,7 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
         const  unsigned int missSBTIndex = 0;
       
         // Extract Payload as unsigned int
-        unsigned int hit_type = 0;
+        unsigned int hit_type = MISS;
       
         unsigned int wlen = float_as_uint(photon.wlen);
         unsigned int groupvel = float_as_uint(photon.invGroupvel);
@@ -191,7 +191,7 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
                     visibilityMask, rayFlags, SBToffset, SBTstride, missSBTIndex,
                     hit_type,  wlen,groupvel,time );          
     
-      if(hit_type > 0)
+      if(hit_type != MISS )
       {
         photon.absLength = 0.0;
       }  
@@ -215,8 +215,7 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
  
  extern "C" __global__ void __closesthit__prog_DOMs() {
 
-    unsigned int meshId = optixGetSbtGASIndex();
-    optixSetPayload_0(meshId+1);
+        optixSetPayload_0(DOM);
 
          const uint32_t launch_index_x = optixGetLaunchIndex().x;
         unsigned int tri_id = optixGetPrimitiveIndex();
@@ -257,23 +256,8 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
 
 }  
 
-
-
 extern "C" __global__ void __closesthit__prog_cables() {    
     atomicAdd(params.cableHits, 1);
+    optixSetPayload_0(CABLE);
 }  
-
-
-/*
-extern "C" __global__ void __closesthit__prog_strings() {
- 
-   unsigned int absorbed =1;
-   optixSetPayload_0(absorbed);
-}  
-*/
-
- 
- 
- // extern "C" __global__ void __miss__prog() {}
- // extern "C" __global__ void __anyhit__prog() {}
  
