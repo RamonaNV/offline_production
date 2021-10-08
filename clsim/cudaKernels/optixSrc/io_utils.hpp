@@ -40,7 +40,7 @@ void photonsToFile(const std::string& filename, I3CUDASimPhoton *photons, unsign
   outputFile.close();
 }
 
-std::vector<std::string> getNextLineAndSplitIntoTokens(std::istream& str)
+std::vector<std::string> getNextLineAndSplitIntoTokens(std::istream& str, const char seperator)
 {
     std::vector<std::string>   result;
     std::string                line;
@@ -48,7 +48,7 @@ std::vector<std::string> getNextLineAndSplitIntoTokens(std::istream& str)
     std::stringstream          lineStream(line);
     std::string                cell;
 
-    while(std::getline(lineStream,cell, '\t'))
+    while(std::getline(lineStream,cell, seperator))
     {
         result.push_back(cell);
     }
@@ -64,22 +64,24 @@ std::vector<std::string> getNextLineAndSplitIntoTokens(std::istream& str)
 void readDOMSFile( std::string &fname, int startCol, int endCol, int nCols,  std::vector<float3> &input)
 { 
   std::ifstream tsvFile(fname);
+  const char seperator = ','; // '\t';
+
+
   if(!tsvFile.is_open())
     throw std::runtime_error("could not open input file");
 
   std::cout << "reading  from "<< fname<<std::endl;
-  getNextLineAndSplitIntoTokens(tsvFile);
+  getNextLineAndSplitIntoTokens(tsvFile,seperator);
 
   while( !tsvFile.eof() )
   {
-    auto line = getNextLineAndSplitIntoTokens(tsvFile);
+    auto line = getNextLineAndSplitIntoTokens(tsvFile,seperator);
     if(line.size() < nCols)
       continue;
     //for (int i = startCol; i<endCol; ++i)
       input.push_back(make_float3(std::stof(line[startCol]),  std::stof(line[startCol+1]), std::stof(line[startCol+2]) ));
       
  }
-
 }
 
 void getDOMPos(std::vector<float3>& domPos, float& radius, std::string& domfile){

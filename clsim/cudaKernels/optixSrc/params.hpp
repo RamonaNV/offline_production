@@ -40,6 +40,10 @@ struct MissData {
 
 enum GeometryType:unsigned int {DOM, CABLE, MISS};
 
+struct Matrix
+{
+    float m[12];
+};
 
 struct Params {
   OptixTraversableHandle handle;

@@ -46,17 +46,22 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
   // ---------------------------- set up Optix -------------------------------------
 
  
-  std::string domfile =   std::string(DATA_DIR) + "domslowres.obj";
-  std::string stringfile =   std::string(DATA_DIR) + "strings.obj";
+  std::string domfile =   std::string(DATA_DIR) + "sphere_one01651_12.obj";
+ // std::string stringfile =   std::string(DATA_DIR) + "strings.obj";
   std::cout << "DOM file = " << domfile << std::endl;
-  std::cout << "String file = " << stringfile << std::endl;
+ // std::cout << "String file = " << stringfile << std::endl;
   std::string ptx_filename = PTX_DIR "optixKernels.ptx";
+  std::string domcsvfile = std::string(DATA_DIR) + "doms.csv";
 
+  std::vector<float3> domPos; 
+  float radius = 0; 
+  getDOMPos(domPos, radius, domcsvfile);
+  
   std::vector<std::string> obj_files;
   //order matters, addd doms, then strings
   obj_files.push_back(domfile);
-  bool simulate_cables = false;  
-  if(simulate_cables)    obj_files.push_back(stringfile);
+ // bool simulate_cables = false;  
+ // if(simulate_cables)    obj_files.push_back(stringfile);
 
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
@@ -72,10 +77,14 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
   rtx_dataholder->linkPipeline();
   if(OPTIX_VERBOSE)  std::cout << "Building Shader Binding Table (SBT) \n";
   rtx_dataholder->buildSBT();
-
-
+  if(OPTIX_VERBOSE)  std::cout << "Creating Transformations of doms \n";
+  rtx_dataholder->loadTransforms(domPos);
+  std::cout<< " number of transforms " << domPos.size()   << std::endl;
   if(OPTIX_VERBOSE)  std::cout << "Building Acceleration Structure \n";
   bool setGAS  = rtx_dataholder->buildAccelerationStructure(obj_files);
+  if(OPTIX_VERBOSE)  std::cout << "Building Instance Acceleration Structure \n";
+  rtx_dataholder->buildIAS();
+
 
   // ---------------------------- preapare device pointers -------------------------------------
 
@@ -121,7 +130,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
 
   // ---------------------------- add device pointers to Optix Parameters -------------------------------------
   Params params;
-  params.handle = rtx_dataholder->gas_handle;
+  params.handle = rtx_dataholder->ias_handle;
   params.nsteps = nsteps;
   params.maxHitIndex =  maxHitIndex;
   params.cableHits =  d_cableHits;

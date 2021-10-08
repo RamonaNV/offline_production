@@ -65,7 +65,7 @@ void RTXDataHolder::createModule(const std::string ptx_filename) {
 
   pipeline_compile_options.usesMotionBlur = 0;
   pipeline_compile_options.traversableGraphFlags =
-      OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS;
+  OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY;
   pipeline_compile_options.numPayloadValues = 4;
   pipeline_compile_options.numAttributeValues = 2;
   pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
@@ -115,10 +115,10 @@ void RTXDataHolder::createProgramGroups() {
   hitgroup_prog_group_descCables.hitgroup.moduleAH = nullptr;
   hitgroup_prog_group_descCables.hitgroup.entryFunctionNameAH = nullptr;
 
-  hitgroup_prog_groups.resize(2);
+  hitgroup_prog_groups.resize(1);
   OptixProgramGroupDesc hitgroup_prog_group_descs[2] = {hitgroup_prog_group_descDOM, hitgroup_prog_group_descCables} ;
   OPTIX_CHECK(optixProgramGroupCreate(optix_context, hitgroup_prog_group_descs,
-                                      2, // num program groups
+                                      1, // num program groups todo remove
                                       &program_group_options, nullptr, nullptr,
                                       &hitgroup_prog_groups[0]));
 }
@@ -126,7 +126,7 @@ void RTXDataHolder::createProgramGroups() {
 void RTXDataHolder::linkPipeline() {
 
   OptixProgramGroup program_groups[] = {raygen_prog_group, miss_prog_group,
-                                        hitgroup_prog_groups[DOM], hitgroup_prog_groups[CABLE]};
+                                        hitgroup_prog_groups[DOM]}; //, hitgroup_prog_groups[CABLE]};
 
   OptixPipelineLinkOptions pipeline_link_options = {};
   // This controls recursive depth of ray tracing. In this example we set to the
@@ -136,7 +136,7 @@ void RTXDataHolder::linkPipeline() {
   // pipeline_link_options.overrideUsesMotionBlur = 0;
   OPTIX_CHECK(optixPipelineCreate(
       optix_context, &pipeline_compile_options, &pipeline_link_options,
-      program_groups,4,
+      program_groups,3,
       nullptr, nullptr, &pipeline));
 }
 
@@ -157,14 +157,14 @@ void RTXDataHolder::buildSBT() {
   CUDA_CHECK(cudaMemcpy(missSbtRecord, &msSBT, missSbtRecordSize,
                         cudaMemcpyHostToDevice));
 
-  const size_t  hitgroupSbtRecordSize = 2;
+  const size_t  hitgroupSbtRecordSize = 1;
   std::vector<HitGroupSbtRecord> hgSBT( hitgroupSbtRecordSize );
   void *hitgroupSbtRecord;
   CUDA_CHECK(cudaMalloc((void **)&hitgroupSbtRecord, hitgroupSbtRecordSize*sizeof(HitGroupSbtRecord)));
 
   OPTIX_CHECK(optixSbtRecordPackHeader(hitgroup_prog_groups[DOM], &hgSBT[DOM]));
 
-  OPTIX_CHECK(optixSbtRecordPackHeader(hitgroup_prog_groups[CABLE], &hgSBT[CABLE]));
+  //OPTIX_CHECK(optixSbtRecordPackHeader(hitgroup_prog_groups[CABLE], &hgSBT[CABLE]));
 
   CUDA_CHECK(cudaMemcpy(hitgroupSbtRecord, &hgSBT[0], hitgroupSbtRecordSize*sizeof(HitGroupSbtRecord),
                         cudaMemcpyHostToDevice));
@@ -301,12 +301,78 @@ void RTXDataHolder::setStream(const cudaStream_t &stream_in) {
   this->stream = stream_in;
 }
 
+
+ void RTXDataHolder::loadTransforms(std::vector<float3>& pos ){
+   for( int i = 0 ; i<pos.size(); ++ i){
+     transforms.push_back({1, 0, 0, pos[i].x , 0, 1, 0, pos[i].y, 0, 0, 1, pos[i].z});
+   }
+ }
+
+
+
+void RTXDataHolder::buildIAS() {
+  std::cout<< " number of transforms " << transforms.size()   << std::endl;
+  std::vector<OptixInstance> instances;
+  for (size_t i = 0; i < transforms.size(); ++i) {
+    OptixInstance inst;
+    memcpy(inst.transform, &transforms[i], sizeof(float) * 12);
+    inst.instanceId = 0;
+    inst.visibilityMask = 255;
+    inst.sbtOffset = 0;
+    inst.flags = OPTIX_INSTANCE_FLAG_NONE;
+    inst.traversableHandle = gas_handle;
+    instances.push_back(inst);
+  }
+
+  CUdeviceptr d_inst;
+  size_t instancesSizeInBytes = instances.size() * sizeof(OptixInstance);
+  CUDA_CHECK(
+      cudaMalloc(reinterpret_cast<void **>(&d_inst), instancesSizeInBytes));
+  CUDA_CHECK(cudaMemcpy(reinterpret_cast<void *>(d_inst), &instances[0],
+                        instancesSizeInBytes, cudaMemcpyHostToDevice));
+
+  OptixBuildInput instanceInput = {};
+  instanceInput.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
+  instanceInput.instanceArray.instances = d_inst;
+  instanceInput.instanceArray.numInstances =
+      static_cast<unsigned int>(instances.size());
+
+  OptixAccelBuildOptions iasAccelOptions = {};
+  iasAccelOptions.buildFlags = OPTIX_BUILD_FLAG_NONE;
+  iasAccelOptions.operation = OPTIX_BUILD_OPERATION_BUILD;
+
+  OptixAccelBufferSizes ias_buffer_sizes;
+  OPTIX_CHECK(optixAccelComputeMemoryUsage(
+      optix_context, &iasAccelOptions, &instanceInput, 1, &ias_buffer_sizes));
+  CUdeviceptr d_temp_buffer_ias;
+  CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_temp_buffer_ias),
+                        ias_buffer_sizes.tempSizeInBytes));
+
+  // We need to free the output buffer if we are rebuilding the IAS.
+  CUDA_CHECK(cudaFree(reinterpret_cast<void *>(d_ias_output_buffer)));
+  CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_ias_output_buffer),
+                        ias_buffer_sizes.outputSizeInBytes));
+
+  OPTIX_CHECK(optixAccelBuild(
+      optix_context,
+      stream, // CUDA stream
+      &iasAccelOptions, &instanceInput,
+      1, // num build inputs
+      d_temp_buffer_ias, ias_buffer_sizes.tempSizeInBytes, d_ias_output_buffer,
+      ias_buffer_sizes.outputSizeInBytes, &ias_handle, nullptr, 0));
+
+  CUDA_CHECK(cudaDeviceSynchronize());
+  CUDA_CHECK(cudaFree(reinterpret_cast<void *>(d_temp_buffer_ias)));
+  CUDA_CHECK(cudaFree(reinterpret_cast<void *>(d_inst)));
+}
+
+
 RTXDataHolder::~RTXDataHolder() {
   OPTIX_CHECK(optixPipelineDestroy(pipeline));
   OPTIX_CHECK(optixProgramGroupDestroy(raygen_prog_group));
   OPTIX_CHECK(optixProgramGroupDestroy(miss_prog_group));
   OPTIX_CHECK(optixProgramGroupDestroy(hitgroup_prog_groups[0]));
-  OPTIX_CHECK(optixProgramGroupDestroy(hitgroup_prog_groups[1]));
+   
   OPTIX_CHECK(optixModuleDestroy(module));
 }
 

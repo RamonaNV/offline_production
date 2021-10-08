@@ -55,10 +55,14 @@ typedef SbtRecord<HitGroupData> HitGroupSbtRecord;
 
 struct RTXDataHolder {
   Params params;
+  std::vector<Matrix> transforms;
+
   OptixDeviceContext optix_context = nullptr;
   void *d_triangleBuffer;
   OptixTraversableHandle gas_handle;
   void *d_gas_output_buffer;
+    OptixTraversableHandle ias_handle;
+  CUdeviceptr d_ias_output_buffer = 0;
   OptixModule module = nullptr;
   OptixPipelineCompileOptions pipeline_compile_options = {};
   OptixShaderBindingTable sbt = {};
@@ -77,7 +81,8 @@ struct RTXDataHolder {
   void linkPipeline();
   void buildSBT();
   bool buildAccelerationStructure(std::vector<std::string> obj_filenames);
-
+  void buildIAS();
+  void loadTransforms(std::vector<float3>& pos );
   void setStream(const cudaStream_t &stream_in);
   ~RTXDataHolder();
   OptixAabb read_obj_mesh(const std::string &obj_filename,
