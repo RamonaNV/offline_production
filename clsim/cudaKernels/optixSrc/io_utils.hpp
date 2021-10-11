@@ -85,8 +85,11 @@ void readDOMSFile( std::string &fname, int startCol, int endCol, int nCols,  std
 }
 
 void getDOMPos(std::vector<float3>& domPos, float& radius, std::string& domfile){
-  readDOMSFile( domfile, 2, 5, 5,  domPos);
+  readDOMSFile( domfile, 0,3, 5,  domPos);
   radius = 0.1651;
+  //int i = 0;
+  //std::cout<< " first dom "<< domPos[i].x << "," << domPos[i].y << "," <<domPos[i].z <<std::endl;
+ 
 }
 
 inline float dist( float3 a, float3 b){

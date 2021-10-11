@@ -254,10 +254,12 @@ __device__ __forceinline__ bool propPhoton(I3CUDAPhoton& ph, float& distanceProp
             params.hitPhotons[myIndex] = outphoton;
         } 
 
+       // printf( " hit ");
+
 }  
 
-extern "C" __global__ void __closesthit__prog_cables() {    
+/*extern "C" __global__ void __closesthit__prog_cables() {    
     atomicAdd(params.cableHits, 1);
     optixSetPayload_0(CABLE);
 }  
- 
+ */

@@ -46,16 +46,17 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
   // ---------------------------- set up Optix -------------------------------------
 
  
-  std::string domfile =   std::string(DATA_DIR) + "sphere_one01651_12.obj";
+  std::string domfile =   std::string(DATA_DIR) + "oneDOM64.obj"; //oneDOM64
  // std::string stringfile =   std::string(DATA_DIR) + "strings.obj";
   std::cout << "DOM file = " << domfile << std::endl;
  // std::cout << "String file = " << stringfile << std::endl;
   std::string ptx_filename = PTX_DIR "optixKernels.ptx";
+  std::cout << "ptx_filename   = " << ptx_filename << std::endl;
   std::string domcsvfile = std::string(DATA_DIR) + "doms.csv";
 
-  std::vector<float3> domPos; 
+  std::vector<float3> domPos; // = {float3{0,0,0}}; 
   float radius = 0; 
-  getDOMPos(domPos, radius, domcsvfile);
+ getDOMPos(domPos, radius, domcsvfile);
   
   std::vector<std::string> obj_files;
   //order matters, addd doms, then strings
@@ -79,7 +80,7 @@ void launch_CudaPropogate(const I3CLSimStep* __restrict__ in_steps, uint32_t nst
   rtx_dataholder->buildSBT();
   if(OPTIX_VERBOSE)  std::cout << "Creating Transformations of doms \n";
   rtx_dataholder->loadTransforms(domPos);
-  std::cout<< " number of transforms " << domPos.size()   << std::endl;
+  std::cout<< " number of transforms " << rtx_dataholder->transforms.size()   << std::endl;
   if(OPTIX_VERBOSE)  std::cout << "Building Acceleration Structure \n";
   bool setGAS  = rtx_dataholder->buildAccelerationStructure(obj_files);
   if(OPTIX_VERBOSE)  std::cout << "Building Instance Acceleration Structure \n";

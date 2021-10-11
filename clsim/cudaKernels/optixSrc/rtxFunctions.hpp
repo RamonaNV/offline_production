@@ -68,7 +68,7 @@ struct RTXDataHolder {
   OptixShaderBindingTable sbt = {};
   OptixProgramGroup raygen_prog_group = nullptr;
   OptixProgramGroup miss_prog_group = nullptr;
-  std::vector<OptixProgramGroup> hitgroup_prog_groups;
+  OptixProgramGroup  hitgroup_prog_groups = nullptr;
   OptixPipeline pipeline = nullptr;
   unsigned int *d_counter;
   int Nrays;
